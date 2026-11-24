@@ -30,6 +30,7 @@
       aside { order:2; border-right:0; border-top:1px solid var(--line); }
     }
   </style>
+  <link rel="stylesheet" href="chatbot/chatbot.css" />
 </head>
 <body>
 <div class="app">
@@ -170,6 +171,41 @@
   }
 
   const fmtDist = (m) => (m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`);
+
+  // ---- 챗봇 연결 지점: 챗봇은 지도 내부를 모르고 이 두 함수만 씁니다 ----
+  let focusMarker = null;
+  const chatMapBridge = {
+    // 챗봇 검색 기준 위치 (지도가 아직 없으면 null → 챗봇이 위치를 물어봄)
+    getCenter() {
+      if (!map) return null;
+      const c = map.getCenter();
+      return { lat: c.lat(), lon: c.lng() };
+    },
+    // 병원 카드의 "지도에서 보기": 해당 위치로 이동하고 표시
+    // rightInset: 지도 오른쪽을 가리는 채팅창 폭(px). 그만큼 표시 위치를 왼쪽으로 옮김
+    focus(card, { rightInset = 0 } = {}) {
+      if (!map || card.lat == null || card.lon == null) return;
+      const pos = toLatLng(card);
+      focusMarker?.setMap(null);
+      focusMarker = new naver.maps.Marker({ position: pos, map, title: card.name, zIndex: 1000 });
+      const div = document.createElement("div");
+      div.className = "nj-iw";
+      div.innerHTML = `<b></b><br><span class="a"></span><br><span class="t"></span>`;
+      div.querySelector("b").textContent = card.name;
+      div.querySelector(".a").textContent = card.address || "주소 없음";
+      div.querySelector(".t").textContent = `${card.typeLabel || "동물병원"} · ${card.phone || "전화번호 없음"}`;
+      infoWindow.setContent(div);
+      map.setZoom(Math.max(map.getZoom(), 16), false);
+      map.setCenter(pos);
+      if (rightInset > 0) map.panBy(new naver.maps.Point(rightInset / 2, 0));
+      infoWindow.open(map, focusMarker);
+    },
+  };
+</script>
+<script src="chatbot/chat-core.js"></script>
+<script src="chatbot/chatbot.js"></script>
+<script>
+  NyangChatbot.mount({ apiBase: API_BASE, logoSrc: "assets/logo.png", map: chatMapBridge });
 </script>
 </body>
 </html>
