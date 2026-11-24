@@ -1,6 +1,7 @@
 // 냥집사 챗봇 화면 (의존성 없음)
-// 사용: NyangChatbot.mount({ apiBase, logoSrc, map })
+// 사용: NyangChatbot.mount({ apiBase, logoSrc, map, layout })
 //   map(선택) = { getCenter(): {lat, lon} | null, focus(card) }  ← 지도 쪽이 제공하는 연결 지점
+//   layout = "floating"(기본: 지도 위 플로팅 버튼 + 창) | "page"(챗봇 단독 화면, chat.html)
 //
 // 역할 분리
 // - AI 답변: 백엔드 POST /api/chat (모델·키는 서버 환경변수. 프론트에는 키가 없습니다)
@@ -33,7 +34,8 @@
     return n;
   }
 
-  function mount({ apiBase, logoSrc, map = null, container = document.body }) {
+  function mount({ apiBase, logoSrc, map = null, container = document.body, layout = "floating" }) {
+    const isPage = layout === "page";
     const state = {
       open: false,
       busy: false,
@@ -54,13 +56,14 @@
     const stateLabel = el("span", { text: "AI 도우미 · 대화 가능" });
     const stateBox = el("div", { class: "nj-state", "data-state": "ready" }, [el("span", { class: "nj-dot" }), stateLabel]);
     const btnReset = el("button", { class: "nj-icon-btn", type: "button", "aria-label": "대화 초기화", title: "대화 초기화", html: ICON.reset, onclick: reset });
-    const btnClose = el("button", { class: "nj-icon-btn", type: "button", "aria-label": "닫기", title: "닫기", html: ICON.close, onclick: close });
+    const btnClose = isPage ? null : el("button", { class: "nj-icon-btn", type: "button", "aria-label": "닫기", title: "닫기", html: ICON.close, onclick: close });
 
     const body = el("div", { class: "nj-body", role: "log", "aria-live": "polite", "aria-relevant": "additions" });
     const input = el("textarea", { class: "nj-input", rows: "1", placeholder: "고양이 병원, 궁금한 걸 물어보세요", "aria-label": "메시지 입력", maxlength: String(C.MAX_MESSAGE_CHARS) });
     const btnSend = el("button", { class: "nj-send", type: "submit", "aria-label": "보내기", html: ICON.send, disabled: true });
     const form = el("form", { class: "nj-form", onsubmit: (e) => { e.preventDefault(); sendFromInput(); } }, [input, btnSend]);
     const locNote = el("span");
+    const btnMyLoc = el("button", { type: "button", class: "nj-link", text: "내 위치 사용", onclick: useMyLocation });
     const counter = el("span", { text: `0/${C.MAX_MESSAGE_CHARS}` });
 
     const panel = el("section", { id: "nj-panel", class: "nj-panel", role: "dialog", "aria-modal": "false", "aria-label": "냥집사 AI 도우미" }, [
@@ -71,15 +74,15 @@
         btnClose,
       ]),
       body,
-      el("footer", { class: "nj-foot" }, [form, el("div", { class: "nj-foot-note" }, [locNote, counter])]),
+      el("footer", { class: "nj-foot" }, [form, el("div", { class: "nj-foot-note" }, [el("span", {}, [locNote, btnMyLoc]), counter])]),
     ]);
 
-    const root = el("div", { class: "nj-root" }, [fab, panel]);
+    const root = el("div", { class: "nj-root" + (isPage ? " is-page" : "") }, isPage ? [panel] : [fab, panel]);
     container.append(root);
 
     // ---------- 열기/닫기 ----------
     fab.addEventListener("click", open);
-    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && state.open) close(); });
+    document.addEventListener("keydown", (e) => { if (e.key === "Escape" && state.open && !isPage) close(); });
 
     function open() {
       state.open = true;
@@ -91,6 +94,7 @@
       setTimeout(() => input.focus({ preventScroll: true }), 120);
     }
     function close() {
+      if (isPage) return;
       state.open = false;
       root.classList.remove("is-open");
       fab.setAttribute("aria-expanded", "false");
@@ -138,7 +142,16 @@
       return map?.getCenter?.() || null;
     }
     function updateLocNote() {
-      locNote.textContent = state.myLocation ? "검색 기준: 내 위치" : map?.getCenter?.() ? "검색 기준: 지도 중심" : "검색 기준: 위치 없음";
+      locNote.textContent = state.myLocation ? "검색 기준: 내 위치" : map?.getCenter?.() ? "검색 기준: 지도 중심 · " : "검색 기준: 위치 없음 · ";
+      btnMyLoc.hidden = !!state.myLocation;
+    }
+    async function useMyLocation() {
+      btnMyLoc.disabled = true;
+      const loc = await requestMyLocation();
+      btnMyLoc.disabled = false;
+      if (!loc) { btnMyLoc.textContent = "위치 권한을 확인해 주세요"; return; }
+      state.myLocation = loc;
+      updateLocNote();
     }
     function requestMyLocation() {
       return new Promise((resolve) => {
@@ -303,6 +316,7 @@
       // 모바일(전체 화면 채팅)에서는 지도를 볼 수 있게 채팅을 닫고,
       // PC 에서는 채팅창이 가리는 만큼 지도 표시 위치를 비켜 줌
       const mobile = window.matchMedia("(max-width: 760px)").matches;
+      if (isPage) return map.focus(card, { rightInset: 0 });
       if (mobile) close();
       map.focus(card, { rightInset: mobile ? 0 : panel.offsetWidth + 20 });
     }
@@ -362,6 +376,7 @@
 
     renderAll();
     updateLocNote();
+    if (isPage) open();
     return { open, close, reset, send };
   }
 

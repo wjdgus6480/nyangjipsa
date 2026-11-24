@@ -294,9 +294,31 @@
 .nj-send svg { width: 20px; height: 20px; }
 .nj-foot-note { display: flex; justify-content: space-between; gap: 8px; margin-top: 6px; font-size: 11px; color: var(--nj-text-muted); }
 
-/* 지도에서 보기로 선택된 위치 표시 (지도 인포윈도우 내부) */
-.nj-iw { padding: 10px 12px; font: 13px/1.45 var(--nj-font, system-ui, sans-serif); max-width: 260px; color: #1b2a41; }
-.nj-iw b { font-size: 14px; }
+.nj-link {
+  font: inherit; font-size: inherit; font-weight: 700;
+  color: var(--nj-med); background: none; border: 0; padding: 0;
+  text-decoration: underline; text-underline-offset: 2px; cursor: pointer;
+}
+.nj-link[hidden] { display: none; }
+.nj-link:disabled { opacity: .5; cursor: default; }
+
+/* ---------- 단독 화면 (chat.html) ---------- */
+.nj-root.is-page {
+  min-height: 100%;
+  display: flex;
+  justify-content: center;
+  align-items: stretch;
+  padding: 24px 16px;
+  background: linear-gradient(180deg, var(--nj-secondary) 0%, #fff 60%);
+}
+.nj-root.is-page .nj-panel {
+  position: relative;
+  inset: auto;
+  width: 100%;
+  max-width: 560px;
+  height: calc(100vh - 48px);
+  height: calc(100dvh - 48px);
+}
 
 /* ---------- 모바일: 전체 화면형 ---------- */
 @media (max-width: 760px) {
@@ -311,6 +333,8 @@
     transform-origin: bottom center;
   }
   .nj-input { font-size: 16px; }
+  .nj-root.is-page { padding: 0; }
+  .nj-root.is-page .nj-panel { position: fixed; max-width: none; height: var(--nj-vh, 100dvh); }
 }
 
 @media (prefers-reduced-motion: reduce) {

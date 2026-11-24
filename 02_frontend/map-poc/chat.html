@@ -1,0 +1,38 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>냥집사 AI 도우미</title>
+  <link rel="icon" href="assets/logo.png" />
+  <link rel="stylesheet" href="chatbot/chatbot.css" />
+  <style>
+    html, body { margin: 0; height: 100%; background: #fff; }
+  </style>
+</head>
+<body>
+<!--
+  챗봇 단독 화면. 지도 SDK·네이버 키 없이 동작합니다 (백엔드 localhost:8080 만 필요).
+  병원 카드의 "지도에서 보기"는 지도 화면(index.html)을 새 탭으로 열어 그 위치를 보여 줍니다.
+-->
+<script src="chatbot/chat-core.js"></script>
+<script src="chatbot/chatbot.js"></script>
+<script>
+  const API_BASE = "http://localhost:8080";
+  const mapLink = {
+    getCenter: () => null, // 지도가 없으므로 "내 위치" 또는 위치 질문으로 검색
+    focus(card) {
+      const q = new URLSearchParams({
+        focus: `${card.lat},${card.lon}`,
+        name: card.name || "",
+        addr: card.address || "",
+        tel: card.phone || "",
+        type: card.typeLabel || "",
+      });
+      window.open(`index.html?${q}`, "_blank", "noopener");
+    },
+  };
+  NyangChatbot.mount({ apiBase: API_BASE, logoSrc: "assets/logo.png", map: mapLink, layout: "page" });
+</script>
+</body>
+</html>
