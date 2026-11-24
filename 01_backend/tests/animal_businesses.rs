@@ -232,3 +232,36 @@ async fn nearby_rejects_invalid_parameters(pool: PgPool) {
     let (status, _) = get_json(pool, "/api/places/nearby?lon=127.0").await;
     assert_eq!(status, StatusCode::BAD_REQUEST);
 }
+
+#[sqlx::test]
+async fn points_returns_open_located_places_rounded(pool: PgPool) -> sqlx::Result<()> {
+    seed_nearby(&pool).await?;
+
+    // 영업 중 + 좌표 있음: 병원 3 (가까운·바로 앞·먼), 약국 1. 폐업·좌표 없음은 제외
+    let (status, all) = get_json(pool.clone(), "/api/places/points").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(all["count"], 4);
+    assert_eq!(all["points"].as_array().unwrap().len(), 4);
+
+    let (_, hospitals) = get_json(pool.clone(), "/api/places/points?type=hospital").await;
+    assert_eq!(hospitals["count"], 3);
+
+    // 좌표만, 소수 4자리 이하로 반올림
+    let p = &hospitals["points"][0];
+    assert_eq!(p.as_array().unwrap().len(), 2);
+    for v in [p[0].as_f64().unwrap(), p[1].as_f64().unwrap()] {
+        assert!(((v * 1e4).round() - v * 1e4).abs() < 1e-6, "{v}");
+    }
+    assert!(
+        hospitals["points"]
+            .as_array()
+            .unwrap()
+            .iter()
+            .any(|p| (p[0].as_f64().unwrap() - DOSAN_LON).abs() < 0.001)
+    );
+
+    let (status, json) = get_json(pool, "/api/places/points?type=clinic").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    assert!(json["error"].is_string());
+    Ok(())
+}

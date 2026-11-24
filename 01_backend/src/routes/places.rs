@@ -1,4 +1,5 @@
 //! `GET /api/places/nearby` — 지도 화면용 주변 업소 검색 (우리 DB만 조회).
+//! `GET /api/places/points` — 행정구역별 개수 집계용 위치 목록 (좌표만, 반올림).
 
 use axum::{
     Json, Router,
@@ -20,7 +21,68 @@ pub const DEFAULT_LIMIT: i64 = 50;
 pub const MAX_LIMIT: i64 = 200;
 
 pub fn router() -> Router<AppState> {
-    Router::new().route("/api/places/nearby", get(nearby))
+    Router::new()
+        .route("/api/places/nearby", get(nearby))
+        .route("/api/places/points", get(points))
+}
+
+/// 좌표 반올림 자릿수: 일반 업소 4자리(약 10m), 주소 번지가 가려진(자택 영업일 수 있는) 업소 3자리(약 100m)
+const POINT_DECIMALS: i32 = 4;
+const MASKED_POINT_DECIMALS: i32 = 3;
+
+#[derive(Debug, Deserialize)]
+pub struct PointsQuery {
+    /// 업종(쉼표로 여러 개). 생략하면 전체
+    #[serde(rename = "type")]
+    pub types: Option<String>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PointsResponse {
+    pub count: usize,
+    /// [경도, 위도] 목록. 이름·전화 등 다른 정보는 없음
+    pub points: Vec<[f64; 2]>,
+}
+
+fn round_to(v: f64, decimals: i32) -> f64 {
+    let f = 10f64.powi(decimals);
+    (v * f).round() / f
+}
+
+fn parse_types(raw: Option<&str>) -> Result<Option<Vec<BusinessType>>, AppError> {
+    match raw.map(str::trim).filter(|s| !s.is_empty()) {
+        None => Ok(None),
+        Some(list) => list
+            .split(',')
+            .map(str::parse::<BusinessType>)
+            .collect::<Result<Vec<_>, _>>()
+            .map(Some)
+            .map_err(AppError::BadRequest),
+    }
+}
+
+/// 예: `/api/places/points?type=hospital`
+async fn points(
+    State(state): State<AppState>,
+    Query(q): Query<PointsQuery>,
+) -> Result<Json<PointsResponse>, AppError> {
+    let types = parse_types(q.types.as_deref())?;
+    let rows = animal_business::all_points(&state.pool, types.as_deref()).await?;
+    let points: Vec<[f64; 2]> = rows
+        .into_iter()
+        .map(|p| {
+            let d = if p.address_masked {
+                MASKED_POINT_DECIMALS
+            } else {
+                POINT_DECIMALS
+            };
+            [round_to(p.lon, d), round_to(p.lat, d)]
+        })
+        .collect();
+    Ok(Json(PointsResponse {
+        count: points.len(),
+        points,
+    }))
 }
 
 /// 쿼리 파라미터. 예: `/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&type=hospital,pharmacy`

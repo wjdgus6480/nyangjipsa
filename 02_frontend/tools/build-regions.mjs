@@ -6,7 +6,7 @@
 // 출력
 //   sido.json          시도 (행정동을 시도 코드로 합침)
 //   sigungu.json       시군구 (행정동을 5자리 시군구 코드로 합침, 일반구 단위). 하위 파일 색인 역할도 함(bbox)
-//   emd/<시군구코드>.json 읍면동 (시군구별로 나눔 → 화면에 걸친 시군구만 불러옴)
+//   emd/<시군구코드>.json 읍면동 (번호 동은 합침, 시군구별로 나눔 → 화면에 걸친 시군구만 불러옴)
 //   meta.json          원본 버전·건수·생성 시각
 //
 // 각 구역 속성: code, name, full(전체 이름), parent(상위 코드), lx/ly(라벨 위치 = 폴리곤 내부점),
@@ -67,10 +67,14 @@ async function main() {
   );
 
   // 3) 읍면동 → 시군구별 파일
+  //    번호로 나뉜 행정동은 하나로 합침: 우1동·우2동·우3동 → 우동, 종로1·2·3·4가동 → 종로동 (읍·면, 번호 없는 동은 그대로)
+  //    합친 구역 코드는 묶인 행정동 코드 중 가장 작은 값
   await run(
     `-i ${q(input)} snap name=emd ` +
+      `-each "short=adm_nm.split(' ').pop(), mname=short.replace(/[0-9·.,]+가?동$/, '동')" ` +
+      `-dissolve sgg,mname copy-fields=sidonm,sggnm calc="code=min(adm_cd2), merged=count()" ` +
       `-simplify interval=${LEVELS.emd.interval} keep-shapes ` +
-      `-each "code=adm_cd2, name=adm_nm.split(' ').pop(), full=adm_nm, parent=sgg, split_key=sgg, ${COMMON}" ` +
+      `-each "name=mname, full=sidonm + ' ' + sggnm + ' ' + mname, parent=sgg, split_key=sgg, ${COMMON}" ` +
       `-split split_key ` +
       `-filter-fields code,name,full,parent,lx,ly,bbox,area ` +
       `-o ${q(tmp + path.sep)} format=geojson precision=${LEVELS.emd.precision}`,
