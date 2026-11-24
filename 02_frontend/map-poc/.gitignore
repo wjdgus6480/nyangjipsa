@@ -1,0 +1,2 @@
+# serve.sh 가 .env 에서 생성하는 파일 (Client ID 포함) — 커밋 금지
+config.js
