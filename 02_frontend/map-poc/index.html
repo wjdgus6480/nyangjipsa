@@ -3,39 +3,86 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>냥집사 지도 PoC</title>
+  <title>냥집사 · 고양이 동물병원 지도</title>
+  <link rel="icon" href="assets/logo.png" />
   <style>
-    :root { --bg:#fff; --fg:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6fde; --sel:#eef4ff; }
+    /* 브랜드 토큰: 챗봇(chatbot.css)과 같은 값 */
+    :root {
+      --primary:#8be4ff; --primary-strong:#4cc9ef; --secondary:#e8f9ff;
+      --bg:#fff; --surface:#f6fafc; --fg:#1b2a41; --muted:#5b6b80; --line:#d6e3ea; --accent:#0e6e8c;
+      --font: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+    }
     * { box-sizing: border-box; }
-    html, body { margin:0; height:100%; font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; color:var(--fg); background:var(--bg); }
-    .app { display:grid; grid-template-columns: 360px 1fr; height:100%; }
-    aside { display:flex; flex-direction:column; border-right:1px solid var(--line); min-height:0; }
-    header { padding:14px 16px; border-bottom:1px solid var(--line); }
-    h1 { margin:0 0 8px; font-size:18px; }
+    html, body { margin:0; height:100%; font-family:var(--font); color:var(--fg); background:var(--bg); }
+    .app { display:grid; grid-template-columns: 372px 1fr; height:100%; }
+    aside { display:flex; flex-direction:column; border-right:1px solid var(--line); min-height:0; background:var(--bg); position:relative; z-index:1; box-shadow: 2px 0 12px rgba(27,42,65,.06); }
+
+    /* 브랜드 헤더 (왼쪽 상단) */
+    .brand { display:flex; align-items:center; gap:12px; padding:14px 16px; background:var(--primary); }
+    .brand-mark { width:46px; height:46px; border-radius:24%; border:2px solid #fff; object-fit:contain; aspect-ratio:1/1; background:var(--primary); flex:none; box-shadow:0 2px 8px rgba(27,42,65,.12); }
+    .brand-text { flex:1; min-width:0; }
+    .brand h1 { margin:0; font-size:21px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+    .brand p { margin:2px 0 0; font-size:12.5px; font-weight:600; opacity:.78; }
+    .brand-link { flex:none; font-size:12px; font-weight:700; color:var(--fg); text-decoration:none; background:rgba(255,255,255,.7); padding:6px 10px; border-radius:999px; }
+    .brand-link:hover { background:#fff; }
+
+    .filters { padding:12px 16px 12px; border-bottom:1px solid var(--line); }
     .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px; }
-    .row label { display:flex; gap:4px; align-items:center; padding:4px 8px; border:1px solid var(--line); border-radius:999px; cursor:pointer; }
-    select { font-size:13px; padding:3px 6px; }
-    .status { margin-top:8px; font-size:12px; color:var(--muted); }
-    ul { list-style:none; margin:0; padding:0; overflow:auto; flex:1; }
-    li { padding:10px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
-    li:hover, li.sel { background:var(--sel); }
-    li .name { font-weight:600; font-size:14px; }
-    li .meta { font-size:12px; color:var(--muted); margin-top:2px; }
+    .row label { position:relative; display:flex; gap:4px; align-items:center; padding:6px 12px; border:1px solid var(--line); border-radius:999px; cursor:pointer; font-weight:600; color:var(--muted); background:var(--bg); transition: background .15s, border-color .15s, color .15s; user-select:none; }
+    .row label input { position:absolute; opacity:0; pointer-events:none; }
+    .row label:hover { border-color:var(--primary-strong); }
+    .row label:has(input:checked) { background:var(--primary); border-color:var(--primary); color:var(--fg); }
+    .row label:has(input:focus-visible) { outline:2px solid var(--primary-strong); outline-offset:2px; }
+    .row-sub { margin-top:10px; gap:8px; color:var(--muted); font-weight:600; }
+    select { font:inherit; font-size:13px; font-weight:600; color:var(--fg); padding:5px 8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); cursor:pointer; }
+    select:focus-visible { outline:2px solid var(--primary-strong); outline-offset:1px; }
+    .status { margin-top:10px; font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+    .status::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--primary-strong); flex:none; }
+
+    ul { list-style:none; margin:0; padding:6px 8px 80px; overflow:auto; flex:1; background:var(--surface); }
+    li { padding:11px 12px; margin:0 0 6px; border:1px solid transparent; border-radius:12px; background:var(--bg); cursor:pointer; transition: border-color .15s, background .15s; }
+    li:hover { border-color:var(--line); background:var(--secondary); }
+    li.sel { border-color:var(--primary-strong); background:var(--secondary); box-shadow: inset 3px 0 0 var(--primary-strong); }
+    li .name { font-weight:700; font-size:14.5px; }
+    li .meta { font-size:12px; color:var(--muted); margin-top:3px; line-height:1.45; }
+
     #map { width:100%; height:100%; }
-    .iw { padding:10px 12px; font-size:13px; max-width:260px; line-height:1.45; }
-    .iw b { font-size:14px; }
-    .err { padding:16px; color:#b91c1c; font-size:14px; }
+    .iw { padding:11px 13px; font-size:13px; max-width:260px; line-height:1.5; color:var(--fg); }
+    .iw b { font-size:14.5px; }
+    .err { padding:16px; color:#c2410c; font-size:14px; }
+
+    /* 지도 핀 (브랜드 컬러) */
+    .pin { width:26px; height:26px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:2.5px solid var(--fg); box-shadow:0 2px 6px rgba(27,42,65,.3); }
+    .pin::after { content:""; position:absolute; width:8px; height:8px; border-radius:50%; background:var(--fg); top:50%; left:50%; margin:-4px 0 0 -4px; }
+    .pin { position:relative; }
+    .pin.is-sel { width:34px; height:34px; background:var(--fg); border-color:var(--primary); }
+    .pin.is-sel::after { background:var(--primary); width:10px; height:10px; margin:-5px 0 0 -5px; }
+
     @media (max-width: 760px) {
       .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
-      aside { order:2; border-right:0; border-top:1px solid var(--line); }
+      aside { order:2; border-right:0; border-top:1px solid var(--line); box-shadow: 0 -2px 12px rgba(27,42,65,.06); }
+      .brand { padding:10px 14px; gap:10px; }
+      .brand-mark { width:38px; height:38px; }
+      .brand h1 { font-size:18px; }
+      .brand p { font-size:11.5px; }
+      .filters { padding:10px 14px; }
+      .row label { padding:5px 10px; }
     }
   </style>
+  <link rel="stylesheet" href="chatbot/chatbot.css" />
 </head>
 <body>
 <div class="app">
   <aside>
-    <header>
-      <h1>🐱 냥집사 지도 PoC</h1>
+    <header class="brand">
+      <img class="brand-mark" src="assets/logo.png" alt="냥집사 로고" />
+      <div class="brand-text">
+        <h1>냥집사</h1>
+        <p>고양이 동물병원 지도</p>
+      </div>
+      <a class="brand-link" href="chat.html" target="_blank" rel="noopener">AI 도우미</a>
+    </header>
+    <div class="filters">
       <div class="row" id="types">
         <label><input type="checkbox" value="hospital" checked />동물병원</label>
         <label><input type="checkbox" value="pharmacy" />동물약국</label>
@@ -43,7 +90,7 @@
         <label><input type="checkbox" value="boarding" />위탁</label>
         <label><input type="checkbox" value="cremation" />장묘</label>
       </div>
-      <div class="row" style="margin-top:6px">
+      <div class="row row-sub">
         반경
         <select id="radius">
           <option value="auto" selected>지도 화면 기준</option>
@@ -53,7 +100,7 @@
         </select>
       </div>
       <div class="status" id="status">지도 불러오는 중…</div>
-    </header>
+    </div>
     <ul id="list"></ul>
   </aside>
   <div id="map"></div>
@@ -84,6 +131,11 @@
   // 좌표 변환은 이 함수 한 곳에서만: API {lon,lat} → 네이버 LatLng(위도, 경도)
   const toLatLng = (p) => new naver.maps.LatLng(p.lat, p.lon);
 
+  // 브랜드 컬러 핀 (선택된 핀은 진한 네이비로 반전)
+  const pinIcon = (sel) => sel
+    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(17, 42) }
+    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(13, 33) };
+
   let map, infoWindow, timer, controller;
   const markers = new Map(); // id → marker
   let places = [], selectedId = null;
@@ -94,6 +146,15 @@
     naver.maps.Event.addListener(map, "idle", scheduleLoad);
     document.querySelectorAll("#types input, #radius").forEach((el) => el.addEventListener("change", scheduleLoad));
     scheduleLoad();
+    focusFromUrl();
+  }
+
+  // chat.html 의 "지도에서 보기" → index.html?focus=lat,lon&name=…
+  function focusFromUrl() {
+    const q = new URLSearchParams(location.search);
+    const [lat, lon] = (q.get("focus") || "").split(",").map(Number);
+    if (!Number.isFinite(lat) || !Number.isFinite(lon)) return;
+    chatMapBridge.focus({ lat, lon, name: q.get("name") || "선택한 장소", address: q.get("addr"), phone: q.get("tel"), typeLabel: q.get("type") });
   }
 
   function scheduleLoad() { clearTimeout(timer); timer = setTimeout(load, 300); }
@@ -135,7 +196,7 @@
     for (const [id, m] of markers) if (!keep.has(id)) { m.setMap(null); markers.delete(id); }
     for (const p of items) {
       if (markers.has(p.id)) continue;
-      const m = new naver.maps.Marker({ position: toLatLng(p), map, title: p.name });
+      const m = new naver.maps.Marker({ position: toLatLng(p), map, title: p.name, icon: pinIcon(p.id === selectedId) });
       naver.maps.Event.addListener(m, "click", () => select(p.id, false));
       markers.set(p.id, m);
     }
@@ -156,6 +217,8 @@
   function select(id, pan) {
     const p = places.find((x) => x.id === id), m = markers.get(id);
     if (!p || !m) return;
+    markers.get(selectedId)?.setIcon(pinIcon(false));
+    m.setIcon(pinIcon(true));
     selectedId = id;
     document.querySelectorAll("#list li").forEach((li) => li.classList.toggle("sel", Number(li.dataset.id) === id));
     const div = document.createElement("div");
@@ -170,6 +233,41 @@
   }
 
   const fmtDist = (m) => (m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`);
+
+  // ---- 챗봇 연결 지점: 챗봇은 지도 내부를 모르고 이 두 함수만 씁니다 ----
+  let focusMarker = null;
+  const chatMapBridge = {
+    // 챗봇 검색 기준 위치 (지도가 아직 없으면 null → 챗봇이 위치를 물어봄)
+    getCenter() {
+      if (!map) return null;
+      const c = map.getCenter();
+      return { lat: c.lat(), lon: c.lng() };
+    },
+    // 병원 카드의 "지도에서 보기": 해당 위치로 이동하고 표시
+    // rightInset: 지도 오른쪽을 가리는 채팅창 폭(px). 그만큼 표시 위치를 왼쪽으로 옮김
+    focus(card, { rightInset = 0 } = {}) {
+      if (!map || card.lat == null || card.lon == null) return;
+      const pos = toLatLng(card);
+      focusMarker?.setMap(null);
+      focusMarker = new naver.maps.Marker({ position: pos, map, title: card.name, zIndex: 1000, icon: pinIcon(true) });
+      const div = document.createElement("div");
+      div.className = "iw";
+      div.innerHTML = `<b></b><br><span class="a"></span><br><span class="t"></span>`;
+      div.querySelector("b").textContent = card.name;
+      div.querySelector(".a").textContent = card.address || "주소 없음";
+      div.querySelector(".t").textContent = `${card.typeLabel || "동물병원"} · ${card.phone || "전화번호 없음"}`;
+      infoWindow.setContent(div);
+      map.setZoom(Math.max(map.getZoom(), 16), false);
+      map.setCenter(pos);
+      if (rightInset > 0) map.panBy(new naver.maps.Point(rightInset / 2, 0));
+      infoWindow.open(map, focusMarker);
+    },
+  };
+</script>
+<script src="chatbot/chat-core.js"></script>
+<script src="chatbot/chatbot.js"></script>
+<script>
+  NyangChatbot.mount({ apiBase: API_BASE, logoSrc: "assets/logo.png", map: chatMapBridge });
 </script>
 </body>
 </html>
