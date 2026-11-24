@@ -1256,7 +1256,8 @@ nyangjipsa/                         ← Git 저장소 최상위 (WSL: ~/projects
 ├── 02_frontend/                    프론트엔드 자리 (React + TS 후보, 미착수)
 ├── 03_tech-stack/
 │   └── TECH_STACK_AND_SETUP.md     ← 지금 읽고 있는 문서
-└── 04_docs/                        개발 기록, 설계 문서, 테스트 기록
+├── 04_docs/                        개발 기록, 설계 문서, 테스트 기록
+└── 05_data/                        기획·분석용 조사 데이터 (시장 분석, 진료비 통계) — 05_data/README.md
 ```
 
 **폴더 이름 규칙**

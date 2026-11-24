@@ -1,0 +1,25 @@
+{
+  "_설명": "수집 설정. true/false 로 API별 수집을 켜고 끕니다. 날짜는 yyyy-mm-dd.",
+  "initial_start_date": "2025-11-23",
+  "end_date": "auto_yesterday",
+  "collect_interval_days": 7,
+  "enabled": {
+    "blog": true,
+    "news": true,
+    "search_trend": true,
+    "search_trend_segments": true,
+    "search_trend_longterm": true,
+    "shopping_insight": true
+  },
+  "search": {
+    "sort": "date",
+    "display": 100,
+    "max_start": 1000,
+    "stop_before_date": "2025-11-23"
+  },
+  "search_trend_longterm_start": "2016-01-01",
+  "shopping_longterm_start": "2017-08-01",
+  "shopping_category": {"id": "50000155", "name": "반려동물 (생활/건강 하위)", "parent_id": "50000008", "parent_name": "생활/건강"},
+  "request_sleep_sec": 0.12,
+  "env_file_fallback": ""
+}

@@ -20,3 +20,11 @@ Thumbs.db
 # ---- 프론트엔드 (추후 사용) ----
 node_modules/
 dist/
+
+# ---- 05_data: 공개 저장소에 올리지 않는 원본·대용량 ----
+05_data/01_반려동물_시장데이터/원본/0[1-4]_*.csv
+05_data/01_반려동물_시장데이터/원본/06_collection_log.csv
+05_data/**/*.xlsx
+05_data/**/*.zip
+05_data/**/*.log
+__pycache__/
