@@ -52,11 +52,9 @@
     .err { padding:16px; color:#c2410c; font-size:14px; }
 
     /* 지도 핀 (브랜드 컬러) */
-    .pin { width:26px; height:26px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:2.5px solid var(--fg); box-shadow:0 2px 6px rgba(27,42,65,.3); }
-    .pin::after { content:""; position:absolute; width:8px; height:8px; border-radius:50%; background:var(--fg); top:50%; left:50%; margin:-4px 0 0 -4px; }
-    .pin { position:relative; }
-    .pin.is-sel { width:34px; height:34px; background:var(--fg); border-color:var(--primary); }
-    .pin.is-sel::after { background:var(--primary); width:10px; height:10px; margin:-5px 0 0 -5px; }
+    .pin { width:24px; height:24px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:1.5px solid #fff; box-shadow:0 2px 6px rgba(27,42,65,.28); }
+    /* 선택한 핀: 진한 파란색 + 흰 테두리, 조금 크게 */
+    .pin.is-sel { width:32px; height:32px; background:#1478c8; border:2px solid #fff; box-shadow:0 3px 10px rgba(20,120,200,.45); }
 
     @media (max-width: 760px) {
       .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
@@ -70,6 +68,7 @@
     }
   </style>
   <link rel="stylesheet" href="chatbot/chatbot.css" />
+  <link rel="stylesheet" href="regions/region-layer.css" />
 </head>
 <body>
 <div class="app">
@@ -104,11 +103,19 @@
     </div>
     <ul id="list"></ul>
   </aside>
-  <div id="map"></div>
+  <div class="map-wrap">
+    <div id="map"></div>
+    <nav class="rg-bar" id="rg-bar" aria-label="행정구역 선택 경로"></nav>
+    <div class="rg-attr" id="rg-attr"></div>
+  </div>
 </div>
 
 <!-- config.js 는 serve.sh 가 .env 의 NAVER_MAP_CLIENT_ID 로 생성 (Git 제외) -->
 <script src="config.js"></script>
+<!-- 행정구역 레이어 (병원 마커와 분리된 모듈) -->
+<script src="regions/region-config.js"></script>
+<script src="regions/region-core.js"></script>
+<script src="regions/region-layer.js"></script>
 <script>
   // 실제 데이터: 우리 API(GET /api/places/nearby) → PostGIS. 거리 계산은 서버에서 합니다.
   const API_BASE = "http://localhost:8080";
@@ -132,19 +139,21 @@
   // 좌표 변환은 이 함수 한 곳에서만: API {lon,lat} → 네이버 LatLng(위도, 경도)
   const toLatLng = (p) => new naver.maps.LatLng(p.lat, p.lon);
 
-  // 브랜드 컬러 핀 (선택된 핀은 진한 네이비로 반전)
+  // 브랜드 컬러 핀 (선택한 핀은 진한 파란색)
   const pinIcon = (sel) => sel
-    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(17, 42) }
-    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(13, 33) };
+    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(16, 39) }
+    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(12, 30) };
 
   let map, infoWindow, timer, controller;
   const markers = new Map(); // id → marker
   let places = [], selectedId = null;
+  let regions = null, regionSel = null, regionLevel = null, regionHere = null; // 행정구역 레이어와 현재 선택
 
   function init() {
     map = new naver.maps.Map("map", { center: toLatLng(START), zoom: 15 });
     infoWindow = new naver.maps.InfoWindow({ content: "", borderWidth: 1, anchorSkew: true });
     naver.maps.Event.addListener(map, "idle", scheduleLoad);
+    initRegions();
     document.querySelectorAll("#types input, #radius").forEach((el) => el.addEventListener("change", scheduleLoad));
     scheduleLoad();
     focusFromUrl();
@@ -169,9 +178,64 @@
     return Math.min(Math.max(Math.round(d), 100), MAX_RADIUS);
   }
 
+  // ---- 행정구역 레이어 연결: 경계는 regions/ 모듈이, 병원 마커는 이 파일이 담당 ----
+  function initRegions() {
+    if (!window.RegionLayer) return;
+    $("#rg-attr").textContent = REGION_CONFIG.attribution;
+    regions = RegionLayer.create(map, {
+      onSelect(sel) { regionSel = sel; renderRegionBar(); scheduleLoad(); },
+      onChange(info) {
+        if (info.error) { status(info.error); return; }
+        if (info.level !== regionLevel || info.here !== regionHere) { regionLevel = info.level; regionHere = info.here; renderRegionBar(); }
+        window.__regionPerf = info; // 성능 확인용 (마지막 갱신 소요 ms)
+      },
+    });
+  }
+
+  function renderRegionBar() {
+    const bar = $("#rg-bar");
+    bar.replaceChildren();
+    const badge = document.createElement("span");
+    badge.className = "rg-level";
+    badge.textContent = `${RegionCore.LEVEL_LABEL[regionLevel] || "행정구역"} 경계`;
+    bar.append(badge);
+    const crumbs = [{ level: null, name: "전국" }].concat(regionSel ? regionSel.path : []);
+    crumbs.forEach((c, i) => {
+      if (i) { const s = document.createElement("span"); s.className = "rg-sep"; s.textContent = "›"; bar.append(s); }
+      const b = document.createElement("button");
+      const last = i === crumbs.length - 1;
+      b.type = "button";
+      b.className = "rg-crumb" + (last ? " is-current" : "");
+      b.textContent = c.name;
+      if (!last) b.addEventListener("click", () => c.level ? regions.select(c.level, c.code, { fit: true }) : regions.clearSelection({ fitNation: true }));
+      bar.append(b);
+    });
+    if (!regionSel && regionHere && regionLevel !== "sido") {
+      const here = document.createElement("span");
+      here.className = "rg-here";
+      here.textContent = `· 지금 ${regionHere}`;
+      bar.append(here);
+    }
+    if (regionSel) {
+      const x = document.createElement("button");
+      x.type = "button";
+      x.className = "rg-clear";
+      x.textContent = "선택 해제";
+      x.addEventListener("click", () => regions.clearSelection());
+      bar.append(x);
+    }
+  }
+
   async function load() {
     const types = [...document.querySelectorAll("#types input:checked")].map((i) => i.value);
     if (!types.length) { render([]); status("업종을 하나 이상 선택하세요."); return; }
+    // 전국(시·도) 화면에서는 개별 마커를 그리지 않음 — 지역을 고르거나 확대하면 표시
+    if (map.getZoom() < REGION_CONFIG.markersMinZoom && !regionSel) {
+      controller?.abort();
+      render([]);
+      status("지역을 누르거나 확대하면 병원이 표시돼요.");
+      return;
+    }
     const c = map.getCenter();
     const radius = currentRadius();
     const q = new URLSearchParams({ lon: c.lng().toFixed(6), lat: c.lat().toFixed(6), radius_m: radius, type: types.join(","), limit: LIMIT });
@@ -182,9 +246,16 @@
       const res = await fetch(`${API_BASE}/api/places/nearby?${q}`, { signal: controller.signal });
       const body = await res.json();
       if (!res.ok) throw new Error(body.error || res.status);
-      render(body.items);
       const more = body.count >= LIMIT ? ` (최대 ${LIMIT}개까지 표시 — 확대해 보세요)` : "";
-      status(`반경 ${(radius / 1000).toFixed(1)}km · ${body.count}곳${more}`);
+      // 행정구역을 골랐으면 그 경계 안의 업소만
+      if (regionSel) {
+        const inside = body.items.filter((p) => RegionCore.featureContains(regionSel.feature, p.lon, p.lat));
+        render(inside);
+        status(`${regionSel.name} 안 ${inside.length}곳${more}`);
+      } else {
+        render(body.items);
+        status(`반경 ${(radius / 1000).toFixed(1)}km · ${body.count}곳${more}`);
+      }
     } catch (e) {
       if (e.name === "AbortError") return;
       status("API 호출 실패: " + e.message + " (백엔드 localhost:8080 실행 확인)");

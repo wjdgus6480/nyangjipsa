@@ -1,0 +1,12 @@
+{
+  "name": "nyangjipsa-frontend-tools",
+  "private": true,
+  "description": "개발용 도구 (서비스 화면에는 포함되지 않음). 행정구역 경계 가공: node build-regions.mjs",
+  "type": "module",
+  "scripts": {
+    "build-regions": "node build-regions.mjs"
+  },
+  "devDependencies": {
+    "mapshaper": "^0.8.9"
+  }
+}
