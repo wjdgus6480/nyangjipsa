@@ -1,17 +1,17 @@
 //! SQLx DB 연결 테스트.
 //!
 //! `#[sqlx::test]` 는 테스트마다 임시 DB 를 새로 만들고 `migrations/` 를 적용한 뒤 실행합니다.
-//! 개발용 DB(vet_map)의 데이터는 건드리지 않습니다. (.env 의 DATABASE_URL 필요)
+//! 개발용 DB(nyangjipsa)의 데이터는 건드리지 않습니다. (.env 의 DATABASE_URL 필요)
 
 use axum::{
     body::Body,
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
+use nyangjipsa_api::{AppState, app, db};
 use serde_json::Value;
 use sqlx::PgPool;
 use tower::ServiceExt;
-use vet_map_api::{AppState, app, db};
 
 #[sqlx::test]
 async fn connects_and_runs_query(pool: PgPool) -> sqlx::Result<()> {

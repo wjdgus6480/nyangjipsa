@@ -1,11 +1,11 @@
 use anyhow::Context;
+use nyangjipsa_api::{AppState, app, config::Config, db};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
-use vet_map_api::{AppState, app, config::Config, db};
 
 #[tokio::main]
 async fn main() -> anyhow::Result<()> {
-    // .env 는 현재 폴더 또는 상위 폴더에서 찾습니다 (01_backend 에서 실행해도 03_vet-map/.env 사용)
+    // .env 는 현재 폴더 또는 상위 폴더에서 찾습니다 (01_backend 에서 실행해도 nyangjipsa/.env 사용)
     dotenvy::dotenv().ok();
 
     tracing_subscriber::fmt()

@@ -1,12 +1,12 @@
 # 로컬 개발용 PostgreSQL 18 + PostGIS 3.7
-# 실행 (03_vet-map 폴더에서):  docker compose up -d
+# 실행 (nyangjipsa 폴더에서):  docker compose up -d
 # 주의: "docker compose down -v" 는 DB 데이터 볼륨을 삭제하므로 사용하지 않습니다.
-name: vet-map
+name: nyangjipsa
 
 services:
   db:
     image: postgis/postgis:18-3.7
-    container_name: vet-map-db
+    container_name: nyangjipsa-db
     restart: unless-stopped
     environment:
       POSTGRES_USER: ${POSTGRES_USER:?.env 에 POSTGRES_USER 가 필요합니다}
@@ -19,7 +19,7 @@ services:
     volumes:
       # PostgreSQL 18 이미지부터 데이터는 /var/lib/postgresql/18/docker 에 저장되므로
       # 상위 폴더 /var/lib/postgresql 을 볼륨에 연결합니다.
-      - vet_map_pgdata:/var/lib/postgresql
+      - nyangjipsa_pgdata:/var/lib/postgresql
     healthcheck:
       # -h 127.0.0.1: 초기화 중 임시 서버(소켓 전용)가 아닌 실제 서버가 뜬 뒤에만 healthy
       test: ["CMD-SHELL", "pg_isready -h 127.0.0.1 -p 5432 -U \"$${POSTGRES_USER}\" -d \"$${POSTGRES_DB}\""]
@@ -29,5 +29,5 @@ services:
       start_period: 20s
 
 volumes:
-  vet_map_pgdata:
-    name: vet_map_pgdata
+  nyangjipsa_pgdata:
+    name: nyangjipsa_pgdata

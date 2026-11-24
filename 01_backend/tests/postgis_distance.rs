@@ -1,8 +1,8 @@
 //! PostGIS 거리 계산 / 좌표 순서 / 반경 검색 테스트.
 //! 좌표 규칙: X = 경도(lon), Y = 위도(lat), SRID 4326.
 
+use nyangjipsa_api::coordinate::Coordinate;
 use sqlx::PgPool;
-use vet_map_api::coordinate::Coordinate;
 
 /// 두 좌표 사이의 거리(미터)를 PostGIS geography 로 계산합니다.
 async fn distance_m(pool: &PgPool, a: Coordinate, b: Coordinate) -> sqlx::Result<f64> {

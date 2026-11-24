@@ -11,13 +11,13 @@
 use std::time::Instant;
 
 use anyhow::{Context, bail};
-use tracing_subscriber::EnvFilter;
-use vet_map_api::{
+use nyangjipsa_api::{
     animal_business::{self, BusinessRecord, BusinessType, RawItem},
     config::Config,
     db,
     public_data::PublicDataClient,
 };
+use tracing_subscriber::EnvFilter;
 
 const ROWS_PER_PAGE: u64 = 100; // API 최대값
 

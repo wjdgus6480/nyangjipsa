@@ -1,4 +1,4 @@
-# 동물병원 지도 서비스 — 기술 스택 및 개발환경 구축 가이드
+# 냥집사 (nyangjipsa) — 기술 스택 및 개발환경 구축 가이드
 
 > 이 문서 하나만 순서대로 따라 하면 **Rust + Axum + PostgreSQL + PostGIS** 백엔드 개발환경을 구축하고 서버를 실행할 수 있습니다.
 > 팀 기본 개발 방식은 **Windows + WSL2(Ubuntu)** 입니다. 각 명령 위에 **📂 실행 위치**를 적어 두었습니다.
@@ -21,7 +21,7 @@
 |---|---|---|
 | 📂 **Windows PowerShell** | Windows의 PowerShell / Windows Terminal | `PS C:\...>` |
 | 📂 **Ubuntu** | WSL Ubuntu 터미널 (아무 폴더) | `이름@PC:~$` |
-| 📂 **Ubuntu `~/projects/03_vet-map`** | Ubuntu에서 해당 폴더로 `cd` 한 뒤 | `이름@PC:~/projects/03_vet-map$` |
+| 📂 **Ubuntu `~/projects/nyangjipsa`** | Ubuntu에서 해당 폴더로 `cd` 한 뒤 | `이름@PC:~/projects/nyangjipsa$` |
 
 ---
 
@@ -104,10 +104,10 @@
  Windows 11
  ├─ 브라우저 / PowerShell ──── http://127.0.0.1:8080 ───┐  (WSL localhost 자동 연결)
  ├─ VS Code (WSL 확장으로 Ubuntu 안의 폴더를 엶)          │
- ├─ Docker Desktop ── 컨테이너 vet-map-db (127.0.0.1:5432)│
+ ├─ Docker Desktop ── 컨테이너 nyangjipsa-db (127.0.0.1:5432)│
  │                         ▲                              │
  └─ WSL2 Ubuntu            │ localhost:5432               ▼
-     └─ ~/projects/03_vet-map ── cargo run (Axum 서버, 127.0.0.1:8080)
+     └─ ~/projects/nyangjipsa ── cargo run (Axum 서버, 127.0.0.1:8080)
 ```
 
 ### 좌표 규칙 (모든 계층 공통)
@@ -238,7 +238,7 @@
 #### Docker / Docker Compose
 - **역할**: PostgreSQL + PostGIS를 **설치 없이 컨테이너로 실행**
 - **왜**: 팀원 모두 똑같은 DB 버전·확장을 명령 한 줄로 실행. PC에 PostgreSQL을 직접 설치할 필요 없음
-- **연결**: `docker-compose.yml` → `.env`의 DB 계정 사용 → 데이터는 **이름 있는 볼륨**(`vet_map_pgdata`)에 보존
+- **연결**: `docker-compose.yml` → `.env`의 DB 계정 사용 → 데이터는 **이름 있는 볼륨**(`nyangjipsa_pgdata`)에 보존
 - **상태**: ✅ 사용
 
 #### React + TypeScript
@@ -392,7 +392,7 @@ cargo --version
 code --install-extension ms-vscode-remote.remote-wsl
 ```
 
-📂 **Ubuntu `~/projects/03_vet-map`** (8장에서 저장소를 받은 뒤) — VS Code로 열기:
+📂 **Ubuntu `~/projects/nyangjipsa`** (8장에서 저장소를 받은 뒤) — VS Code로 열기:
 
 ```bash
 code .
@@ -514,16 +514,16 @@ mkdir -p ~/projects && cd ~/projects
 ```
 
 ```bash
-git clone <저장소 주소> 03_vet-map
+git clone <저장소 주소> nyangjipsa
 ```
 
 ```bash
-cd ~/projects/03_vet-map
+cd ~/projects/nyangjipsa
 ```
 
 > ⚠️ **반드시 Ubuntu 홈 폴더(`~/projects`) 아래에 받으세요.** `/mnt/c/...`(Windows 폴더)에서 빌드하면 파일 접근이 매우 느리고 권한 문제가 생깁니다.
 >
-> 💡 Windows 탐색기에서 이 폴더를 보려면 주소창에 `\\wsl.localhost\Ubuntu\home\<Ubuntu사용자명>\projects\03_vet-map` 을 입력합니다. 단, **파일 편집은 VS Code(WSL)로 하세요.**
+> 💡 Windows 탐색기에서 이 폴더를 보려면 주소창에 `\\wsl.localhost\Ubuntu\home\<Ubuntu사용자명>\projects\nyangjipsa` 을 입력합니다. 단, **파일 편집은 VS Code(WSL)로 하세요.**
 
 ---
 
@@ -531,7 +531,7 @@ cd ~/projects/03_vet-map
 
 ### 9-1. .env 파일 만들기
 
-📂 **Ubuntu `~/projects/03_vet-map`**
+📂 **Ubuntu `~/projects/nyangjipsa`**
 
 ```bash
 cp .env.example .env && chmod 600 .env
@@ -547,7 +547,7 @@ code .env
 
 SQLx의 `query!` 매크로는 빌드할 때 **`01_backend` 폴더의 `.env`** 에서 `DATABASE_URL` 을 찾습니다. 루트의 `.env` 하나만 관리하도록 **링크**를 만듭니다.
 
-📂 **Ubuntu `~/projects/03_vet-map`**
+📂 **Ubuntu `~/projects/nyangjipsa`**
 
 ```bash
 ln -s ../.env 01_backend/.env
@@ -567,15 +567,15 @@ ls -l 01_backend/.env
 
 | 변수 | 예시 값 | 설명 |
 |---|---|---|
-| `POSTGRES_USER` | `vetmap` | DB 관리자 계정 (Docker가 처음 실행될 때 생성) |
+| `POSTGRES_USER` | `nyangjipsa` | DB 관리자 계정 (Docker가 처음 실행될 때 생성) |
 | `POSTGRES_PASSWORD` | `change_me_local_only` | DB 비밀번호 — **예시 값, 반드시 변경** |
-| `POSTGRES_DB` | `vet_map` | 개발용 DB 이름 |
+| `POSTGRES_DB` | `nyangjipsa` | 개발용 DB 이름 |
 | `POSTGRES_PORT` | `5432` | PC에서 접속할 포트 (이미 쓰고 있으면 `5433` 등으로 변경) |
-| `DATABASE_URL` | `postgres://vetmap:change_me_local_only@127.0.0.1:5432/vet_map` | 백엔드·SQLx 접속 주소. 위 4개 값과 일치해야 함 |
+| `DATABASE_URL` | `postgres://nyangjipsa:change_me_local_only@127.0.0.1:5432/nyangjipsa` | 백엔드·SQLx 접속 주소. 위 4개 값과 일치해야 함 |
 | `SERVER_HOST` | `127.0.0.1` | API 서버 주소 |
 | `SERVER_PORT` | `8080` | API 서버 포트 |
 | `APP_ENV` | `development` | 실행 환경 (`development` / `production`) |
-| `RUST_LOG` | `info,vet_map_api=debug,tower_http=info` | 로그 레벨 |
+| `RUST_LOG` | `info,nyangjipsa_api=debug,tower_http=info` | 로그 레벨 |
 | `PUBLIC_DATA_BASE_URL` | `https://apis.data.go.kr` | 공공데이터포털 API 기본 주소 |
 | `PUBLIC_DATA_SERVICE_KEY` | (빈 값) | 공공데이터포털 인증키 — [13장](#13-공공데이터-api-인증키-등록-및-reqwest-호출-구조) |
 | `MAP_PROVIDER` 등 | (주석 처리) | 지도 API — **미정**, 확정 후 사용 |
@@ -589,7 +589,7 @@ ls -l 01_backend/.env
 - 서버 설정을 로그로 출력할 때 DB 주소와 API 키는 `<hidden>` 으로 가려집니다 (단위 테스트로 확인).
 - 커밋 전 확인:
 
-📂 **Ubuntu `~/projects/03_vet-map`**
+📂 **Ubuntu `~/projects/nyangjipsa`**
 
 ```bash
 git status --short
@@ -603,7 +603,7 @@ git status --short
 
 ### 10-1. 컨테이너 시작
 
-📂 **Ubuntu `~/projects/03_vet-map`** (Docker Desktop 실행 중, `.env` 작성 완료)
+📂 **Ubuntu `~/projects/nyangjipsa`** (Docker Desktop 실행 중, `.env` 작성 완료)
 
 ```bash
 docker compose up -d
@@ -611,7 +611,7 @@ docker compose up -d
 
 처음 실행할 때 이미지(약 600MB)를 내려받습니다.
 
-> Windows PowerShell에서 Windows 쪽 폴더로 실행해도 됩니다. compose 파일에 `name: vet-map` 이 고정되어 있어 **어디서 실행해도 같은 컨테이너·같은 볼륨**을 사용합니다.
+> Windows PowerShell에서 Windows 쪽 폴더로 실행해도 됩니다. compose 파일에 `name: nyangjipsa` 이 고정되어 있어 **어디서 실행해도 같은 컨테이너·같은 볼륨**을 사용합니다.
 
 ### 10-2. 상태 확인 (healthy 가 될 때까지)
 
@@ -619,16 +619,16 @@ docker compose up -d
 docker compose ps
 ```
 
-정상 결과: `vet-map-db` 의 STATUS 에 **`(healthy)`** 가 표시됩니다. `(health: starting)` 이면 10~30초 후 다시 확인하세요.
+정상 결과: `nyangjipsa-db` 의 STATUS 에 **`(healthy)`** 가 표시됩니다. `(health: starting)` 이면 10~30초 후 다시 확인하세요.
 
 ### 10-3. 접속 및 PostGIS 확인
 
 ```bash
-docker compose exec db psql -U vetmap -d vet_map -c "SELECT version();"
+docker compose exec db psql -U nyangjipsa -d nyangjipsa -c "SELECT version();"
 ```
 
 ```bash
-docker compose exec db psql -U vetmap -d vet_map -c "SELECT postgis_full_version();"
+docker compose exec db psql -U nyangjipsa -d nyangjipsa -c "SELECT postgis_full_version();"
 ```
 
 > `-U`, `-d` 값은 `.env` 의 `POSTGRES_USER`, `POSTGRES_DB` 와 같아야 합니다.
@@ -640,9 +640,9 @@ docker compose exec db psql -U vetmap -d vet_map -c "SELECT postgis_full_version
 | 항목 | 값 |
 |---|---|
 | 이미지 | `postgis/postgis:18-3.7` |
-| 컨테이너 이름 | `vet-map-db` |
+| 컨테이너 이름 | `nyangjipsa-db` |
 | 접속 주소 | `127.0.0.1:5432` (PC 내부에서만 접속 가능) |
-| 데이터 볼륨 | `vet_map_pgdata` → 컨테이너 `/var/lib/postgresql` |
+| 데이터 볼륨 | `nyangjipsa_pgdata` → 컨테이너 `/var/lib/postgresql` |
 | Healthcheck | `pg_isready -h 127.0.0.1` 5초 간격, 최대 10회, 시작 후 20초 유예 |
 
 ### 10-5. 중지·재시작 (데이터 유지)
@@ -683,10 +683,10 @@ sqlx --version
 
 ### 11-2. 마이그레이션 적용
 
-📂 **Ubuntu `~/projects/03_vet-map/01_backend`** (DB 컨테이너 healthy 상태)
+📂 **Ubuntu `~/projects/nyangjipsa/01_backend`** (DB 컨테이너 healthy 상태)
 
 ```bash
-cd ~/projects/03_vet-map/01_backend
+cd ~/projects/nyangjipsa/01_backend
 ```
 
 ```bash
@@ -714,7 +714,7 @@ sqlx migrate info
 
 ### 11-4. 새 마이그레이션 추가 규칙
 
-📂 **Ubuntu `~/projects/03_vet-map/01_backend`**
+📂 **Ubuntu `~/projects/nyangjipsa/01_backend`**
 
 ```bash
 sqlx migrate add --sequential <설명_영문_소문자>
@@ -742,7 +742,7 @@ sqlx migrate add --sequential <설명_영문_소문자>
 
 **SQL 쿼리 매크로(`query!`, `query_as!`, `query_scalar!`)를 추가하거나 수정했다면 커밋 전에 반드시 실행합니다.**
 
-📂 **Ubuntu `~/projects/03_vet-map/01_backend`** (DB 실행 중, 마이그레이션 적용 완료)
+📂 **Ubuntu `~/projects/nyangjipsa/01_backend`** (DB 실행 중, 마이그레이션 적용 완료)
 
 ```bash
 cargo sqlx prepare -- --all-targets
@@ -830,7 +830,7 @@ FROM hospitals;
    - 최근 발급 키는 **64자리 16진수** 하나입니다 (Encoding/Decoding 이 같음)
    - 예전 형식 키(끝이 `==` 등)는 **Decoding 키**를 사용합니다. Encoding 키(`%` 포함)를 넣으면 이중 인코딩되어 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 가 납니다.
 
-📂 **Ubuntu `~/projects/03_vet-map`** — `.env` 에 **이미 있는 줄에** 값을 넣습니다 (예시 값):
+📂 **Ubuntu `~/projects/nyangjipsa`** — `.env` 에 **이미 있는 줄에** 값을 넣습니다 (예시 값):
 
 ```dotenv
 PUBLIC_DATA_SERVICE_KEY=여기에_인증키_붙여넣기
@@ -877,7 +877,7 @@ grep -c '^PUBLIC_DATA_SERVICE_KEY=.' .env
 
 ### 13-4. 수집 실행
 
-📂 **Ubuntu `~/projects/03_vet-map/01_backend`** (DB 실행 중, 마이그레이션 완료, 인증키 등록)
+📂 **Ubuntu `~/projects/nyangjipsa/01_backend`** (DB 실행 중, 마이그레이션 완료, 인증키 등록)
 
 먼저 시험 (업종별 1페이지 = 100건씩):
 
@@ -915,7 +915,7 @@ cargo run --release --bin collect -- all --since 20261101000000
 수집 결과 확인:
 
 ```bash
-docker compose exec db psql -U vetmap -d vet_map -c "SELECT business_type, count(*), count(location) AS with_location, count(*) FILTER (WHERE status_code='01') AS open FROM animal_businesses GROUP BY 1 ORDER BY 1;"
+docker compose exec db psql -U nyangjipsa -d nyangjipsa -c "SELECT business_type, count(*), count(location) AS with_location, count(*) FILTER (WHERE status_code='01') AS open FROM animal_businesses GROUP BY 1 ORDER BY 1;"
 ```
 
 ---
@@ -924,7 +924,7 @@ docker compose exec db psql -U vetmap -d vet_map -c "SELECT business_type, count
 
 ### 14-1. 빌드
 
-📂 **Ubuntu `~/projects/03_vet-map/01_backend`**
+📂 **Ubuntu `~/projects/nyangjipsa/01_backend`**
 
 ```bash
 cargo build --locked
@@ -935,7 +935,7 @@ cargo build --locked
 
 ### 14-2. 실행
 
-📂 **Ubuntu `~/projects/03_vet-map/01_backend`** (DB 컨테이너 healthy, 마이그레이션 완료)
+📂 **Ubuntu `~/projects/nyangjipsa/01_backend`** (DB 컨테이너 healthy, 마이그레이션 완료)
 
 ```bash
 cargo run
@@ -1025,7 +1025,7 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 
 ## 15. 테스트 및 코드 검사
 
-📂 모두 **Ubuntu `~/projects/03_vet-map/01_backend`**
+📂 모두 **Ubuntu `~/projects/nyangjipsa/01_backend`**
 
 ### 15-1. 명령 요약
 
@@ -1045,7 +1045,7 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-### 15-3. 테스트 구성 (✅ 기준 PC: 29개 모두 통과)
+### 15-3. 테스트 구성 (✅ 기준 PC: 25개 모두 통과)
 
 공공데이터 API(네트워크)를 호출하는 테스트는 없습니다. 응답 해석은 실제 응답 형식을 본뜬 문자열로 검증합니다.
 
@@ -1063,7 +1063,7 @@ cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 DB가 필요한 테스트는 `#[sqlx::test]` 를 사용합니다.
 
 - 테스트마다 **임시 DB(`_sqlx_test_...`)를 새로 만들고** 마이그레이션을 적용한 뒤 실행 → 끝나면 정리
-- **개발용 DB(`vet_map`)의 데이터는 건드리지 않습니다.**
+- **개발용 DB(`nyangjipsa`)의 데이터는 건드리지 않습니다.**
 - 그래서 `.env` 의 DB 계정에는 DB 생성 권한이 있어야 합니다 (Docker 기본 계정은 관리자이므로 OK).
 
 특정 테스트만 실행:
@@ -1094,7 +1094,7 @@ cargo test -- --nocapture
 
 ### 16-2. 작업 순서 (실제 명령)
 
-📂 **Ubuntu `~/projects/03_vet-map`**
+📂 **Ubuntu `~/projects/nyangjipsa`**
 
 1. 최신 main 받기
 
@@ -1189,9 +1189,9 @@ git push -u origin feature/hospital-nearby-api
 | 증상 / 오류 메시지 | 원인 | 해결 |
 |---|---|---|
 | `failed to connect to the docker API ... dockerDesktopLinuxEngine` | Docker Desktop 미실행 | Docker Desktop 실행 후 1~2분 대기 → `docker version` 재확인 |
-| `required variable POSTGRES_USER is missing` | `.env` 없음 또는 위치 다름 | `03_vet-map` 폴더에서 `cp .env.example .env` |
+| `required variable POSTGRES_USER is missing` | `.env` 없음 또는 위치 다름 | `nyangjipsa` 폴더에서 `cp .env.example .env` |
 | `Bind for 127.0.0.1:5432 failed: port is already allocated` | 다른 PostgreSQL 이 5432 사용 중 | `.env` 의 `POSTGRES_PORT` 와 `DATABASE_URL` 포트를 `5433` 으로 함께 변경 |
-| `password authentication failed for user "vetmap"` | 볼륨이 이미 만들어진 뒤 `.env` 비밀번호를 바꿈 (비밀번호는 **최초 생성 시에만** 적용) | `.env` 를 원래 비밀번호로 되돌리기. 또는 `docker compose exec db psql -U vetmap -d vet_map -c "ALTER USER vetmap PASSWORD '새값';"` |
+| `password authentication failed for user "nyangjipsa"` | 볼륨이 이미 만들어진 뒤 `.env` 비밀번호를 바꿈 (비밀번호는 **최초 생성 시에만** 적용) | `.env` 를 원래 비밀번호로 되돌리기. 또는 `docker compose exec db psql -U nyangjipsa -d nyangjipsa -c "ALTER USER nyangjipsa PASSWORD '새값';"` |
 
 ### 17-4. 공공데이터 / 좌표 / Git
 
@@ -1220,7 +1220,7 @@ git push -u origin feature/hospital-nearby-api
 ## 부록 A. 프로젝트 폴더 구조
 
 ```text
-03_vet-map/                         ← Git 저장소 최상위 (WSL: ~/projects/03_vet-map)
+nyangjipsa/                         ← Git 저장소 최상위 (WSL: ~/projects/nyangjipsa)
 ├── .env.example                    환경변수 예시 (실제 값은 .env, Git 제외)
 ├── .gitattributes                  줄바꿈 규칙 (LF 고정)
 ├── .gitignore                      Git 제외 목록
@@ -1276,17 +1276,17 @@ git push -u origin feature/hospital-nearby-api
 | 5 | 빌드 도구 | Ubuntu | `sudo apt-get install -y build-essential pkg-config` | 6 |
 | 6 | Rust | Ubuntu | rustup 설치 → `rustc --version` = 1.100.0 | 5 |
 | 7 | Git 설정 | Ubuntu | `git config --global user.name/user.email ...` | 8-1 |
-| 8 | 저장소 복제 | Ubuntu `~/projects` | `git clone <저장소 주소> 03_vet-map` | 8-2 |
-| 9 | `.env` + 링크 | Ubuntu `~/projects/03_vet-map` | `cp .env.example .env` → 비밀번호 수정 → `ln -s ../.env 01_backend/.env` | 9 |
-| 10 | DB 실행 | Ubuntu `~/projects/03_vet-map` | `docker compose up -d` → `docker compose ps` 에 healthy | 10 |
+| 8 | 저장소 복제 | Ubuntu `~/projects` | `git clone <저장소 주소> nyangjipsa` | 8-2 |
+| 9 | `.env` + 링크 | Ubuntu `~/projects/nyangjipsa` | `cp .env.example .env` → 비밀번호 수정 → `ln -s ../.env 01_backend/.env` | 9 |
+| 10 | DB 실행 | Ubuntu `~/projects/nyangjipsa` | `docker compose up -d` → `docker compose ps` 에 healthy | 10 |
 | 11 | sqlx-cli | Ubuntu | `cargo install sqlx-cli --version 0.9.1 --locked --no-default-features --features rustls,postgres` | 11 |
 | 12 | 마이그레이션 | Ubuntu `.../01_backend` | `sqlx migrate run` | 11 |
 | 13 | 빌드 | Ubuntu `.../01_backend` | `cargo build --locked` | 14 |
-| 14 | 테스트 | Ubuntu `.../01_backend` | `cargo test` (29개 통과) | 15 |
-| 15 | 공공데이터 인증키 | Ubuntu `~/projects/03_vet-map` | 5개 API 활용신청 → `.env` 에 키 입력 | 13-2 |
+| 14 | 테스트 | Ubuntu `.../01_backend` | `cargo test` (25개 통과) | 15 |
+| 15 | 공공데이터 인증키 | Ubuntu `~/projects/nyangjipsa` | 5개 API 활용신청 → `.env` 에 키 입력 | 13-2 |
 | 16 | 데이터 수집 | Ubuntu `.../01_backend` | `cargo run --release --bin collect -- all` | 13-4 |
 | 17 | 서버 실행 | Ubuntu `.../01_backend` | `cargo run` → Windows에서 `http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233` | 14 |
-| 18 | VS Code로 열기 | Ubuntu `~/projects/03_vet-map` | `code .` → rust-analyzer 설치 | 5-3 |
+| 18 | VS Code로 열기 | Ubuntu `~/projects/nyangjipsa` | `code .` → rust-analyzer 설치 | 5-3 |
 
 17번까지 성공하면 개발환경 구축이 끝난 것입니다. 🎉
 

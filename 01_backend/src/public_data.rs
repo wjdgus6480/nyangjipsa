@@ -66,7 +66,7 @@ impl PublicDataClient {
     ) -> Result<Self, PublicDataError> {
         let http = reqwest::Client::builder()
             .timeout(Duration::from_secs(30))
-            .user_agent(concat!("vet-map-api/", env!("CARGO_PKG_VERSION")))
+            .user_agent(concat!("nyangjipsa-api/", env!("CARGO_PKG_VERSION")))
             .build()?;
         Ok(Self {
             http,

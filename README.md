@@ -1,4 +1,4 @@
-# 동물병원 지도 서비스 (vet-map)
+# 냥집사 (nyangjipsa) — 동물병원 지도 서비스
 
 공공데이터 기반으로 주변 동물병원 위치와 진료비 정보를 지도에서 보여주는 서비스입니다.
 
@@ -6,7 +6,7 @@
 
 **[03_tech-stack/TECH_STACK_AND_SETUP.md](03_tech-stack/TECH_STACK_AND_SETUP.md)** 문서 하나를 순서대로 따라 하면 개발환경 구축부터 서버 실행까지 끝납니다.
 
-팀 기본 개발 방식은 **WSL2(Ubuntu)** 입니다. 프로젝트는 `~/projects/03_vet-map` 에 둡니다.
+팀 기본 개발 방식은 **WSL2(Ubuntu)** 입니다. 프로젝트는 `~/projects/nyangjipsa` 에 둡니다.
 
 ## 빠른 시작 (환경이 이미 준비된 경우, Ubuntu 터미널)
 

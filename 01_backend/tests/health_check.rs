@@ -6,9 +6,9 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
+use nyangjipsa_api::routes::health;
 use serde_json::Value;
 use tower::ServiceExt;
-use vet_map_api::routes::health;
 
 #[tokio::test]
 async fn health_returns_ok() {

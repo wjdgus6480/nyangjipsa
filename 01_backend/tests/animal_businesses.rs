@@ -6,14 +6,14 @@ use axum::{
     http::{Request, StatusCode},
 };
 use http_body_util::BodyExt;
-use serde_json::Value;
-use sqlx::PgPool;
-use tower::ServiceExt;
-use vet_map_api::{
+use nyangjipsa_api::{
     AppState,
     animal_business::{self, BusinessRecord, BusinessType},
     app,
 };
+use serde_json::Value;
+use sqlx::PgPool;
+use tower::ServiceExt;
 
 /// 실제 API 응답의 도산대로90길 17 (청담동) 원본 좌표 (EPSG:5174)
 const DOSAN_X: f64 = 204264.267630355;

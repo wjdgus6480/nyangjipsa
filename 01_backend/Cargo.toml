@@ -1,10 +1,10 @@
 [package]
-name = "vet-map-api"
+name = "nyangjipsa-api"
 version = "0.1.0"
 edition = "2024"
 rust-version = "1.100"
 publish = false
-default-run = "vet-map-api"   # cargo run = API 서버, 수집은 cargo run --bin collect
+default-run = "nyangjipsa-api"   # cargo run = API 서버, 수집은 cargo run --bin collect
 description = "동물병원 지도 서비스 백엔드 (Axum + SQLx + PostGIS)"
 
 [dependencies]
