@@ -505,7 +505,7 @@ git config --global core.quotepath false
 
 ### 8-2. 저장소 복제
 
-> 원격 저장소 주소는 저장소가 생성된 뒤 팀장이 공유합니다. 아래 `<저장소 주소>` 를 실제 주소로 바꿔서 실행하세요.
+> 저장소: [https://github.com/wjdgus6480/nyangjipsa](https://github.com/wjdgus6480/nyangjipsa) (공개)
 
 📂 **Ubuntu**
 
@@ -514,7 +514,7 @@ mkdir -p ~/projects && cd ~/projects
 ```
 
 ```bash
-git clone <저장소 주소> nyangjipsa
+git clone https://github.com/wjdgus6480/nyangjipsa.git
 ```
 
 ```bash
@@ -1152,7 +1152,12 @@ git push -u origin feature/hospital-nearby-api
 | `migrations/*.sql` | 개인 VS Code 설정 (`.vscode/` 중 공용 2개 파일 제외) |
 | `.env.example` (예시 값만) | 원본 데이터 대용량 파일 |
 
-> 💡 GitHub에 push 할 때 인증: Ubuntu에서 `gh auth login` (GitHub CLI) 또는 Windows의 Git Credential Manager 연동을 사용합니다. 원격 저장소가 만들어지면 팀 공지로 안내합니다. (📝)
+> 💡 GitHub에 push 할 때 인증 (택1, 최초 1회):
+> - Windows에 GitHub CLI(`gh`)가 로그인되어 있으면, 📂 **Ubuntu `~/projects/nyangjipsa`** 에서
+>   `git config credential.https://github.com.helper "!'/mnt/c/Program Files/GitHub CLI/gh.exe' auth git-credential"`
+> - 또는 Ubuntu에 GitHub CLI를 설치하고 `gh auth login` → `gh auth setup-git`
+>
+> 💡 GitHub 잔디(기여 기록)에 반영되려면 `git config --global user.email` 이 **GitHub 계정에 등록·인증된 이메일**이어야 합니다. 공개 저장소이므로 커밋 이메일이 공개됩니다.
 
 ---
 
@@ -1276,7 +1281,7 @@ nyangjipsa/                         ← Git 저장소 최상위 (WSL: ~/projects
 | 5 | 빌드 도구 | Ubuntu | `sudo apt-get install -y build-essential pkg-config` | 6 |
 | 6 | Rust | Ubuntu | rustup 설치 → `rustc --version` = 1.100.0 | 5 |
 | 7 | Git 설정 | Ubuntu | `git config --global user.name/user.email ...` | 8-1 |
-| 8 | 저장소 복제 | Ubuntu `~/projects` | `git clone <저장소 주소> nyangjipsa` | 8-2 |
+| 8 | 저장소 복제 | Ubuntu `~/projects` | `git clone https://github.com/wjdgus6480/nyangjipsa.git` | 8-2 |
 | 9 | `.env` + 링크 | Ubuntu `~/projects/nyangjipsa` | `cp .env.example .env` → 비밀번호 수정 → `ln -s ../.env 01_backend/.env` | 9 |
 | 10 | DB 실행 | Ubuntu `~/projects/nyangjipsa` | `docker compose up -d` → `docker compose ps` 에 healthy | 10 |
 | 11 | sqlx-cli | Ubuntu | `cargo install sqlx-cli --version 0.9.1 --locked --no-default-features --features rustls,postgres` | 11 |

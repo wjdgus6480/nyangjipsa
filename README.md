@@ -1,5 +1,7 @@
 # 냥집사 (nyangjipsa) — 동물병원 지도 서비스
 
+저장소: https://github.com/wjdgus6480/nyangjipsa
+
 공공데이터 기반으로 주변 동물병원 위치와 진료비 정보를 지도에서 보여주는 서비스입니다.
 
 ## 👉 처음이라면
