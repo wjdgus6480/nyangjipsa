@@ -49,6 +49,11 @@
     #map { width:100%; height:100%; }
     .iw { padding:11px 13px; font-size:13px; max-width:260px; line-height:1.5; color:var(--fg); }
     .iw b { font-size:14.5px; }
+    li .fee { font-size:12px; color:var(--fg); margin-top:3px; font-weight:600; }
+    .iw-fees { list-style:none; margin:8px 0 0; padding:6px 0 0; border-top:1px dashed #d6e3ea; }
+    .iw-fees li { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; padding:1px 0; }
+    .iw-fees b { font-size:12.5px; white-space:nowrap; }
+    .iw-note { font-size:11px; color:var(--muted); margin-top:4px; }
     .err { padding:16px; color:#c2410c; font-size:14px; }
 
     /* 지도 핀 (브랜드 컬러) */
@@ -265,7 +270,7 @@
     }
     const c = map.getCenter();
     const radius = currentRadius();
-    const q = new URLSearchParams({ lon: c.lng().toFixed(6), lat: c.lat().toFixed(6), radius_m: radius, type: types.join(","), limit: LIMIT });
+    const q = new URLSearchParams({ lon: c.lng().toFixed(6), lat: c.lat().toFixed(6), radius_m: radius, type: types.join(","), limit: LIMIT, include_fees: "true" });
     controller?.abort();
     controller = new AbortController();
     status("검색 중…");
@@ -312,6 +317,13 @@
       li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
       li.querySelector(".name").textContent = p.name;
       li.querySelector(".meta").textContent = `${TYPE_LABEL[p.type] || p.type} · ${fmtDist(p.distance_m)} · ${p.road_address || p.lot_address || "주소 없음"}`;
+      const keyFees = pickFees(p.fees, LIST_FEES);
+      if (keyFees.length) {
+        const fee = document.createElement("div");
+        fee.className = "fee";
+        fee.textContent = keyFees.map((x) => `${shortFee(x.item_name)} ${fmtPrice(x.price)}`).join(" · ") + (keyFees.some((x) => x.is_dummy) ? " (참고)" : "");
+        li.appendChild(fee);
+      }
       li.addEventListener("click", () => select(p.id, true));
       list.appendChild(li);
     }
@@ -337,9 +349,37 @@
     div.querySelector("b").textContent = p.name;
     div.querySelector(".a").textContent = (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : "");
     div.querySelector(".t").textContent = `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`;
+    const iwFees = pickFees(p.fees, INFO_FEES);
+    if (iwFees.length) {
+      const ul = document.createElement("ul");
+      ul.className = "iw-fees";
+      for (const x of iwFees) {
+        const li = document.createElement("li");
+        li.innerHTML = "<span></span><b></b>";
+        li.querySelector("span").textContent = shortFee(x.item_name);
+        li.querySelector("b").textContent = fmtPrice(x.price);
+        ul.appendChild(li);
+      }
+      const note = document.createElement("div");
+      note.className = "iw-note";
+      note.textContent = iwFees.some((x) => x.is_dummy) ? "고양이 기준 참고 가격(추정치) · 병원에 확인하세요" : "고양이 기준 참고 가격";
+      div.append(ul, note);
+    }
     infoWindow.setContent(div);
     infoWindow.open(map, m);
     if (pan) map.panTo(toLatLng(p));
+  }
+
+  // ---- 진료비 표시 (서버 /api/places/nearby?include_fees=true 의 병원 fees, 고양이 기준) ----
+  const LIST_FEES = ["초진 진찰료", "종합백신 접종비"];
+  const INFO_FEES = ["초진 진찰료", "재진 진찰료", "종합백신 접종비", "혈액화학 검사비와 판독료", "엑스선 촬영비와 판독료", "입원비"];
+  const SHORT_FEE = { "진찰에 대한 상담료": "상담료", "혈액화학 검사비와 판독료": "혈액화학 검사", "전혈구 검사비와 판독료": "전혈구 검사", "전해질 검사비와 판독료": "전해질 검사", "엑스선 촬영비와 판독료": "엑스레이", "초음파 검사비와 판독료": "초음파", "컴퓨터단층촬영(CT)비와 판독료": "CT", "자기공명영상(MRI)비와 판독료": "MRI", "종합백신 접종비": "종합백신", "광견병백신 접종비": "광견병백신", "인플루엔자백신 접종비": "인플루엔자백신", "입원비": "입원(1일)" };
+  const shortFee = (name) => SHORT_FEE[name] || name;
+  const fmtPrice = (won) => (Number.isFinite(won) ? won.toLocaleString("ko-KR") + "원" : "");
+  /** fees 중 wanted 순서대로 있는 것만 */
+  function pickFees(fees, wanted) {
+    if (!Array.isArray(fees) || !fees.length) return [];
+    return wanted.map((name) => fees.find((f) => f.item_name === name)).filter(Boolean);
   }
 
   const fmtDist = (m) => (m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`);

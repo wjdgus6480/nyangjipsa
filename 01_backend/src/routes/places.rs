@@ -13,6 +13,7 @@ use crate::{
     animal_business::{self, BusinessType, NearbyPlace},
     coordinate::Coordinate,
     error::AppError,
+    routes::hospitals::{FeeOut, load_fees},
 };
 
 pub const DEFAULT_RADIUS_M: f64 = 1_000.0;
@@ -99,6 +100,18 @@ pub struct NearbyQuery {
     pub types: Option<String>,
     /// 최대 개수. 기본 50, 최대 200
     pub limit: Option<i64>,
+    /// true 면 병원(hospital_id 가 있는 항목)에 고양이 진료비(`fees`)를 붙입니다. 기본 false
+    pub include_fees: Option<bool>,
+}
+
+/// 검색 결과 한 건 + (요청 시) 병원 진료비
+#[derive(Debug, Serialize)]
+pub struct PlaceItem {
+    #[serde(flatten)]
+    pub place: NearbyPlace,
+    /// `include_fees=true` 이고 진료비가 있는 병원에만. `is_dummy: true` 는 참고용 추정 가격
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub fees: Option<Vec<FeeOut>>,
 }
 
 #[derive(Debug, Serialize)]
@@ -106,7 +119,7 @@ pub struct NearbyResponse {
     pub center: Coordinate,
     pub radius_m: f64,
     pub count: usize,
-    pub items: Vec<NearbyPlace>,
+    pub items: Vec<PlaceItem>,
 }
 
 async fn nearby(
@@ -139,9 +152,24 @@ async fn nearby(
         ),
     };
 
-    let items =
+    let places =
         animal_business::find_nearby(&state.pool, center, radius_m, types.as_deref(), limit)
             .await?;
+
+    // 병원 진료비 (지도 목록·정보창에 표시)
+    let mut fees = if q.include_fees.unwrap_or(false) {
+        let ids: Vec<i64> = places.iter().filter_map(|p| p.hospital_id).collect();
+        load_fees(&state.pool, &ids).await?
+    } else {
+        Default::default()
+    };
+    let items: Vec<PlaceItem> = places
+        .into_iter()
+        .map(|place| PlaceItem {
+            fees: place.hospital_id.and_then(|id| fees.remove(&id)),
+            place,
+        })
+        .collect();
 
     Ok(Json(NearbyResponse {
         center,

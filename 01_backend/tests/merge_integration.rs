@@ -389,3 +389,31 @@ async fn places_api_links_hospital_id_and_detail_api_returns_fees(pool: PgPool) 
         StatusCode::BAD_REQUEST
     );
 }
+
+#[sqlx::test]
+async fn places_api_includes_hospital_fees_only_when_asked(pool: PgPool) {
+    seed_region_fee(&pool).await;
+    let raw = serde_json::from_value(api_item("HF1", "가격병원", "01", "영업/정상")).unwrap();
+    let rec = BusinessRecord::from_raw(BusinessType::Hospital, raw).unwrap();
+    animal_business::upsert(&pool, &rec).await.unwrap();
+    collector::sync_hospitals_from_businesses(&pool)
+        .await
+        .unwrap();
+    nyangjipsa_api::fees::fill_missing_dummy_fees(&pool)
+        .await
+        .unwrap();
+
+    let base = "/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&type=hospital";
+    let (_, without) = get_json(&pool, base).await;
+    assert!(without["items"][0].get("fees").is_none());
+
+    let (_, with) = get_json(&pool, &format!("{base}&include_fees=true")).await;
+    let fees = with["items"][0]["fees"]
+        .as_array()
+        .expect("병원에 진료비가 붙어야 함");
+    assert_eq!(fees[0]["item_name"], "초진 진찰료");
+    assert_eq!(fees[0]["is_dummy"], true);
+    // 다른 필드는 그대로 (flatten)
+    assert_eq!(with["items"][0]["name"], "가격병원");
+    assert!(with["items"][0]["hospital_id"].is_number());
+}

@@ -492,3 +492,105 @@ async fn returns_503_when_chat_not_configured(pool: PgPool) {
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
     assert!(j["error"].is_string());
 }
+
+// ---------- 가격 비교 ----------
+
+/// 가까운 병원 3곳: 비싼 곳·싼 곳·가격 없는 곳
+async fn seed_priced_hospitals(pool: &PgPool) {
+    for (ext, name, lon, price) in [
+        ("C1", "비싼병원", 126.9781, Some(15000)),
+        ("C2", "싼병원", 126.9790, Some(9000)),
+        ("C3", "가격없는병원", 126.9785, None),
+    ] {
+        let id: i64 = sqlx::query_scalar(
+            "INSERT INTO hospitals (external_id, name, business_status, sido, sigungu, location)
+             VALUES ($1, $2, '영업/정상', '서울특별시', '중구',
+                     ST_SetSRID(ST_MakePoint($3, 37.5667), 4326)::geography)
+             RETURNING id",
+        )
+        .bind(ext)
+        .bind(name)
+        .bind(lon)
+        .fetch_one(pool)
+        .await
+        .unwrap();
+        if let Some(p) = price {
+            sqlx::query(
+                "INSERT INTO hospital_fees (hospital_id, category, item_name, condition, price)
+                 VALUES ($1, '진찰료', '초진 진찰료', '체중 5kg', $2)",
+            )
+            .bind(id)
+            .bind(p)
+            .execute(pool)
+            .await
+            .unwrap();
+        }
+    }
+}
+
+fn llm_json_compare(item: &str) -> String {
+    let mut v: Value = serde_json::from_str(&llm_json(false)).unwrap();
+    v["compare_fee"] = json!(item);
+    v.to_string()
+}
+
+#[sqlx::test]
+async fn price_comparison_lists_cheapest_first_with_db_prices(pool: PgPool) {
+    seed_priced_hospitals(&pool).await;
+    let (url, _) = start_mock(200, &llm_json_compare("초진 진찰료")).await;
+    let (_, j) = post_chat(
+        &chat_app(pool, &url, 10, 10),
+        json!({ "message": "근처 병원 진찰비 비교해줘", "lat": 37.5665, "lon": 126.9780 }),
+    )
+    .await;
+    let c = &j["price_comparison"];
+    assert_eq!(c["item_name"], "초진 진찰료");
+    assert_eq!(c["condition"], "체중 5kg");
+    assert_eq!(c["count"], 2, "가격 없는 병원은 비교에서 빠짐");
+    assert_eq!(c["rows"][0]["name"], "싼병원");
+    assert_eq!(c["rows"][0]["price"], 9000);
+    assert_eq!(c["rows"][1]["name"], "비싼병원");
+    assert_eq!(
+        (c["min"].as_i64(), c["max"].as_i64(), c["avg"].as_i64()),
+        (Some(9000), Some(15000), Some(12000))
+    );
+    assert_eq!(c["is_dummy"], true);
+    assert!(c["notice"].as_str().unwrap().contains("참고"));
+}
+
+#[sqlx::test]
+async fn server_detects_price_question_even_when_ai_is_down(pool: PgPool) {
+    seed_priced_hospitals(&pool).await;
+    let (url, _) = start_mock(429, "").await;
+    let (_, j) = post_chat(
+        &chat_app(pool, &url, 10, 10),
+        json!({ "message": "초진 진찰료 가격 비교해줘", "lat": 37.5665, "lon": 126.9780 }),
+    )
+    .await;
+    assert_eq!(j["fallback"], true);
+    assert_eq!(j["price_comparison"]["rows"][0]["name"], "싼병원");
+}
+
+#[sqlx::test]
+async fn price_comparison_asks_for_location_when_missing(pool: PgPool) {
+    let (url, _) = start_mock(200, &llm_json_compare("종합백신 접종비")).await;
+    let (_, j) = post_chat(
+        &chat_app(pool, &url, 10, 10),
+        json!({ "message": "백신 가격 비교해줘" }),
+    )
+    .await;
+    assert_eq!(j["needs_location"], true);
+    assert!(j.get("price_comparison").is_none());
+}
+
+#[sqlx::test]
+async fn unknown_compare_item_from_ai_is_ignored(pool: PgPool) {
+    seed_priced_hospitals(&pool).await;
+    let (url, _) = start_mock(200, &llm_json_compare("중성화 수술비")).await;
+    let (_, j) = post_chat(
+        &chat_app(pool, &url, 10, 10),
+        json!({ "message": "안녕하세요", "lat": 37.5665, "lon": 126.9780 }),
+    )
+    .await;
+    assert!(j.get("price_comparison").is_none());
+}
