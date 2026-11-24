@@ -1,0 +1,125 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        WITH center AS (\n            SELECT ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography AS g\n        )\n        SELECT b.id,\n               b.business_type,\n               b.name,\n               b.road_address,\n               b.lot_address,\n               b.phone,\n               b.address_masked,\n               ST_X(b.location::geometry) AS \"lon!\",\n               ST_Y(b.location::geometry) AS \"lat!\",\n               ST_Distance(b.location, c.g) AS \"distance_m!\"\n        FROM animal_businesses b, center c\n        WHERE b.status_code = '01'\n          AND b.location IS NOT NULL\n          AND ST_DWithin(b.location, c.g, $3::float8)\n          AND ($4::text[] IS NULL OR b.business_type = ANY($4))\n        ORDER BY ST_Distance(b.location, c.g), b.id\n        LIMIT $5\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "id",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 1,
+        "name": "business_type",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "business_type"
+          }
+        }
+      },
+      {
+        "ordinal": 2,
+        "name": "name",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "name"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
+        "name": "road_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "road_address"
+          }
+        }
+      },
+      {
+        "ordinal": 4,
+        "name": "lot_address",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "lot_address"
+          }
+        }
+      },
+      {
+        "ordinal": 5,
+        "name": "phone",
+        "type_info": "Text",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "phone"
+          }
+        }
+      },
+      {
+        "ordinal": 6,
+        "name": "address_masked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "address_masked"
+          }
+        }
+      },
+      {
+        "ordinal": 7,
+        "name": "lon!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 8,
+        "name": "lat!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 9,
+        "name": "distance_m!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "Float8",
+        "Float8",
+        "Float8",
+        "TextArray",
+        "Int8"
+      ]
+    },
+    "nullable": [
+      false,
+      false,
+      false,
+      true,
+      true,
+      true,
+      false,
+      null,
+      null,
+      null
+    ]
+  },
+  "hash": "52de31393df690c7dcd42405eb3be9e8a7e15a8a34f2f896a0effefa97238fba"
+}

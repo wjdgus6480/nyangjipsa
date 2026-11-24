@@ -709,7 +709,8 @@ sqlx migrate info
 | 파일 | 내용 |
 |---|---|
 | `0001_enable_postgis.sql` | `CREATE EXTENSION IF NOT EXISTS postgis;` |
-| `0002_create_hospitals.sql` | 병원 기본 테이블 (`location geography(Point, 4326)` + GIST 공간 인덱스) — 초기 골격 |
+| `0002_create_hospitals.sql` | 병원 기본 테이블 (`location geography(Point, 4326)` + GIST 공간 인덱스) — 초기 골격, 현재 미사용 |
+| `0003_create_animal_businesses.sql` | 동물 5개 업종 통합 테이블 `animal_businesses` (업종+관리번호 유일, 원본 좌표 + 변환 좌표, GIST 인덱스) — [13장](#13-공공데이터-api-인증키-등록-및-reqwest-호출-구조) |
 
 ### 11-4. 새 마이그레이션 추가 규칙
 
@@ -787,51 +788,135 @@ FROM hospitals;
 
 ## 13. 공공데이터 API 인증키 등록 및 reqwest 호출 구조
 
-### 13-1. 인증키 발급
+### 13-1. 사용하는 공공데이터 API (✅ 2026-11-24 호출 확인)
+
+모두 **행정안전부 지방행정 인허가 데이터**이며 응답 형식과 필드가 같습니다. 공공데이터포털에서 **5개 모두 활용신청**해야 합니다.
+
+| 업종 (`type`) | 공공데이터포털 이름 | API 경로 (`https://apis.data.go.kr/` 뒤) | 전체 건수 (폐업 포함) |
+|---|---|---|---|
+| `hospital` | 행정안전부_동물_동물병원 조회서비스 | `1741000/animal_hospitals/info` | 10,676 |
+| `pharmacy` | 행정안전부_동물_동물약국 조회서비스 | `1741000/animal_pharmacies/info` | 21,190 |
+| `grooming` | 행정안전부_동물_동물미용업 조회서비스 | `1741000/pet_grooming/info` | 16,372 |
+| `cremation` | 행정안전부_동물_동물장묘업 조회서비스 | `1741000/animal_cremation/info` | 105 |
+| `boarding` | 행정안전부_동물_동물위탁관리업 조회서비스 | `1741000/animal_boarding/info` | 10,169 |
+
+**주요 요청 파라미터**: `serviceKey`, `pageNo`, `numOfRows`(최대 100), `returnType=json`, 그리고 선택 조건 `cond[SALS_STTS_CD::EQ]=01`(영업/정상), `cond[ROAD_NM_ADDR::LIKE]=...`, `cond[DAT_UPDT_PNT::GTE]=YYYYMMDDHHMMSS`(변경분)
+
+**주요 응답 필드 → DB 컬럼**
+
+| API 필드 | 의미 | DB 컬럼 (`animal_businesses`) |
+|---|---|---|
+| `MNG_NO` | 관리번호 | `mng_no` (업종과 함께 유일) |
+| `BPLC_NM` | 사업장명 | `name` |
+| `ROAD_NM_ADDR` / `LOTNO_ADDR` | 도로명 / 지번 주소 | `road_address` / `lot_address` |
+| `TELNO` | 전화번호 | `phone` |
+| `SALS_STTS_CD` / `SALS_STTS_NM` | 영업상태 (`01` = 영업/정상) | `status_code` / `status_name` |
+| `DTL_TASK_SE_NM` | 세부업무구분 (미용·위탁관리업만) | `detail_task_name` |
+| `LCPMT_YMD` / `CLSBIZ_YMD` | 인허가일 / 폐업일 | `license_date` / `closed_date` |
+| `CRD_INFO_X` / `CRD_INFO_Y` | 좌표 (**EPSG:5174**, 미터) | `source_x` / `source_y` → 변환해서 `location` |
+| `DAT_UPDT_PNT` | 데이터 갱신 시점 | `source_updated_at` |
+
+> ⚠️ **좌표계 주의**: API 좌표는 위경도가 아니라 **EPSG:5174 (Bessel 중부원점 TM)** 입니다. 저장할 때 PostGIS로 변환합니다: `ST_Transform(ST_SetSRID(ST_MakePoint(X, Y), 5174), 4326)`. 실제 주소 위치와 비교해 약 2m 오차로 확인했습니다 (테스트 `converts_epsg5174_to_wgs84_accurately`). 별도의 측지계 보정(towgs84)을 넣지 않습니다.
+>
+> ⚠️ **미용업·위탁관리업은 주소 번지가 `**` 로 가려져** 있습니다 (개인정보 보호). `address_masked = true` 로 표시됩니다.
+>
+> ⚠️ 약 5~25% 레코드는 **좌표가 비어** 있어 `location` 이 NULL 이며 지도 검색에서 제외됩니다. (지도 API 확정 후 주소→좌표 변환 검토)
+
+### 13-2. 인증키 발급과 등록
 
 1. [공공데이터포털](https://www.data.go.kr) 회원가입·로그인
-2. 사용할 API(예: 동물병원 관련 데이터) 페이지에서 **활용신청**
-3. 승인 후 **마이페이지 → 개발계정 → 일반 인증키** 확인
+2. 위 5개 API 페이지에서 각각 **활용신청** (개발계정은 자동 승인)
+3. **마이페이지 → 개발계정 → 일반 인증키** 확인
+   - 최근 발급 키는 **64자리 16진수** 하나입니다 (Encoding/Decoding 이 같음)
+   - 예전 형식 키(끝이 `==` 등)는 **Decoding 키**를 사용합니다. Encoding 키(`%` 포함)를 넣으면 이중 인코딩되어 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 가 납니다.
 
-> ⚠️ 인증키는 **Encoding** 과 **Decoding** 두 가지가 표시됩니다. 우리 코드는 reqwest가 자동으로 URL 인코딩을 하므로 **Decoding 키**를 사용합니다. Encoding 키를 넣으면 두 번 인코딩되어 `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` 가 납니다.
-
-### 13-2. 인증키 등록
-
-📂 **Ubuntu `~/projects/03_vet-map`** — `.env` 파일에 입력 (예시 값입니다):
+📂 **Ubuntu `~/projects/03_vet-map`** — `.env` 에 **이미 있는 줄에** 값을 넣습니다 (예시 값):
 
 ```dotenv
-PUBLIC_DATA_SERVICE_KEY=여기에_Decoding_인증키_붙여넣기
+PUBLIC_DATA_SERVICE_KEY=여기에_인증키_붙여넣기
 ```
+
+> ⚠️ 같은 이름의 줄을 **새로 추가하지 마세요.** `.env` 에 `PUBLIC_DATA_SERVICE_KEY=` 줄이 두 개 있으면 **첫 번째(빈 값)** 가 사용됩니다. (실제 발생 사례)
+
+확인 (키 값은 출력하지 않음):
+
+```bash
+grep -c '^PUBLIC_DATA_SERVICE_KEY=.' .env
+```
+
+결과가 `1` 이면 정상입니다.
 
 - 키는 **`.env` 에만** 둡니다. 코드·문서·커밋·채팅에 붙여넣지 않습니다.
 - 키가 노출되었다면 공공데이터포털에서 **재발급**합니다.
 
-### 13-3. 호출 구조
+### 13-3. 호출·수집 구조
 
 ```text
- 01_backend/src/public_data.rs
- ┌─────────────────────────────────────────────────────────────┐
- │ PublicDataClient                                            │
- │  ├─ reqwest::Client  (타임아웃 10초, 재사용)                  │
- │  ├─ base_url         ← .env PUBLIC_DATA_BASE_URL            │
- │  └─ service_key      ← .env PUBLIC_DATA_SERVICE_KEY         │
- │                                                             │
- │  get_json::<T>(경로, 파라미터)                                │
- │   1. GET {base_url}/{경로}?serviceKey=...&파라미터...         │
- │   2. HTTP 상태 확인 (200번대 아니면 오류)                       │
- │   3. JSON → Rust 구조체 T (Serde)                            │
- │   4. 오류 시 URL(=키 포함)을 지운 뒤 반환 → 로그에 키 노출 방지   │
- └─────────────────────────────────────────────────────────────┘
-          │ 결과 구조체
-          ▼
-   수집 로직 (추후) → SQLx 로 hospitals 테이블에 저장
+ src/bin/collect.rs  (수집 실행 파일)
+   │  업종마다 pageNo=1,2,3… (100건씩) 끝까지 반복
+   ▼
+ src/public_data.rs  PublicDataClient::get_page::<RawItem>()
+   │  1. GET {PUBLIC_DATA_BASE_URL}/1741000/<서비스>/info?serviceKey=..&returnType=json&pageNo=..
+   │  2. 504(시간 초과)·5xx·연결 오류 → 1, 2, 4, 8초 간격 최대 5회 재시도  ← 실제로 자주 발생
+   │  3. 응답 해석: items.item 이 배열/객체/빈 값 모두 처리, 오류 코드 → PublicDataError
+   │  4. 오류 메시지에서 요청 URL(= 키 포함) 제거 → 로그에 키 노출 방지
+   ▼
+ src/animal_business.rs
+   │  BusinessRecord::from_raw()  날짜·숫자 정리, 빈 값 → NULL, 주소 마스킹 감지
+   │  upsert()  INSERT … ON CONFLICT (business_type, mng_no) DO UPDATE  (페이지마다 트랜잭션)
+   │            좌표: ST_Transform(ST_SetSRID(ST_MakePoint(X, Y), 5174), 4326)
+   ▼
+ PostgreSQL  animal_businesses
+   ▲
+   │  find_nearby()  영업중(status_code='01') + ST_DWithin 반경 + 거리순
+ src/routes/places.rs  GET /api/places/nearby   ← 사용자 지도 조회 (외부 API 호출 없음)
 ```
 
-- **역할 구분**: `public_data.rs`(reqwest)는 **외부 데이터 수집 전용**입니다. 사용자 지도 조회 API(`routes/`, Axum)는 외부 API를 호출하지 않고 **우리 DB만** 조회합니다.
-- 많은 공공데이터 API는 기본 응답이 **XML** 입니다. API 문서에서 JSON 응답 파라미터(예: `_type=json`, `returnType=json` 등 — API마다 다름)를 확인해 함께 전달합니다.
-- 호출 한도(일일 트래픽)가 있으므로 반복 호출은 수집 작업에서만 하고, 결과는 DB에 저장해서 재사용합니다.
+- **역할 구분**: reqwest(수집)는 **관리자가 실행하는 수집 작업**에서만 외부 API를 호출합니다. 사용자 지도 조회 API(Axum)는 **우리 DB만** 조회합니다.
+- 호출 한도(일일 트래픽)가 있으므로 전체 수집은 가끔, 평소에는 변경분(`--since`)만 수집합니다.
 
-> 사용할 구체적인 공공데이터 API와 수집 주기는 **추후 확정** 예정입니다. 현재는 공통 호출 구조(클라이언트)만 준비되어 있고, 실제 외부 호출 테스트는 아직 하지 않았습니다. (📝)
+### 13-4. 수집 실행
+
+📂 **Ubuntu `~/projects/03_vet-map/01_backend`** (DB 실행 중, 마이그레이션 완료, 인증키 등록)
+
+먼저 시험 (업종별 1페이지 = 100건씩):
+
+```bash
+cargo run --bin collect -- all --max-pages 1
+```
+
+전체 수집 (5개 업종 약 58,500건, 약 10~20분. `--release` 로 실행하면 빠름):
+
+```bash
+cargo run --release --bin collect -- all
+```
+
+일부 업종만:
+
+```bash
+cargo run --release --bin collect -- hospital pharmacy
+```
+
+변경분만 (예: 2026-11-01 00:00:00 이후 갱신된 데이터):
+
+```bash
+cargo run --release --bin collect -- all --since 20261101000000
+```
+
+정상 결과 (업종마다 한 줄):
+
+```text
+[동물병원] 완료: API 총 10676건 / 받은 10676건 / 신규 … / 갱신 … / 제외 0 / 좌표없음 …
+```
+
+- 여러 번 실행해도 **중복 저장되지 않습니다** (같은 업종+관리번호는 갱신).
+- 중간에 실패해도 이미 저장된 페이지는 남아 있습니다. 같은 명령을 다시 실행하면 됩니다.
+
+수집 결과 확인:
+
+```bash
+docker compose exec db psql -U vetmap -d vet_map -c "SELECT business_type, count(*), count(location) AS with_location, count(*) FILTER (WHERE status_code='01') AS open FROM animal_businesses GROUP BY 1 ORDER BY 1;"
+```
 
 ---
 
@@ -891,7 +976,50 @@ curl -s http://127.0.0.1:8080/health/db
 |---|---|---|---|
 | GET | `/health` | 서버 동작 확인 | ✅ |
 | GET | `/health/db` | DB 연결 + PostGIS 버전 확인 | ✅ |
-| GET | `/api/hospitals/...` | 주변 병원 검색 | ⏳ 기능 개발 단계에서 추가 예정 |
+| GET | `/api/places/nearby` | 주변 동물 업소 검색 (영업 중, 거리순) | ✅ |
+
+### 14-5. 주변 검색 API 사용법
+
+| 파라미터 | 필수 | 설명 | 기본 / 범위 |
+|---|---|---|---|
+| `lon` | ✅ | 중심 경도 (X) | −180 ~ 180 |
+| `lat` | ✅ | 중심 위도 (Y) | −90 ~ 90 |
+| `radius_m` | | 반경(미터) | 1000 / 0 초과 ~ 20000 |
+| `type` | | 업종, 쉼표로 여러 개: `hospital`, `pharmacy`, `grooming`, `cremation`, `boarding` | 생략 시 전체 |
+| `limit` | | 최대 개수 | 50 / 1 ~ 200 |
+
+예 (청담동 근처 1km 안의 동물병원·약국):
+
+```text
+http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&type=hospital,pharmacy
+```
+
+응답 예:
+
+```json
+{
+  "center": { "lon": 127.049, "lat": 37.5233 },
+  "radius_m": 1000.0,
+  "count": 1,
+  "items": [
+    {
+      "id": 123,
+      "type": "hospital",
+      "name": "OO동물병원",
+      "road_address": "서울특별시 강남구 …",
+      "lot_address": "서울특별시 강남구 …",
+      "phone": "02-…",
+      "address_masked": false,
+      "lon": 127.0490,
+      "lat": 37.5233,
+      "distance_m": 12.3
+    }
+  ]
+}
+```
+
+- 좌표 순서는 항상 **lon(경도), lat(위도)** 입니다. 지도 SDK 의 `LatLng(lat, lng)` 로 넘길 때 순서에 주의하세요.
+- 잘못된 값(위도 범위 밖, 없는 업종 등)은 `400` 과 `{"error": "..."}` 를 돌려줍니다.
 
 ---
 
@@ -917,12 +1045,17 @@ curl -s http://127.0.0.1:8080/health/db
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-### 15-3. 테스트 구성 (✅ 기준 PC: 11개 모두 통과)
+### 15-3. 테스트 구성 (✅ 기준 PC: 29개 모두 통과)
+
+공공데이터 API(네트워크)를 호출하는 테스트는 없습니다. 응답 해석은 실제 응답 형식을 본뜬 문자열로 검증합니다.
 
 | 파일 | 테스트 내용 | DB 필요 |
 |---|---|---|
 | `src/config.rs` (단위 1개) | 설정 Debug 출력에 비밀번호·API 키가 보이지 않음 | ❌ |
 | `src/coordinate.rs` (단위 3개) | 경도/위도 범위 검증, 순서 뒤바뀜 감지 | ❌ |
+| `src/public_data.rs` (단위 5개) | 응답 해석(배열/객체 1개/빈 값), 오류 코드, 504 재시도 판단 | ❌ |
+| `src/animal_business.rs` (단위 4개) | 업종 이름 변환, 원본 → 레코드 정리(날짜·좌표·마스킹) | ❌ |
+| `tests/animal_businesses.rs` (5개) | upsert 중복 방지, **EPSG:5174 → WGS84 변환 오차 20m 이내**, 좌표 없음 처리, `/api/places/nearby` 정렬·필터·영업중만·잘못된 파라미터 400 | ✅ |
 | `tests/health_check.rs` (1개) | `/health` 가 200과 `{"status":"ok"}` 응답 | ❌ |
 | `tests/db_connection.rs` (3개) | SQLx 연결(`SELECT 1`), PostGIS 버전 조회, `/health/db` 응답 | ✅ |
 | `tests/postgis_distance.rs` (3개) | ① 위도 1도 거리 ≈ 111km ② 좌표 순서(X=경도, Y=위도) ③ `ST_DWithin` 반경 1km 검색 | ✅ |
@@ -1064,8 +1197,12 @@ git push -u origin feature/hospital-nearby-api
 
 | 증상 / 오류 메시지 | 원인 | 해결 |
 |---|---|---|
-| `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` | Encoding 키 사용 / 승인 전 / 키 오타 | **Decoding** 키 사용, 활용신청 승인 상태 확인 (승인 후 반영까지 수 시간 걸릴 수 있음) |
-| 공공데이터 응답 JSON 파싱 오류 | 응답이 XML | API 문서의 JSON 응답 파라미터 추가 |
+| `SERVICE_KEY_IS_NOT_REGISTERED_ERROR` | `.env` 에 키 줄이 2개 / Encoding 키 사용 / 승인 전 / 키 오타 | `grep -c '^PUBLIC_DATA_SERVICE_KEY=' .env` 가 `1` 인지 확인, Decoding 키 사용, 활용신청 승인 확인 (반영까지 수 시간 걸릴 수 있음) |
+| `.env 에 PUBLIC_DATA_SERVICE_KEY 가 없습니다` (collect) | 키 값이 비어 있음 (첫 번째 빈 줄이 읽힘) | 위와 같음 |
+| `NO_OPENAPI_SERVICE_ERROR` (HTTP 400) | API 경로 오타 | [13-1](#13-1-사용하는-공공데이터-api--2026-11-24-호출-확인) 표의 경로 확인 |
+| `공공데이터 API 재시도` 경고가 자주 보임 | 공공데이터 서버 시간 초과(504) | 정상 동작 (자동 재시도). 5회 모두 실패하면 잠시 후 다시 실행 |
+| `LIMITED_NUMBER_OF_SERVICE_REQUESTS_EXCEEDS_ERROR` | 일일 호출 한도 초과 | 다음 날 실행, 평소에는 `--since` 로 변경분만 수집 |
+| `could not determine which binary to run` | 실행 파일이 2개 | `cargo run` 은 서버(기본값), 수집은 `cargo run --bin collect` |
 | 병원 위치가 바다/엉뚱한 곳에 표시 | 경도·위도 순서가 뒤바뀜 | `ST_MakePoint(경도, 위도)` 순서 확인. 지도 SDK `LatLng(위도, 경도)` 순서 확인 |
 | `git status` 에 한글 파일명이 `\354\241...` 로 표시 | Git 기본 설정 | `git config --global core.quotepath false` |
 | `cd 04_docs(문서)` 실패 | 셸이 괄호를 특수문자로 해석 | 괄호 없는 폴더명 사용 (팀 규칙), 또는 경로를 따옴표로 감싸기 |
@@ -1105,9 +1242,11 @@ git push -u origin feature/hospital-nearby-api
 │   │   ├── error.rs                API 오류 → HTTP 응답 변환
 │   │   ├── db.rs                   DB 연결 풀, 공통 쿼리
 │   │   ├── coordinate.rs           경도/위도 타입과 검증
-│   │   ├── public_data.rs          공공데이터 API 호출 (reqwest)
-│   │   └── routes/                 URL 별 처리 함수 (health 등)
-│   └── tests/                      통합 테스트 (API, DB, PostGIS)
+│   │   ├── public_data.rs          공공데이터 API 호출 (reqwest, 재시도, 응답 해석)
+│   │   ├── animal_business.rs      동물 5개 업종 데이터 정리·저장(upsert)·주변 검색
+│   │   ├── bin/collect.rs          수집 실행 파일 (cargo run --bin collect)
+│   │   └── routes/                 URL 별 처리 함수 (health, places)
+│   └── tests/                      통합 테스트 (API, DB, PostGIS, 업종 데이터)
 │
 ├── 02_frontend/                    프론트엔드 자리 (React + TS 후보, 미착수)
 ├── 03_tech-stack/
@@ -1143,11 +1282,13 @@ git push -u origin feature/hospital-nearby-api
 | 11 | sqlx-cli | Ubuntu | `cargo install sqlx-cli --version 0.9.1 --locked --no-default-features --features rustls,postgres` | 11 |
 | 12 | 마이그레이션 | Ubuntu `.../01_backend` | `sqlx migrate run` | 11 |
 | 13 | 빌드 | Ubuntu `.../01_backend` | `cargo build --locked` | 14 |
-| 14 | 테스트 | Ubuntu `.../01_backend` | `cargo test` (11개 통과) | 15 |
-| 15 | 서버 실행 | Ubuntu `.../01_backend` | `cargo run` → Windows에서 `http://127.0.0.1:8080/health/db` | 14 |
-| 16 | VS Code로 열기 | Ubuntu `~/projects/03_vet-map` | `code .` → rust-analyzer 설치 | 5-3 |
+| 14 | 테스트 | Ubuntu `.../01_backend` | `cargo test` (29개 통과) | 15 |
+| 15 | 공공데이터 인증키 | Ubuntu `~/projects/03_vet-map` | 5개 API 활용신청 → `.env` 에 키 입력 | 13-2 |
+| 16 | 데이터 수집 | Ubuntu `.../01_backend` | `cargo run --release --bin collect -- all` | 13-4 |
+| 17 | 서버 실행 | Ubuntu `.../01_backend` | `cargo run` → Windows에서 `http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233` | 14 |
+| 18 | VS Code로 열기 | Ubuntu `~/projects/03_vet-map` | `code .` → rust-analyzer 설치 | 5-3 |
 
-15번까지 성공하면 개발환경 구축이 끝난 것입니다. 🎉
+17번까지 성공하면 개발환경 구축이 끝난 것입니다. 🎉
 
 ---
 

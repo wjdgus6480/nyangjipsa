@@ -1,4 +1,5 @@
 pub mod health;
+pub mod places;
 
 use axum::Router;
 
@@ -9,5 +10,6 @@ pub fn router(state: AppState) -> Router {
     Router::new()
         .merge(health::router())
         .merge(health::db_router())
+        .merge(places::router())
         .with_state(state)
 }

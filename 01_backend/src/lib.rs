@@ -2,7 +2,10 @@
 //!
 //! - `routes`: 사용자 요청을 받는 Axum API (우리 DB만 조회)
 //! - `public_data`: 공공데이터포털 API 를 호출하는 수집용 클라이언트 (reqwest)
+//! - `animal_business`: 동물 업종 데이터 변환·저장·주변 검색
+//! - `src/bin/collect.rs`: 공공데이터 → DB 수집 실행 파일
 
+pub mod animal_business;
 pub mod config;
 pub mod coordinate;
 pub mod db;
