@@ -5,3 +5,7 @@
 *.ps1 text eol=crlf
 *.bat text eol=crlf
 *.cmd text eol=crlf
+
+# 데이터 파일은 원본 바이트 그대로 보관 (줄바꿈 변환 안 함)
+05_data/**/*.csv -text
+05_data/**/*.json -text
