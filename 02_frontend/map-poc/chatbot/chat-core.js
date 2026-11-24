@@ -111,15 +111,48 @@
     return Array.isArray(resp.hospitals) && resp.hospitals.length === 0;
   }
 
+  /**
+   * 서버의 가격 비교표(price_comparison) → 화면용. 숫자는 모두 서버(DB) 값입니다.
+   * rows 는 가격이 낮은 순. 비교할 수 있는 병원이 없으면 rows 가 빈 배열.
+   */
+  function toComparison(pc) {
+    if (!pc || typeof pc !== "object") return null;
+    const rows = Array.isArray(pc.rows) ? pc.rows : [];
+    return {
+      item: pc.item_name || "",
+      condition: pc.condition && pc.condition !== "-" ? pc.condition : "",
+      isDummy: !!pc.is_dummy,
+      min: pc.min ?? null,
+      max: pc.max ?? null,
+      avg: pc.avg ?? null,
+      notice: pc.notice || "",
+      rows: rows.map((r) => ({
+        key: "c" + r.hospital_id,
+        kind: "hospital",
+        typeLabel: TYPE_LABEL.hospital,
+        name: r.name,
+        price: r.price,
+        distance_m: r.distance_m,
+        phone: r.phone || null,
+        address: r.address || null,
+        lat: Number.isFinite(r.lat) ? r.lat : null,
+        lon: Number.isFinite(r.lon) ? r.lon : null,
+      })),
+    };
+  }
+
   /** 서버 응답 → 화면에 그릴 AI 메시지 */
   function toAssistantMessage(resp) {
+    const comparison = toComparison(resp.price_comparison);
     return {
       role: "assistant",
       text: resp.answer || "",
       question: resp.question || null,
       keywords: Array.isArray(resp.keywords) ? resp.keywords : [],
       choices: Array.isArray(resp.choices) ? resp.choices : [],
-      cards: toCards(resp),
+      comparison,
+      // 가격 비교표가 있으면 병원 카드는 비교표가 대신함 (같은 병원이 두 번 나오지 않게)
+      cards: comparison ? toCards({ places: resp.places }) : toCards(resp),
       needsLocation: !!resp.needs_location,
       fallback: !!resp.fallback,
       disclaimer: resp.disclaimer || null,
@@ -154,6 +187,7 @@
     toCards,
     placeToCard,
     needsHospitalFallback,
+    toComparison,
     toAssistantMessage,
     errorText,
     fmtDist,

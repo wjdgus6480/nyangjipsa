@@ -57,6 +57,79 @@ pub struct LlmReply {
     /// 병원 외에 찾을 업종: pharmacy / grooming / cremation / boarding
     #[serde(default)]
     pub search_places: Vec<String>,
+    /// 가격을 비교할 진료비 항목 이름 (fees::CAT_FEE_ITEMS 중 하나). 비교 요청이 아니면 "none" 또는 빈 값
+    #[serde(default)]
+    pub compare_fee: String,
+}
+
+/// 근처 병원의 한 진료비 항목 가격 비교표. **숫자는 모두 DB 에서** 나옵니다 (AI 가 만들지 않음).
+#[derive(Debug, Serialize)]
+pub struct PriceComparison {
+    pub item_name: String,
+    pub condition: String,
+    /// true 면 지역 평균 기반 임의 값이 섞여 있음 (참고용)
+    pub is_dummy: bool,
+    /// 비교한 병원 수
+    pub count: usize,
+    pub min: Option<i32>,
+    pub max: Option<i32>,
+    pub avg: Option<i32>,
+    /// 가격이 낮은 순
+    pub rows: Vec<PriceRow>,
+    pub notice: &'static str,
+}
+
+#[derive(Debug, Serialize)]
+pub struct PriceRow {
+    pub hospital_id: i64,
+    pub name: String,
+    pub price: i32,
+    pub distance_m: i64,
+    pub phone: Option<String>,
+    pub address: Option<String>,
+    pub lat: f64,
+    pub lon: f64,
+}
+
+pub const PRICE_NOTICE: &str = "고양이 기준 참고 가격입니다. 현재 병원별 가격은 지역 평균을 바탕으로 한 추정치(더미)이며, 실제 진료비는 병원에 꼭 확인하세요. 출처: 농림축산식품부 동물병원 진료비 조사·공개 시스템(2025년 조사)";
+
+/// 병원 목록(진료비 포함)에서 한 항목의 가격 비교표를 만듭니다.
+pub fn build_price_comparison(item: &str, hospitals: &[HospitalOut]) -> PriceComparison {
+    let mut condition = String::new();
+    let mut is_dummy = false;
+    let mut rows: Vec<PriceRow> = hospitals
+        .iter()
+        .filter_map(|h| {
+            let fee = h.fees.as_ref()?.iter().find(|f| f.item_name == item)?;
+            condition.clone_from(&fee.condition);
+            is_dummy |= fee.is_dummy;
+            Some(PriceRow {
+                hospital_id: h.id,
+                name: h.name.clone(),
+                price: fee.price,
+                distance_m: h.distance_m,
+                phone: h.phone.clone(),
+                address: h.address.clone(),
+                lat: h.lat,
+                lon: h.lon,
+            })
+        })
+        .collect();
+    rows.sort_by_key(|r| (r.price, r.distance_m));
+    let prices: Vec<i32> = rows.iter().map(|r| r.price).collect();
+    let avg = (!prices.is_empty())
+        .then(|| (prices.iter().map(|&p| i64::from(p)).sum::<i64>() / prices.len() as i64) as i32);
+    PriceComparison {
+        item_name: item.to_owned(),
+        condition,
+        is_dummy,
+        count: rows.len(),
+        min: prices.iter().copied().min(),
+        max: prices.iter().copied().max(),
+        avg,
+        rows,
+        notice: PRICE_NOTICE,
+    }
 }
 
 /// 챗봇 응답에 담기는 병원 외 장소(약국·미용·장묘·위탁).
@@ -128,6 +201,9 @@ pub struct ChatResponse {
     /// 약국·미용·장묘·위탁 검색이 필요하고 위치가 있을 때만 (병원은 `hospitals`)
     #[serde(skip_serializing_if = "Option::is_none")]
     pub places: Option<Vec<ChatPlace>>,
+    /// 가격 비교를 물었고 위치가 있을 때: 근처 병원의 해당 항목 가격 (낮은 순)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub price_comparison: Option<PriceComparison>,
     /// 병원·장소 검색이 필요한데 위치가 없으면 true (UI 가 위치 권한을 요청)
     pub needs_location: bool,
     /// true 면 Gemini 가 아니라 서버의 대체 응답
@@ -306,7 +382,22 @@ fn sanitize(mut r: LlmReply) -> LlmReply {
     }
     places.truncate(3);
     r.search_places = places;
+    r.compare_fee = crate::fees::known_fee_item(&r.compare_fee)
+        .unwrap_or_default()
+        .to_owned();
     r
+}
+
+/// AI 가 비교 항목을 고르지 못했어도 메시지가 분명히 특정 항목의 가격을 물으면 서버가 채웁니다.
+pub fn ensure_compare_fee(r: &mut LlmReply, message: &str) {
+    if r.compare_fee.is_empty()
+        && let Some(item) = crate::fees::detect_fee_item(message)
+    {
+        r.compare_fee = item.to_owned();
+    }
+    if !r.compare_fee.is_empty() {
+        r.search_hospitals = true;
+    }
 }
 
 /// Gemini 를 쓸 수 없을 때(한도 초과·오류)의 고정 응답. 병원 검색은 DB 만 쓰므로 계속 동작합니다.
@@ -332,6 +423,7 @@ pub fn fallback_reply(message: &str) -> LlmReply {
         ],
         search_hospitals: wants_hospital,
         search_places: vec![],
+        compare_fee: String::new(),
     }
 }
 
@@ -408,6 +500,8 @@ mod tests {
                 "pharmacy".into(),
                 "boarding".into(),
             ],
+            // 알려진 항목이 아니면 비움
+            compare_fee: "아무거나".into(),
         };
         let s = sanitize(r);
         assert_eq!(s.mode, "answer");
@@ -417,6 +511,7 @@ mod tests {
         assert_eq!(s.choices.len(), 6);
         assert!(s.choices.iter().all(|c| c.kind == "core"));
         assert_eq!(s.search_places, vec!["pharmacy", "boarding"]);
+        assert_eq!(s.compare_fee, "");
     }
 
     #[test]

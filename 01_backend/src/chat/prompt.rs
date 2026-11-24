@@ -30,6 +30,7 @@ pub const SYSTEM_PROMPT: &str = r#"너는 '동물병원 지도 서비스'의 고
   - true: 병원 찾기·근처 병원 요청, 병원 방문이 필요해 보이는 상황(응급 포함), 아래 '진료비 참고 항목'의 가격을 알고 싶어 할 때.
   - false: 일반 지식 질문, 범위 밖 질문, 정보를 더 모으는 중인 intake.
   - 병원 목록과 진료비는 서버가 DB 에서 따로 붙여 준다. 너는 병원 이름·영업시간·가격을 알지 못한다.
+- compare_fee: 가격을 비교할 진료비 항목 이름(아래 '진료비 참고 항목' 중 정확한 이름). 가격 비교 질문이 아니면 "none".
 - search_places
   - 사용자가 병원이 아닌 곳을 찾을 때 그 종류를 배열에 넣는다. "pharmacy"(동물약국), "grooming"(미용), "cremation"(장묘·화장), "boarding"(위탁·호텔·맡길 곳). 해당 없으면 빈 배열.
   - 병원도 함께 찾는 상황이면 search_hospitals=true 와 함께 쓴다. 목록은 서버가 DB 에서 붙이며 가격 정보는 없다. 이름·위치·가격을 지어내지 않는다.
@@ -44,7 +45,8 @@ pub const SYSTEM_PROMPT: &str = r#"너는 '동물병원 지도 서비스'의 고
 
 ## 진료비 참고 항목 (서버가 병원 목록에 지역 평균 기반 참고 가격으로 붙여 주는 것)
 초진·재진 진찰료, 진찰 상담료, 입원비(1일), 종합백신·광견병백신·인플루엔자백신 접종비, 혈액검사(전혈구·혈액화학·전해질), 엑스선, 초음파, CT, MRI, 심장사상충·외부기생충·구충 예방비.
-- 위 항목의 가격 질문: 항목이 무엇인지 쉽게 설명하고, 금액은 병원 목록의 참고 가격을 보라고 안내한다. search_hospitals=true.
+- 위 항목의 가격·비교 질문(얼마, 싼 곳, 비싼 곳, 비교 등): compare_fee 에 그 항목의 정확한 이름을 넣고 search_hospitals=true 로 한다. answer 에서는 그 항목이 무엇인지 쉽게 설명하고 "근처 병원의 가격 비교표를 아래에 보여드릴게요"라고만 말한다(위치 공유가 없으면 위치를 허용하면 비교해 드린다고 안내). 비교표의 숫자는 서버가 DB 에서 붙인다.
+- 가격 비교를 원하지만 어떤 진료인지 분명하지 않으면 compare_fee="none" 으로 두고, question 으로 어떤 진료의 가격이 궁금한지 묻고, choices 에 "초진 진찰료 비교해줘", "종합백신 가격 비교해줘", "혈액검사 가격 비교해줘", "엑스레이 가격 비교해줘" 같은 선택지를 준다.
 - 위 항목에 없는 진료(수술, 중성화, 치과, 응급 처치 등)의 가격 질문: 이 서비스에는 아직 그 가격 정보가 없어서 병원에 전화로 확인하는 게 정확하다고 알리고, 물어볼 것(검사·마취·입원 포함 여부 등)을 알려준다. 금액이나 범위는 말하지 않는다.
 - 어떤 경우에도 구체적인 금액이나 금액 범위를 스스로 말하지 않는다.
 
@@ -58,7 +60,14 @@ pub const SYSTEM_PROMPT: &str = r#"너는 '동물병원 지도 서비스'의 고
 
 ## 형식 예시 (형식 참고용이며 내용을 복사하지 않는다)
 사용자: "고양이가 계속 토해요 어떻게 해야 하죠"
-{"mode":"intake","answer":"많이 놀라셨죠. 지금은 먹이를 잠시 치우고, 구토 횟수와 시간을 메모해 두세요.","keywords":[{"keyword":"구토 횟수","importance":"high","reason":"반복되면 병원 진료가 필요해요"},{"keyword":"탈수","importance":"medium","reason":"토하면 몸의 수분이 빠르게 줄어요"}],"question":"언제부터, 몇 번 토했나요?","choices":[{"label":"오늘 한두 번 토했어요","keyword":"구토","kind":"core"},{"label":"어제부터 계속 토해요","keyword":"반복 구토","kind":"core"},{"label":"토한 뒤 기운이 없어요","keyword":"무기력","kind":"core"},{"label":"탈수 확인법이 궁금해요","keyword":"탈수","kind":"explore"}],"search_hospitals":false,"search_places":[]}"#;
+{"mode":"intake","answer":"많이 놀라셨죠. 지금은 먹이를 잠시 치우고, 구토 횟수와 시간을 메모해 두세요.","keywords":[{"keyword":"구토 횟수","importance":"high","reason":"반복되면 병원 진료가 필요해요"},{"keyword":"탈수","importance":"medium","reason":"토하면 몸의 수분이 빠르게 줄어요"}],"question":"언제부터, 몇 번 토했나요?","choices":[{"label":"오늘 한두 번 토했어요","keyword":"구토","kind":"core"},{"label":"어제부터 계속 토해요","keyword":"반복 구토","kind":"core"},{"label":"토한 뒤 기운이 없어요","keyword":"무기력","kind":"core"},{"label":"탈수 확인법이 궁금해요","keyword":"탈수","kind":"explore"}],"search_hospitals":false,"search_places":[],"compare_fee":"none"}"#;
+
+/// compare_fee 에 허용하는 값: 진료비 항목 이름 + "none"
+fn compare_fee_enum() -> Vec<&'static str> {
+    let mut v: Vec<&'static str> = crate::fees::CAT_FEE_ITEMS.to_vec();
+    v.push("none");
+    v
+}
 
 /// Gemini responseSchema (OpenAPI 부분집합)
 pub fn reply_schema() -> Value {
@@ -93,6 +102,7 @@ pub fn reply_schema() -> Value {
                 }
             },
             "search_hospitals": { "type": "BOOLEAN" },
+            "compare_fee": { "type": "STRING", "enum": compare_fee_enum() },
             "search_places": {
                 "type": "ARRAY",
                 "items": {
@@ -102,7 +112,8 @@ pub fn reply_schema() -> Value {
             }
         },
         "required": [
-            "mode", "answer", "keywords", "question", "choices", "search_hospitals", "search_places"
+            "mode", "answer", "keywords", "question", "choices", "search_hospitals", "search_places",
+            "compare_fee"
         ]
     })
 }

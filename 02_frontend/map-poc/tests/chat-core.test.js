@@ -81,3 +81,30 @@ test("오류 안내 문구와 표시 포맷", () => {
 test("추천 질문 5개", () => {
   assert.equal(C.SUGGESTIONS.length, 5);
 });
+
+test("가격 비교표: 서버 값 그대로, 낮은 순 유지, 병원 카드는 비교표가 대신함", () => {
+  const resp = {
+    answer: "초진 진찰료 비교표예요",
+    hospitals: [{ id: 1, name: "싼병원", distance_m: 100, lat: 37.5, lon: 127, fees: [] }],
+    places: [{ id: 9, type: "pharmacy", name: "약국", distance_m: 50, lat: 37.5, lon: 127, address_masked: false }],
+    price_comparison: {
+      item_name: "초진 진찰료", condition: "체중 5kg", is_dummy: true, count: 2, min: 9000, max: 15000, avg: 12000,
+      notice: "참고 가격",
+      rows: [
+        { hospital_id: 1, name: "싼병원", price: 9000, distance_m: 100, phone: "02-1", address: "주소", lat: 37.5, lon: 127 },
+        { hospital_id: 2, name: "비싼병원", price: 15000, distance_m: 200, phone: null, address: null, lat: 37.6, lon: 127.1 },
+      ],
+    },
+  };
+  const m = C.toAssistantMessage(resp);
+  assert.equal(m.comparison.item, "초진 진찰료");
+  assert.equal(m.comparison.condition, "체중 5kg");
+  assert.deepEqual(m.comparison.rows.map((r) => r.price), [9000, 15000]);
+  assert.equal(m.comparison.min, 9000);
+  assert.equal(m.comparison.isDummy, true);
+  // 병원 카드는 빠지고 장소 카드만 남음
+  assert.deepEqual(m.cards.map((c) => c.kind), ["pharmacy"]);
+  // 비교 요청이 아니면 null
+  assert.equal(C.toAssistantMessage({ answer: "x" }).comparison, null);
+  assert.equal(C.toComparison({ item_name: "입원비", condition: "-", rows: [] }).condition, "");
+});

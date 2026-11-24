@@ -1019,6 +1019,7 @@ curl -s http://127.0.0.1:8080/health/db
 | `radius_m` | | 반경(미터) | 1000 / 0 초과 ~ 20000 |
 | `type` | | 업종, 쉼표로 여러 개: `hospital`, `pharmacy`, `grooming`, `cremation`, `boarding` | 생략 시 전체 |
 | `limit` | | 최대 개수 | 50 / 1 ~ 200 |
+| `include_fees` | | `true` 면 병원 항목에 고양이 진료비 `fees[]` 를 붙임 (지도 목록·정보창 표시용) | false |
 
 예 (청담동 근처 1km 안의 동물병원·약국):
 
@@ -1091,6 +1092,7 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 | `question` | 후속 질문 (없으면 null) |
 | `choices[]` | 선택지. `kind: core`(지금 필요한 것 우선) / `explore`(모를 수 있는·추가로 고를 만한 것) |
 | `hospitals[]` | 병원 검색이 필요하고 위치가 있을 때만. 가까운 영업 중 병원 최대 5곳(반경 3km) + 진료비(`is_dummy` 포함) |
+| `price_comparison` | 특정 진료비 항목의 가격 비교를 물었고 위치가 있을 때만. 근처 병원 최대 10곳의 그 항목 가격을 **낮은 순**으로(`rows[]`), `min`/`avg`/`max`, 참고 안내 문구. 숫자는 모두 DB 값이며 AI 는 어떤 항목인지(`compare_fee`)만 고름. AI 가 놓쳐도 "초진 진찰료 비교"처럼 분명한 질문은 서버가 항목을 찾아 채움 |
 | `places[]` | 약국·미용·장묘·위탁 검색이 필요하고 위치가 있을 때만. 업종별 최대 3곳(반경 3km). **번지가 가려진 업소(미용·위탁)는 정확한 좌표·전화번호를 주지 않음** |
 | `needs_location` | 병원·장소 검색이 필요한데 위치가 없으면 `true` → UI 가 위치 권한 요청 |
 | `fallback` | `true` 면 Gemini 가 아니라 서버의 대체 응답 |

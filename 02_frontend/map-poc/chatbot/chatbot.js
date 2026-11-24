@@ -269,6 +269,8 @@
           el("span", { class: "is-" + (["high", "medium", "low"].includes(k.importance) ? k.importance : "low"), title: k.reason || "", text: k.keyword }))));
       }
 
+      if (m.comparison) col.append(comparisonTable(m.comparison));
+
       if (m.cards.length) col.append(cards(m.cards));
 
       if (m.needsLocation) col.append(locationAsk());
@@ -286,6 +288,38 @@
 
       if (m.disclaimer && (m.cards.length || isLast)) col.append(el("div", { class: "nj-note", text: m.disclaimer }));
       return el("div", { class: "nj-msg is-ai" }, [logo(""), col]);
+    }
+
+    // 근처 병원 가격 비교표 (가격 낮은 순). 숫자는 서버(DB) 값만 사용
+    function comparisonTable(cmp) {
+      const title = cmp.item + (cmp.condition ? ` (${cmp.condition})` : "");
+      const wrap = el("div", { class: "nj-compare", "aria-label": "진료비 비교" }, [
+        el("div", { class: "nj-cards-title", text: `${title} · 근처 병원 가격 비교 (${cmp.rows.length}곳)` }),
+      ]);
+      if (!cmp.rows.length) {
+        wrap.append(el("div", { class: "nj-card-line", text: "반경 안에 이 항목의 가격 정보가 있는 병원이 없어요." }));
+        return wrap;
+      }
+      wrap.append(el("div", { class: "nj-compare-sum" }, [
+        el("span", { text: "최저 " + C.fmtPrice(cmp.min) }),
+        el("span", { text: "평균 " + C.fmtPrice(cmp.avg) }),
+        el("span", { text: "최고 " + C.fmtPrice(cmp.max) }),
+      ]));
+      const ol = el("ol", { class: "nj-compare-list" });
+      cmp.rows.forEach((r, i) => {
+        const canMap = r.lat != null && r.lon != null && !!map?.focus;
+        ol.append(el("li", { class: i === 0 ? "is-best" : "" }, [
+          el("div", { class: "nj-compare-name" }, [
+            el("b", { text: r.name }),
+            el("small", { text: C.fmtDist(r.distance_m) + (r.phone ? " · " + r.phone : "") }),
+          ]),
+          el("b", { class: "nj-compare-price", text: C.fmtPrice(r.price) }),
+          canMap ? el("button", { type: "button", class: "nj-btn nj-compare-map", text: "지도", onclick: () => showOnMap(r) }) : null,
+        ]));
+      });
+      wrap.append(ol);
+      if (cmp.notice) wrap.append(el("div", { class: "nj-note", text: cmp.notice }));
+      return wrap;
     }
 
     function cards(list) {

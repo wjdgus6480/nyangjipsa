@@ -64,29 +64,59 @@ struct FeeRow {
     is_dummy: bool,
 }
 
-#[derive(Debug, Serialize)]
+#[derive(Debug, Clone, Serialize)]
 pub struct FeeOut {
-    category: String,
-    item_name: String,
-    condition: String,
-    price: i32,
+    pub category: String,
+    pub item_name: String,
+    pub condition: String,
+    pub price: i32,
     /// true 면 실제 가격이 아닌 지역 평균 기반 임의 값 (참고용)
-    is_dummy: bool,
+    pub is_dummy: bool,
 }
 
 #[derive(Debug, Serialize)]
 pub struct HospitalOut {
-    id: i64,
-    name: String,
-    address: Option<String>,
-    phone: Option<String>,
-    business_status: Option<String>,
-    lat: f64,
-    lon: f64,
+    pub id: i64,
+    pub name: String,
+    pub address: Option<String>,
+    pub phone: Option<String>,
+    pub business_status: Option<String>,
+    pub lat: f64,
+    pub lon: f64,
     /// 검색 중심점으로부터의 거리(m, 반올림)
-    distance_m: i64,
+    pub distance_m: i64,
     #[serde(skip_serializing_if = "Option::is_none")]
-    fees: Option<Vec<FeeOut>>,
+    pub fees: Option<Vec<FeeOut>>,
+}
+
+/// 병원 id 들의 진료비를 한 번에 조회합니다. (병원 API·지도 API·챗봇 가격 비교가 함께 사용)
+pub async fn load_fees(
+    pool: &PgPool,
+    ids: &[i64],
+) -> Result<HashMap<i64, Vec<FeeOut>>, sqlx::Error> {
+    let mut map: HashMap<i64, Vec<FeeOut>> = HashMap::new();
+    if ids.is_empty() {
+        return Ok(map);
+    }
+    let rows = sqlx::query_as::<_, FeeRow>(
+        "SELECT hospital_id, category, item_name, condition, price, is_dummy
+         FROM hospital_fees
+         WHERE hospital_id = ANY($1)
+         ORDER BY hospital_id, category, item_name, condition",
+    )
+    .bind(ids)
+    .fetch_all(pool)
+    .await?;
+    for f in rows {
+        map.entry(f.hospital_id).or_default().push(FeeOut {
+            category: f.category,
+            item_name: f.item_name,
+            condition: f.condition,
+            price: f.price,
+            is_dummy: f.is_dummy,
+        });
+    }
+    Ok(map)
 }
 
 #[derive(Debug, Serialize)]
@@ -127,27 +157,7 @@ pub async fn find_nearby(
     let mut fees_by_hospital: Option<HashMap<i64, Vec<FeeOut>>> = None;
     if include_fees {
         let ids: Vec<i64> = rows.iter().map(|r| r.id).collect();
-        let fee_rows = sqlx::query_as::<_, FeeRow>(
-            "SELECT hospital_id, category, item_name, condition, price, is_dummy
-             FROM hospital_fees
-             WHERE hospital_id = ANY($1)
-             ORDER BY hospital_id, category, item_name, condition",
-        )
-        .bind(&ids)
-        .fetch_all(pool)
-        .await?;
-
-        let mut map: HashMap<i64, Vec<FeeOut>> = HashMap::new();
-        for f in fee_rows {
-            map.entry(f.hospital_id).or_default().push(FeeOut {
-                category: f.category,
-                item_name: f.item_name,
-                condition: f.condition,
-                price: f.price,
-                is_dummy: f.is_dummy,
-            });
-        }
-        fees_by_hospital = Some(map);
+        fees_by_hospital = Some(load_fees(pool, &ids).await?);
     }
 
     Ok(rows
