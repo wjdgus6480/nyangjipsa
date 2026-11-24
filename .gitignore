@@ -1,0 +1,22 @@
+# ---- Rust 빌드 결과 ----
+target/
+
+# ---- 비밀정보 (절대 커밋 금지) ----
+.env
+.env.*
+!.env.example
+
+# ---- 로그 ----
+*.log
+
+# ---- 편집기 / OS ----
+.vscode/*
+!.vscode/settings.json
+!.vscode/extensions.json
+.idea/
+Thumbs.db
+.DS_Store
+
+# ---- 프론트엔드 (추후 사용) ----
+node_modules/
+dist/

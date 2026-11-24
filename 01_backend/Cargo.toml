@@ -1,0 +1,47 @@
+[package]
+name = "vet-map-api"
+version = "0.1.0"
+edition = "2024"
+rust-version = "1.100"
+publish = false
+description = "동물병원 지도 서비스 백엔드 (Axum + SQLx + PostGIS)"
+
+[dependencies]
+# 웹 서버
+axum = "0.8"
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal"] }
+tower-http = { version = "0.7", features = ["cors", "trace"] }
+
+# 데이터베이스 (PostgreSQL + PostGIS). 공간 처리는 SQL에서 하고 Rust는 f64 경도/위도만 사용
+sqlx = { version = "0.9", default-features = false, features = [
+    "runtime-tokio",
+    "tls-rustls-aws-lc-rs",
+    "postgres",
+    "macros",
+    "migrate",
+    "derive",
+] }
+
+# 공공데이터 API 호출 (rustls TLS: sqlx와 같은 aws-lc-rs 암호화 구현 사용)
+reqwest = { version = "0.13", default-features = false, features = [
+    "rustls",
+    "json",
+    "query",
+    "charset",
+    "http2",
+] }
+
+# 직렬화
+serde = { version = "1", features = ["derive"] }
+serde_json = "1"
+
+# 설정 / 로그 / 오류
+dotenvy = "0.15"
+tracing = "0.1"
+tracing-subscriber = { version = "0.3", features = ["env-filter"] }
+thiserror = "2"
+anyhow = "1"
+
+[dev-dependencies]
+tower = { version = "0.5", features = ["util"] }
+http-body-util = "0.1"

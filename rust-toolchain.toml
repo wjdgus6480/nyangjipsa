@@ -1,0 +1,6 @@
+# 팀원 모두가 같은 Rust 버전으로 빌드하도록 고정합니다.
+# 이 폴더(또는 하위 폴더)에서 cargo를 실행하면 rustup이 자동으로 이 버전을 설치·사용합니다.
+[toolchain]
+channel = "1.100.0"
+components = ["rustfmt", "clippy"]
+profile = "minimal"
