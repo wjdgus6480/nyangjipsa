@@ -1,0 +1,175 @@
+<!doctype html>
+<html lang="ko">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>냥집사 지도 PoC</title>
+  <style>
+    :root { --bg:#fff; --fg:#1f2328; --muted:#6b7280; --line:#e5e7eb; --accent:#2f6fde; --sel:#eef4ff; }
+    * { box-sizing: border-box; }
+    html, body { margin:0; height:100%; font-family: system-ui, -apple-system, "Malgun Gothic", sans-serif; color:var(--fg); background:var(--bg); }
+    .app { display:grid; grid-template-columns: 360px 1fr; height:100%; }
+    aside { display:flex; flex-direction:column; border-right:1px solid var(--line); min-height:0; }
+    header { padding:14px 16px; border-bottom:1px solid var(--line); }
+    h1 { margin:0 0 8px; font-size:18px; }
+    .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px; }
+    .row label { display:flex; gap:4px; align-items:center; padding:4px 8px; border:1px solid var(--line); border-radius:999px; cursor:pointer; }
+    select { font-size:13px; padding:3px 6px; }
+    .status { margin-top:8px; font-size:12px; color:var(--muted); }
+    ul { list-style:none; margin:0; padding:0; overflow:auto; flex:1; }
+    li { padding:10px 16px; border-bottom:1px solid var(--line); cursor:pointer; }
+    li:hover, li.sel { background:var(--sel); }
+    li .name { font-weight:600; font-size:14px; }
+    li .meta { font-size:12px; color:var(--muted); margin-top:2px; }
+    #map { width:100%; height:100%; }
+    .iw { padding:10px 12px; font-size:13px; max-width:260px; line-height:1.45; }
+    .iw b { font-size:14px; }
+    .err { padding:16px; color:#b91c1c; font-size:14px; }
+    @media (max-width: 760px) {
+      .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+      aside { order:2; border-right:0; border-top:1px solid var(--line); }
+    }
+  </style>
+</head>
+<body>
+<div class="app">
+  <aside>
+    <header>
+      <h1>🐱 냥집사 지도 PoC</h1>
+      <div class="row" id="types">
+        <label><input type="checkbox" value="hospital" checked />동물병원</label>
+        <label><input type="checkbox" value="pharmacy" />동물약국</label>
+        <label><input type="checkbox" value="grooming" />미용</label>
+        <label><input type="checkbox" value="boarding" />위탁</label>
+        <label><input type="checkbox" value="cremation" />장묘</label>
+      </div>
+      <div class="row" style="margin-top:6px">
+        반경
+        <select id="radius">
+          <option value="auto" selected>지도 화면 기준</option>
+          <option value="1000">1km</option>
+          <option value="3000">3km</option>
+          <option value="5000">5km</option>
+        </select>
+      </div>
+      <div class="status" id="status">지도 불러오는 중…</div>
+    </header>
+    <ul id="list"></ul>
+  </aside>
+  <div id="map"></div>
+</div>
+
+<!-- config.js 는 serve.sh 가 .env 의 NAVER_MAP_CLIENT_ID 로 생성 (Git 제외) -->
+<script src="config.js"></script>
+<script>
+  // 실제 데이터: 우리 API(GET /api/places/nearby) → PostGIS. 거리 계산은 서버에서 합니다.
+  const API_BASE = "http://localhost:8080";
+  const START = { lon: 127.0490, lat: 37.5233 }; // 청담동 (API 예시 좌표)
+  const MAX_RADIUS = 20000, LIMIT = 200;
+  const TYPE_LABEL = { hospital:"동물병원", pharmacy:"동물약국", grooming:"미용", boarding:"위탁", cremation:"장묘" };
+
+  const $ = (s) => document.querySelector(s);
+  const status = (t) => { $("#status").textContent = t; };
+
+  if (!window.NAVER_MAP_CLIENT_ID) {
+    document.getElementById("map").innerHTML = '<div class="err">config.js 에 NAVER_MAP_CLIENT_ID 가 없습니다. serve.sh 로 실행하세요.</div>';
+  } else {
+    const s = document.createElement("script");
+    s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + encodeURIComponent(window.NAVER_MAP_CLIENT_ID);
+    s.onload = init;
+    s.onerror = () => status("네이버 지도 스크립트를 불러오지 못했습니다.");
+    document.head.appendChild(s);
+  }
+
+  // 좌표 변환은 이 함수 한 곳에서만: API {lon,lat} → 네이버 LatLng(위도, 경도)
+  const toLatLng = (p) => new naver.maps.LatLng(p.lat, p.lon);
+
+  let map, infoWindow, timer, controller;
+  const markers = new Map(); // id → marker
+  let places = [], selectedId = null;
+
+  function init() {
+    map = new naver.maps.Map("map", { center: toLatLng(START), zoom: 15 });
+    infoWindow = new naver.maps.InfoWindow({ content: "", borderWidth: 1, anchorSkew: true });
+    naver.maps.Event.addListener(map, "idle", scheduleLoad);
+    document.querySelectorAll("#types input, #radius").forEach((el) => el.addEventListener("change", scheduleLoad));
+    scheduleLoad();
+  }
+
+  function scheduleLoad() { clearTimeout(timer); timer = setTimeout(load, 300); }
+
+  function currentRadius() {
+    const v = $("#radius").value;
+    if (v !== "auto") return Number(v);
+    const b = map.getBounds(), c = map.getCenter();
+    const proj = map.getProjection();
+    const d = proj.getDistance(c, b.getNE()); // 중심 → 화면 모서리 (미터)
+    return Math.min(Math.max(Math.round(d), 100), MAX_RADIUS);
+  }
+
+  async function load() {
+    const types = [...document.querySelectorAll("#types input:checked")].map((i) => i.value);
+    if (!types.length) { render([]); status("업종을 하나 이상 선택하세요."); return; }
+    const c = map.getCenter();
+    const radius = currentRadius();
+    const q = new URLSearchParams({ lon: c.lng().toFixed(6), lat: c.lat().toFixed(6), radius_m: radius, type: types.join(","), limit: LIMIT });
+    controller?.abort();
+    controller = new AbortController();
+    status("검색 중…");
+    try {
+      const res = await fetch(`${API_BASE}/api/places/nearby?${q}`, { signal: controller.signal });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || res.status);
+      render(body.items);
+      const more = body.count >= LIMIT ? ` (최대 ${LIMIT}개까지 표시 — 확대해 보세요)` : "";
+      status(`반경 ${(radius / 1000).toFixed(1)}km · ${body.count}곳${more}`);
+    } catch (e) {
+      if (e.name === "AbortError") return;
+      status("API 호출 실패: " + e.message + " (백엔드 localhost:8080 실행 확인)");
+    }
+  }
+
+  function render(items) {
+    places = items;
+    const keep = new Set(items.map((p) => p.id));
+    for (const [id, m] of markers) if (!keep.has(id)) { m.setMap(null); markers.delete(id); }
+    for (const p of items) {
+      if (markers.has(p.id)) continue;
+      const m = new naver.maps.Marker({ position: toLatLng(p), map, title: p.name });
+      naver.maps.Event.addListener(m, "click", () => select(p.id, false));
+      markers.set(p.id, m);
+    }
+    const list = $("#list");
+    list.innerHTML = "";
+    for (const p of items) {
+      const li = document.createElement("li");
+      li.dataset.id = p.id;
+      li.className = p.id === selectedId ? "sel" : "";
+      li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
+      li.querySelector(".name").textContent = p.name;
+      li.querySelector(".meta").textContent = `${TYPE_LABEL[p.type] || p.type} · ${fmtDist(p.distance_m)} · ${p.road_address || p.lot_address || "주소 없음"}`;
+      li.addEventListener("click", () => select(p.id, true));
+      list.appendChild(li);
+    }
+  }
+
+  function select(id, pan) {
+    const p = places.find((x) => x.id === id), m = markers.get(id);
+    if (!p || !m) return;
+    selectedId = id;
+    document.querySelectorAll("#list li").forEach((li) => li.classList.toggle("sel", Number(li.dataset.id) === id));
+    const div = document.createElement("div");
+    div.className = "iw";
+    div.innerHTML = `<b></b><br><span class="a"></span><br><span class="t"></span>`;
+    div.querySelector("b").textContent = p.name;
+    div.querySelector(".a").textContent = (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : "");
+    div.querySelector(".t").textContent = `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`;
+    infoWindow.setContent(div);
+    infoWindow.open(map, m);
+    if (pan) map.panTo(toLatLng(p));
+  }
+
+  const fmtDist = (m) => (m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`);
+</script>
+</body>
+</html>
