@@ -130,6 +130,14 @@ pub struct BusinessRecord {
 }
 
 impl BusinessRecord {
+    /// 폐업 상태인지. 폐업 업소는 저장하지 않고, 이미 있으면 삭제합니다.
+    /// (휴업·취소/말소 등 다른 상태는 유지합니다.)
+    pub fn is_closed(&self) -> bool {
+        self.status_name
+            .as_deref()
+            .is_some_and(|s| s.starts_with("폐업"))
+    }
+
     /// 원본 항목을 정리합니다. 관리번호나 사업장명이 없으면 저장할 수 없으므로 `None`.
     pub fn from_raw(business_type: BusinessType, raw: RawItem) -> Option<Self> {
         let mng_no = non_empty(raw.mng_no)?;
@@ -279,12 +287,72 @@ pub async fn upsert<'e>(
     .await
 }
 
+/// 한 업종(또는 `None` 이면 전체)의 폐업 업소를 삭제합니다. 반환: 삭제된 행 수.
+/// 수집이 끝까지 성공한 뒤, 응답에서 빠졌지만 DB 에 폐업으로 남아 있던 업소까지 정리할 때 씁니다.
+///
+/// 병원은 서비스용 `hospitals`(와 그 진료비)에서도 함께 삭제합니다.
+pub async fn remove_closed(
+    pool: &PgPool,
+    business_type: Option<BusinessType>,
+) -> Result<u64, sqlx::Error> {
+    let type_name = business_type.map(BusinessType::as_str);
+    let mut tx = pool.begin().await?;
+    // 서비스용 병원 먼저 (이 단계에서는 원본 행이 아직 남아 있어야 관리번호를 알 수 있음)
+    sqlx::query(
+        "DELETE FROM hospitals WHERE external_id IN (
+             SELECT mng_no FROM animal_businesses
+             WHERE business_type = 'hospital' AND status_name LIKE '폐업%'
+               AND ($1::text IS NULL OR business_type = $1))",
+    )
+    .bind(type_name)
+    .execute(&mut *tx)
+    .await?;
+    let removed = sqlx::query(
+        "DELETE FROM animal_businesses
+         WHERE status_name LIKE '폐업%' AND ($1::text IS NULL OR business_type = $1)",
+    )
+    .bind(type_name)
+    .execute(&mut *tx)
+    .await?
+    .rows_affected();
+    tx.commit().await?;
+    Ok(removed)
+}
+
+/// (업종, 관리번호)로 한 건을 삭제합니다. 반환: 삭제된 행 수(0 또는 1).
+///
+/// 병원이면 서비스용 `hospitals`(와 FK CASCADE 로 진료비)에서도 같은 관리번호의 병원을 삭제합니다.
+/// 폐업 병원이 지도·검색·챗봇에 계속 나오지 않게 하려면 두 테이블이 함께 지워져야 합니다.
+pub async fn delete(
+    conn: &mut sqlx::PgConnection,
+    business_type: BusinessType,
+    mng_no: &str,
+) -> Result<u64, sqlx::Error> {
+    if business_type == BusinessType::Hospital {
+        sqlx::query("DELETE FROM hospitals WHERE external_id = $1")
+            .bind(mng_no)
+            .execute(&mut *conn)
+            .await?;
+    }
+    Ok(
+        sqlx::query("DELETE FROM animal_businesses WHERE business_type = $1 AND mng_no = $2")
+            .bind(business_type.as_str())
+            .bind(mng_no)
+            .execute(&mut *conn)
+            .await?
+            .rows_affected(),
+    )
+}
+
 /// 주변 검색 결과 한 건.
 #[derive(Debug, Clone, Serialize)]
 pub struct NearbyPlace {
     pub id: i64,
     #[serde(rename = "type")]
     pub business_type: String,
+    /// 병원(hospital)이면 서비스용 병원 id. 이 값으로 `GET /api/hospitals/{id}` 에서 진료비를 조회합니다.
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub hospital_id: Option<i64>,
     pub name: String,
     pub road_address: Option<String>,
     pub lot_address: Option<String>,
@@ -316,6 +384,7 @@ pub async fn find_nearby(
         )
         SELECT b.id,
                b.business_type,
+               h.id AS "hospital_id?",
                b.name,
                b.road_address,
                b.lot_address,
@@ -324,7 +393,10 @@ pub async fn find_nearby(
                ST_X(b.location::geometry) AS "lon!",
                ST_Y(b.location::geometry) AS "lat!",
                ST_Distance(b.location, c.g) AS "distance_m!"
-        FROM animal_businesses b, center c
+        FROM animal_businesses b
+        CROSS JOIN center c
+        LEFT JOIN hospitals h
+               ON b.business_type = 'hospital' AND h.external_id = b.mng_no
         WHERE b.status_code = '01'
           AND b.location IS NOT NULL
           AND ST_DWithin(b.location, c.g, $3::float8)

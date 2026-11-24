@@ -36,6 +36,9 @@ reqwest = { version = "0.13", default-features = false, features = [
 serde = { version = "1", features = ["derive"] }
 serde_json = "1"
 
+# 진료비 xlsx 읽기 (import_fees)
+calamine = "0.38.0"
+
 # 설정 / 로그 / 오류
 dotenvy = "0.15"
 tracing = "0.1"

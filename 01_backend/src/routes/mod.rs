@@ -1,7 +1,9 @@
+pub mod chat;
 pub mod health;
+pub mod hospitals;
 pub mod places;
 
-use axum::Router;
+use axum::{Router, routing::post};
 
 use crate::AppState;
 
@@ -11,5 +13,7 @@ pub fn router(state: AppState) -> Router {
         .merge(health::router())
         .merge(health::db_router())
         .merge(places::router())
+        .nest("/api/hospitals", hospitals::router())
+        .route("/api/chat", post(chat::chat))
         .with_state(state)
 }
