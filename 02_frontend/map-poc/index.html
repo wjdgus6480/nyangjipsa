@@ -75,11 +75,12 @@
 <div class="app">
   <aside>
     <header class="brand">
-      <img class="brand-mark" src="assets/logo.png" alt="냥집사 로고" />
+      <a href="../home/index.html" title="냥집사 홈으로"><img class="brand-mark" src="assets/logo.png" alt="냥집사 홈" /></a>
       <div class="brand-text">
         <h1>냥집사</h1>
         <p>고양이 동물병원 지도</p>
       </div>
+      <a class="brand-link" href="../home/index.html">홈</a>
       <a class="brand-link" href="chat.html" target="_blank" rel="noopener">AI 도우미</a>
     </header>
     <div class="filters">
@@ -119,7 +120,7 @@
   const status = (t) => { $("#status").textContent = t; };
 
   if (!window.NAVER_MAP_CLIENT_ID) {
-    document.getElementById("map").innerHTML = '<div class="err">config.js 에 NAVER_MAP_CLIENT_ID 가 없습니다. serve.sh 로 실행하세요.</div>';
+    document.getElementById("map").innerHTML = '<div class="err">config.js 에 NAVER_MAP_CLIENT_ID 가 없습니다. .env 에 키를 넣고 serve.sh 또는 node 02_frontend/serve.js 로 실행하세요.</div>';
   } else {
     const s = document.createElement("script");
     s.src = "https://oapi.map.naver.com/openapi/v3/maps.js?ncpKeyId=" + encodeURIComponent(window.NAVER_MAP_CLIENT_ID);
