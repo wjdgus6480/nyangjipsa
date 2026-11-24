@@ -578,6 +578,12 @@ ls -l 01_backend/.env
 | `RUST_LOG` | `info,nyangjipsa_api=debug,tower_http=info` | 로그 레벨 |
 | `PUBLIC_DATA_BASE_URL` | `https://apis.data.go.kr` | 공공데이터포털 API 기본 주소 |
 | `PUBLIC_DATA_SERVICE_KEY` | (빈 값) | 공공데이터포털 인증키 — [13장](#13-공공데이터-api-인증키-등록-및-reqwest-호출-구조) |
+| `SYNC_INTERVAL_HOURS` | `0` | 공공데이터 자동 동기화 주기(시간). **`0` 이면 끔(기본)**. 켜면 서버가 실행 중인 동안 주기적으로 변경분을 받아 옴 — [13-5](#13-5-자동-동기화) |
+| `GEMINI_API_KEY` | (빈 값) | Gemini 인증키. 비어 있으면 챗봇이 꺼짐(`/api/chat` 은 503) — [14-7](#14-7-챗봇-api) |
+| `GEMINI_MODEL` | `gemini-3.5-flash-lite` | 챗봇 모델. 키마다 쓸 수 있는 모델이 다를 수 있음 |
+| `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` | 기본 모델이 실패(일시 오류·한도 초과·모델 없음)하면 한 번 더 시도할 보조 모델. 빈 값이면 사용 안 함 |
+| `CHAT_GLOBAL_RPM` | `10` | 챗봇 전체 분당 Gemini 호출 상한 (무료 한도 보호, 초과 시 대체 응답) |
+| `CHAT_IP_RPM` | `5` | 클라이언트(IP)당 분당 챗봇 요청 상한 (초과 시 429) |
 | `MAP_PROVIDER` 등 | (주석 처리) | 지도 API — **미정**, 확정 후 사용 |
 
 > WSL Ubuntu에서도 `127.0.0.1:5432` 로 Docker DB에 접속됩니다 (기준 PC 확인).
@@ -709,8 +715,11 @@ sqlx migrate info
 | 파일 | 내용 |
 |---|---|
 | `0001_enable_postgis.sql` | `CREATE EXTENSION IF NOT EXISTS postgis;` |
-| `0002_create_hospitals.sql` | 병원 기본 테이블 (`location geography(Point, 4326)` + GIST 공간 인덱스) — 초기 골격, 현재 미사용 |
-| `0003_create_animal_businesses.sql` | 동물 5개 업종 통합 테이블 `animal_businesses` (업종+관리번호 유일, 원본 좌표 + 변환 좌표, GIST 인덱스) — [13장](#13-공공데이터-api-인증키-등록-및-reqwest-호출-구조) |
+| `0002_create_hospitals.sql` | 병원 기본 테이블 (`location geography(Point, 4326)` + GIST 공간 인덱스) — 초기 골격. 서비스용 병원 목록으로 0004 에서 확장 |
+| `0003_create_animal_businesses.sql` | 동물 5개 업종 통합 테이블 `animal_businesses` (업종+관리번호 유일, 원본 좌표 + 변환 좌표, GIST 인덱스) — 공공데이터 원본의 **정본** — [13장](#13-공공데이터-api-인증키-등록-및-reqwest-호출-구조) |
+| `0004_hospital_fields_and_fees.sql` | `hospitals` 에 `external_id`(=관리번호)·전화·영업상태·시도·시군구 추가, 진료비 테이블 `region_fees`(지역별 고양이 평균)·`hospital_fees`(병원별, 현재 더미) 생성 |
+
+데이터 구조: `animal_businesses`(원본 5종) → `hospitals`(서비스용 병원, `external_id = mng_no` 로 연결) → `hospital_fees`(병원별 진료비). 병원 id 와 진료비는 수집을 다시 해도 유지됩니다.
 
 ### 11-4. 새 마이그레이션 추가 규칙
 
@@ -903,6 +912,17 @@ cargo run --release --bin collect -- hospital pharmacy
 cargo run --release --bin collect -- all --since 20261101000000
 ```
 
+저장된 마지막 변경 시각 − 1일 이후만 자동으로 (업종별로 계산, 저장된 게 없는 업종은 전체 수집):
+
+```bash
+cargo run --release --bin collect -- all --incremental
+```
+
+수집할 때 함께 일어나는 일:
+
+- **폐업은 저장하지 않고, 이미 있으면 삭제합니다.** 병원이면 서비스용 `hospitals` 와 그 진료비도 함께 삭제됩니다. (휴업·취소/말소 등은 유지)
+- 병원(`hospital`)을 수집하면 `animal_businesses` → `hospitals` 갱신과, **진료비가 없는 신규 병원에만** 더미 진료비 채우기까지 합니다. 기존 병원 id 와 진료비 가격은 바뀌지 않습니다.
+
 정상 결과 (업종마다 한 줄):
 
 ```text
@@ -917,6 +937,15 @@ cargo run --release --bin collect -- all --since 20261101000000
 ```bash
 docker compose exec db psql -U nyangjipsa -d nyangjipsa -c "SELECT business_type, count(*), count(location) AS with_location, count(*) FILTER (WHERE status_code='01') AS open FROM animal_businesses GROUP BY 1 ORDER BY 1;"
 ```
+
+### 13-5. 자동 동기화
+
+`.env` 의 `SYNC_INTERVAL_HOURS` 를 1 이상으로 하면 서버가 켜져 있는 동안 그 주기(시간)마다 5개 업종의 **변경분**을 받아 `animal_businesses` → `hospitals` → 신규 병원 더미 진료비까지 갱신합니다. 기본값 `0` 은 꺼짐입니다.
+
+- 마지막 수집 시각을 보고 남은 시간만큼만 기다립니다. 서버를 자주 재시작해도 중복 실행되지 않습니다.
+- 저장된 데이터가 없는 업종은 첫 실행에서 전체를 받습니다(수 분 걸림).
+- 실패하면 로그에 남기고 최대 1시간 뒤 다시 시도합니다.
+- 서버가 꺼져 있는 동안에는 동기화되지 않습니다. 이때는 `collect --incremental` 을 직접 실행하세요.
 
 ---
 
@@ -976,7 +1005,10 @@ curl -s http://127.0.0.1:8080/health/db
 |---|---|---|---|
 | GET | `/health` | 서버 동작 확인 | ✅ |
 | GET | `/health/db` | DB 연결 + PostGIS 버전 확인 | ✅ |
-| GET | `/api/places/nearby` | 주변 동물 업소 검색 (영업 중, 거리순) | ✅ |
+| GET | `/api/places/nearby` | 주변 동물 업소 검색 (5개 업종, 영업 중, 거리순). 병원에는 `hospital_id` 가 붙음 | ✅ |
+| GET | `/api/hospitals/nearby` | 반경 안의 영업 중인 병원 + 고양이 진료비 | ✅ |
+| GET | `/api/hospitals/{id}` | 병원 한 곳과 진료비 (`hospital_id` 로 조회) | ✅ |
+| POST | `/api/chat` | 고양이 병원·진료 안내 챗봇 (Gemini) — 키가 없으면 503 | ✅ |
 
 ### 14-5. 주변 검색 API 사용법
 
@@ -1005,6 +1037,7 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
     {
       "id": 123,
       "type": "hospital",
+      "hospital_id": 45,
       "name": "OO동물병원",
       "road_address": "서울특별시 강남구 …",
       "lot_address": "서울특별시 강남구 …",
@@ -1020,6 +1053,52 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 
 - 좌표 순서는 항상 **lon(경도), lat(위도)** 입니다. 지도 SDK 의 `LatLng(lat, lng)` 로 넘길 때 순서에 주의하세요.
 - 잘못된 값(위도 범위 밖, 없는 업종 등)은 `400` 과 `{"error": "..."}` 를 돌려줍니다.
+- `type=hospital` 결과에만 `hospital_id` 가 붙습니다 (서비스용 병원 id). 지도에서 병원 마커를 누르면 이 값으로 `GET /api/hospitals/{id}` 를 불러 진료비를 보여줄 수 있습니다. 병원 외 업종에는 없습니다.
+
+### 14-6. 병원 API (진료비 포함)
+
+`GET /api/hospitals/nearby?lat=37.5665&lon=126.9780&radius=1000&limit=50&include_fees=true`
+
+| 파라미터 | 필수 | 기본 / 범위 | 설명 |
+|---|---|---|---|
+| `lat`, `lon` | ✅ | 위도 −90~90 / 경도 −180~180 | 중심 좌표 |
+| `radius` | | 1000 / 1~5000 (m) | 반경 |
+| `limit` | | 50 / 1~100 | 최대 개수 |
+| `include_fees` | | true | 병원별 진료비 포함 여부 |
+
+- 영업 중인 병원만, 가까운 순입니다. 각 병원에 `distance_m`(반올림 미터)와 `fees[]` 가 들어갑니다.
+- `fees[].is_dummy: true` 는 실제 가격이 아니라 **지역 평균 기반 임의 값(±20%)** 입니다. 화면에는 "참고용"으로 표시하세요.
+- 진료비 통계 출처: 농림축산식품부 동물병원 진료비 조사·공개 시스템(2025년 조사) — 서비스에서 쓸 때 출처를 표기해야 합니다.
+
+`GET /api/hospitals/{id}` 는 병원 한 곳(`name`, `address`, `phone`, `business_status`, `lat`, `lon`)과 `fees[]` 를 돌려줍니다. 없는 id 는 404, 숫자가 아니면 400 입니다.
+
+### 14-7. 챗봇 API
+
+`POST /api/chat` — 고양이 병원·진료 안내 챗봇. Gemini 를 **1회 호출**해 답변·키워드(중요도)·후속 질문·선택지를 JSON 으로 받고, 병원·진료비·장소는 LLM 이 아니라 서버가 DB 에서 붙입니다 (읽기 전용).
+
+| 요청 필드 | 필수 | 설명 |
+|---|---|---|
+| `message` | ✅ | 사용자 메시지 (최대 500자) |
+| `history` | | 이전 대화 `[{role: "user"\|"assistant", text}]` (최근 6턴만 사용) |
+| `lat`, `lon` | | 사용자 위치 (둘 다 보내거나 둘 다 생략). 서버가 병원·장소 검색에만 쓰고 **Gemini 에는 보내지 않음** (위치를 공유했는지 여부만 전달) |
+| `choice_keyword` | | 선택지를 눌렀을 때 그 키워드 |
+
+| 응답 필드 | 설명 |
+|---|---|
+| `mode` | `intake`(처음 온 사용자에게 상황을 좁히는 질문) / `answer`(구체적 질문에 직접 답변) |
+| `answer` | 답변 |
+| `keywords[]` | 핵심 키워드와 중요도(`high`/`medium`/`low`), 이유 |
+| `question` | 후속 질문 (없으면 null) |
+| `choices[]` | 선택지. `kind: core`(지금 필요한 것 우선) / `explore`(모를 수 있는·추가로 고를 만한 것) |
+| `hospitals[]` | 병원 검색이 필요하고 위치가 있을 때만. 가까운 영업 중 병원 최대 5곳(반경 3km) + 진료비(`is_dummy` 포함) |
+| `places[]` | 약국·미용·장묘·위탁 검색이 필요하고 위치가 있을 때만. 업종별 최대 3곳(반경 3km). **번지가 가려진 업소(미용·위탁)는 정확한 좌표·전화번호를 주지 않음** |
+| `needs_location` | 병원·장소 검색이 필요한데 위치가 없으면 `true` → UI 가 위치 권한 요청 |
+| `fallback` | `true` 면 Gemini 가 아니라 서버의 대체 응답 |
+| `disclaimer` | 진단 대체 불가·진료비 참고용 안내 문구 |
+
+무료 한도 대비책: ① 전체 분당 호출 상한(`CHAT_GLOBAL_RPM`) ② IP당 요청 상한(`CHAT_IP_RPM`, 초과 시 429) ③ 첫 질문 1시간 캐시(위치 공유 여부별로 구분) ④ 일시 오류(5xx)는 같은 모델로 1회 재시도, 그래도 실패하거나 한도 초과·모델 없음이면 보조 모델(`GEMINI_FALLBACK_MODEL`)로 전환 — 무료 한도는 모델별로 따로 계산됨 ⑤ 모든 모델이 실패·응답 이상이면 대체 응답(선택지 제공, 병원 검색은 계속 동작) ⑥ 모델명 설정화.
+
+> 개인정보: 프롬프트에는 사용자 위치·개인정보를 넣지 않습니다. 무료 Gemini 입력은 서비스 개선에 쓰일 수 있습니다.
 
 ---
 
@@ -1045,7 +1124,9 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 cargo fmt --check && cargo clippy --all-targets -- -D warnings && cargo test
 ```
 
-### 15-3. 테스트 구성 (✅ 기준 PC: 25개 모두 통과)
+### 15-3. 테스트 구성 (✅ 기준 PC: 74개 모두 통과)
+
+병합으로 추가된 테스트: `tests/merge_integration.rs`(모의 공공데이터 서버로 수집 → 병원 파생 → 진료비, 폐업 삭제, 증분 수집, `hospital_id` 연결), `tests/chat_api.rs`(모의 Gemini 로 챗봇·대비책·장소 검색), `tests/hospitals_nearby.rs`, `tests/fees_sync.rs`, `tests/closed_cleanup.rs`, `src/chat`·`src/region.rs`·`src/fees.rs` 단위 테스트.
 
 공공데이터 API(네트워크)를 호출하는 테스트는 없습니다. 응답 해석은 실제 응답 형식을 본뜬 문자열로 검증합니다.
 

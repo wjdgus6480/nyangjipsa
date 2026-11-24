@@ -32,7 +32,7 @@ async fn postgis_extension_is_enabled(pool: PgPool) -> sqlx::Result<()> {
 
 #[sqlx::test]
 async fn health_db_endpoint_reports_postgis(pool: PgPool) {
-    let router = app(AppState { pool }, false);
+    let router = app(AppState::new(pool), false);
 
     let response = router
         .oneshot(Request::get("/health/db").body(Body::empty()).unwrap())

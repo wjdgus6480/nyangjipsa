@@ -123,7 +123,7 @@ async fn stores_null_location_when_coordinates_missing(pool: PgPool) -> sqlx::Re
 }
 
 async fn get_json(pool: PgPool, uri: &str) -> (StatusCode, Value) {
-    let response = app(AppState { pool }, false)
+    let response = app(AppState::new(pool), false)
         .oneshot(Request::get(uri).body(Body::empty()).unwrap())
         .await
         .unwrap();

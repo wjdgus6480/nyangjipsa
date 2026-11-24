@@ -1,5 +1,14 @@
+use std::{net::SocketAddr, time::Duration};
+
 use anyhow::Context;
-use nyangjipsa_api::{AppState, app, config::Config, db};
+use nyangjipsa_api::{
+    AppState, app,
+    chat::{ChatService, gemini::GeminiClient},
+    config::Config,
+    db,
+    public_data::PublicDataClient,
+    sync,
+};
 use tokio::net::TcpListener;
 use tracing_subscriber::EnvFilter;
 
@@ -19,7 +28,41 @@ async fn main() -> anyhow::Result<()> {
         .await
         .context("DB 에 연결하지 못했습니다 (docker compose ps 로 DB 상태 확인)")?;
 
-    let state = AppState { pool };
+    // 공공데이터 자동 동기화 (SYNC_INTERVAL_HOURS > 0 이고 인증키가 있을 때만)
+    match (&config.public_data_service_key, config.sync_interval_hours) {
+        (Some(key), hours) if hours > 0 => {
+            let client = PublicDataClient::new(&config.public_data_base_url, key.as_str())?;
+            sync::spawn_scheduler(client, pool.clone(), Duration::from_secs(hours * 3600));
+        }
+        _ => tracing::info!(
+            "공공데이터 자동 동기화 꺼짐 (SYNC_INTERVAL_HOURS=0 또는 PUBLIC_DATA_SERVICE_KEY 없음)"
+        ),
+    }
+
+    // 챗봇 (GEMINI_API_KEY 가 있을 때만)
+    let mut state = AppState::new(pool);
+    match &config.gemini_api_key {
+        Some(key) => {
+            let mut gemini = GeminiClient::new(key, &config.gemini_model)?;
+            if let Some(fallback) = &config.gemini_fallback_model {
+                gemini = gemini.with_fallback_model(fallback);
+            }
+            state = state.with_chat(ChatService::new(
+                gemini,
+                config.chat_global_rpm,
+                config.chat_ip_rpm,
+            ));
+            tracing::info!(
+                "챗봇 켜짐 (model={}, 보조={:?}, 전체 {}회/분, 클라이언트당 {}회/분)",
+                config.gemini_model,
+                config.gemini_fallback_model,
+                config.chat_global_rpm,
+                config.chat_ip_rpm
+            );
+        }
+        None => tracing::info!("챗봇 꺼짐 (GEMINI_API_KEY 없음)"),
+    }
+
     let router = app(state, config.is_development());
 
     let addr = config.server_addr();
@@ -28,10 +71,14 @@ async fn main() -> anyhow::Result<()> {
         .with_context(|| format!("{addr} 포트를 열지 못했습니다 (이미 사용 중인지 확인)"))?;
     tracing::info!("listening on {addr}");
 
-    axum::serve(listener, router)
-        .with_graceful_shutdown(shutdown_signal())
-        .await
-        .context("서버 실행 중 오류")?;
+    // ConnectInfo: 챗봇의 클라이언트(IP)별 요청 제한에 사용
+    axum::serve(
+        listener,
+        router.into_make_service_with_connect_info::<SocketAddr>(),
+    )
+    .with_graceful_shutdown(shutdown_signal())
+    .await
+    .context("서버 실행 중 오류")?;
 
     tracing::info!("서버 종료");
     Ok(())

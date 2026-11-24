@@ -1,6 +1,6 @@
 {
   "db_name": "PostgreSQL",
-  "query": "\n        WITH center AS (\n            SELECT ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography AS g\n        )\n        SELECT b.id,\n               b.business_type,\n               b.name,\n               b.road_address,\n               b.lot_address,\n               b.phone,\n               b.address_masked,\n               ST_X(b.location::geometry) AS \"lon!\",\n               ST_Y(b.location::geometry) AS \"lat!\",\n               ST_Distance(b.location, c.g) AS \"distance_m!\"\n        FROM animal_businesses b, center c\n        WHERE b.status_code = '01'\n          AND b.location IS NOT NULL\n          AND ST_DWithin(b.location, c.g, $3::float8)\n          AND ($4::text[] IS NULL OR b.business_type = ANY($4))\n        ORDER BY ST_Distance(b.location, c.g), b.id\n        LIMIT $5\n        ",
+  "query": "\n        WITH center AS (\n            SELECT ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography AS g\n        )\n        SELECT b.id,\n               b.business_type,\n               h.id AS \"hospital_id?\",\n               b.name,\n               b.road_address,\n               b.lot_address,\n               b.phone,\n               b.address_masked,\n               ST_X(b.location::geometry) AS \"lon!\",\n               ST_Y(b.location::geometry) AS \"lat!\",\n               ST_Distance(b.location, c.g) AS \"distance_m!\"\n        FROM animal_businesses b\n        CROSS JOIN center c\n        LEFT JOIN hospitals h\n               ON b.business_type = 'hospital' AND h.external_id = b.mng_no\n        WHERE b.status_code = '01'\n          AND b.location IS NOT NULL\n          AND ST_DWithin(b.location, c.g, $3::float8)\n          AND ($4::text[] IS NULL OR b.business_type = ANY($4))\n        ORDER BY ST_Distance(b.location, c.g), b.id\n        LIMIT $5\n        ",
   "describe": {
     "columns": [
       {
@@ -27,6 +27,17 @@
       },
       {
         "ordinal": 2,
+        "name": "hospital_id?",
+        "type_info": "Int8",
+        "origin": {
+          "Table": {
+            "table": "hospitals",
+            "name": "id"
+          }
+        }
+      },
+      {
+        "ordinal": 3,
         "name": "name",
         "type_info": "Text",
         "origin": {
@@ -37,7 +48,7 @@
         }
       },
       {
-        "ordinal": 3,
+        "ordinal": 4,
         "name": "road_address",
         "type_info": "Text",
         "origin": {
@@ -48,7 +59,7 @@
         }
       },
       {
-        "ordinal": 4,
+        "ordinal": 5,
         "name": "lot_address",
         "type_info": "Text",
         "origin": {
@@ -59,7 +70,7 @@
         }
       },
       {
-        "ordinal": 5,
+        "ordinal": 6,
         "name": "phone",
         "type_info": "Text",
         "origin": {
@@ -70,7 +81,7 @@
         }
       },
       {
-        "ordinal": 6,
+        "ordinal": 7,
         "name": "address_masked",
         "type_info": "Bool",
         "origin": {
@@ -81,19 +92,19 @@
         }
       },
       {
-        "ordinal": 7,
+        "ordinal": 8,
         "name": "lon!",
         "type_info": "Float8",
         "origin": "Expression"
       },
       {
-        "ordinal": 8,
+        "ordinal": 9,
         "name": "lat!",
         "type_info": "Float8",
         "origin": "Expression"
       },
       {
-        "ordinal": 9,
+        "ordinal": 10,
         "name": "distance_m!",
         "type_info": "Float8",
         "origin": "Expression"
@@ -112,6 +123,7 @@
       false,
       false,
       false,
+      false,
       true,
       true,
       true,
@@ -121,5 +133,5 @@
       null
     ]
   },
-  "hash": "52de31393df690c7dcd42405eb3be9e8a7e15a8a34f2f896a0effefa97238fba"
+  "hash": "a01b21c885ea5f8a3bec60a3de2d234b12054703e487244e7296ef8851bfcafc"
 }

@@ -1,0 +1,20 @@
+{
+  "permissions": {
+    "ask": [
+      "Bash(*--regenerate*)",
+      "Bash(*docker compose down*-v*)",
+      "Bash(*docker volume rm*)",
+      "Bash(*TRUNCATE*)",
+      "Bash(*DROP TABLE*)",
+      "Bash(*DELETE FROM hospital*)",
+      "Bash(*DELETE FROM region_fees*)",
+      "PowerShell(*--regenerate*)",
+      "PowerShell(*docker compose down*-v*)",
+      "PowerShell(*docker volume rm*)",
+      "PowerShell(*TRUNCATE*)",
+      "PowerShell(*DROP TABLE*)",
+      "PowerShell(*DELETE FROM hospital*)",
+      "PowerShell(*DELETE FROM region_fees*)"
+    ]
+  }
+}
