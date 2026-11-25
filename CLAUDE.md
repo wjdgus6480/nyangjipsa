@@ -19,9 +19,11 @@ Rust + Axum + SQLx + PostgreSQL/PostGIS 백엔드. 환경 구축은 `03_tech-sta
 ## 프론트엔드 (항상 적용)
 
 - **새로 만드는 프론트엔드 화면·기능은 React 로만 만든다.** 순수 HTML/CSS/JS 로 새 화면을 만들지 않는다.
-- 기존 순수 JS 화면(`02_frontend/home`, `02_frontend/map-poc` 의 지도·챗봇)은 팀이 이전을 정하기 전까지 그대로 동작하게 둔다. 고칠 때 React 로 옮길지는 작업 전에 팀에 확인한다.
-- React 프로젝트 구성(TypeScript 사용 여부, 빌드 도구, 폴더 위치)이 아직 정해지지 않았다면 작업 전에 먼저 정하고 진행한다.
-- 백엔드 API(`/api/places/nearby`, `/api/hospitals/*`, `/api/chat`, `/api/route`)는 그대로 쓴다. 화면 때문에 API 를 바꿀 때는 기존 화면이 깨지지 않게 한다.
+- React 앱은 `02_frontend/src` (React + TypeScript + Vite, react-router: `/` 홈, `/map` 지도, `/chat` 챗봇)다. 새 기능은 여기에 컴포넌트로 추가한다. 구성·폴더 규칙은 `02_frontend/README.md` 와 `04_docs/06_프론트엔드_React_전환_기록.md` 를 따른다.
+- 옛 순수 JS 화면(`02_frontend/home`, `02_frontend/map-poc`, `02_frontend/serve.js`)에는 **새 기능을 추가하지 않는다.** 삭제는 팀 확인 후 별도 PR 로 한다.
+- API 호출은 `src/services/api`, 응답 타입은 `src/types/api.ts`(Rust serde 구조체 기준)에 둔다. 상태 관리 라이브러리 없이 화면별 로컬 상태 + Context 를 쓴다.
+- 프론트 커밋 전: `02_frontend` 에서 `npm run check` (타입 검사·ESLint·Vitest·옛 Node 테스트·빌드)를 통과시킨다.
+- 백엔드 API(`/api/places/*`, `/api/hospitals/*`, `/api/chat`, `/api/route`)는 그대로 쓴다. 화면 때문에 API 를 바꿀 때는 기존 화면이 깨지지 않게 한다.
 
 ## 규칙
 
