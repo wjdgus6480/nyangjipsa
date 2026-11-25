@@ -24,8 +24,14 @@ const MAX_TRANSIT_OPTIONS: usize = 5;
 
 pub const ROUTE_NOTICE: &str =
     "경로·소요 시간·요금 정보: 카카오맵. 실제 교통 상황과 다를 수 있습니다.";
-pub const TRANSIT_WALK_NOTICE: &str =
-    "출발지에서 첫 정류장(역)까지, 마지막 정류장(역)에서 병원까지 걷는 구간은 포함되지 않았어요.";
+pub const TRANSIT_WALK_NOTICE: &str = "정류장(역)까지·정류장(역)에서 걷는 시간은 선택한 경로만 실제 도보 경로로 계산하고, 나머지 경로는 직선거리 기반 추정치예요.";
+
+/// 추정 도보: 실제 길은 직선보다 돌아가므로 직선거리에 곱하는 값
+const DETOUR_FACTOR: f64 = 1.3;
+/// 추정 도보: 보통 걸음 (분당 약 70m)
+const WALK_SPEED_M_PER_S: f64 = 70.0 / 60.0;
+/// 이보다 가까우면 걷는 구간 없음으로 봄 (m)
+const NEGLIGIBLE_WALK_M: f64 = 20.0;
 
 #[derive(Debug, Clone, Copy, PartialEq, Eq, Hash)]
 pub enum Mode {
@@ -67,6 +73,9 @@ pub struct RouteResponse {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub message: Option<String>,
     pub notices: Vec<&'static str>,
+    /// 대중교통: 앞뒤 도보를 실제 도보 경로로 계산한 후보의 번호 (나머지는 추정치)
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub detail_index: Option<usize>,
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -81,6 +90,66 @@ pub struct RouteOption {
     #[serde(skip_serializing_if = "Option::is_none")]
     pub transfers: Option<i64>,
     pub steps: Vec<RouteStep>,
+    /// 대중교통: 출발지 → 첫 정류장(역) 도보
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub access_walk: Option<WalkLeg>,
+    /// 대중교통: 마지막 정류장(역) → 도착지 도보
+    #[serde(skip_serializing_if = "Option::is_none")]
+    pub egress_walk: Option<WalkLeg>,
+    /// 문 앞에서 문 앞까지 총 시간(초). 대중교통 = 앞 도보 + time_s + 뒤 도보, 도보 경로 = time_s
+    pub total_time_s: i64,
+}
+
+/// 정류장(역) 앞뒤 도보 구간
+#[derive(Debug, Clone, Serialize)]
+pub struct WalkLeg {
+    pub distance_m: i64,
+    pub time_s: i64,
+    /// true 면 직선거리 기반 추정치 (도보 API 를 부르지 않았거나 실패)
+    pub estimated: bool,
+    /// 단계별 안내 (실제 도보 경로일 때만)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub guidance: Vec<String>,
+    /// [[경도, 위도], ...] — 추정치는 시작·끝 두 점(직선)
+    pub path: Vec<[f64; 2]>,
+}
+
+/// 두 좌표 사이 직선거리(m, 구면 근사)
+pub fn straight_distance_m(a: Coordinate, b: Coordinate) -> f64 {
+    let r = 6_371_000.0_f64;
+    let (la1, la2) = (a.lat.to_radians(), b.lat.to_radians());
+    let dla = la2 - la1;
+    let dlo = (b.lon - a.lon).to_radians();
+    let h = (dla / 2.0).sin().powi(2) + la1.cos() * la2.cos() * (dlo / 2.0).sin().powi(2);
+    2.0 * r * h.sqrt().asin()
+}
+
+/// API 없이 도보 구간 추정 (직선거리 × 1.3, 분당 70m)
+pub fn estimate_walk(a: Coordinate, b: Coordinate) -> WalkLeg {
+    let straight = straight_distance_m(a, b);
+    let (distance, time) = if straight < NEGLIGIBLE_WALK_M {
+        (0.0, 0.0)
+    } else {
+        let d = straight * DETOUR_FACTOR;
+        (d, d / WALK_SPEED_M_PER_S)
+    };
+    WalkLeg {
+        distance_m: distance.round() as i64,
+        time_s: time.round() as i64,
+        estimated: true,
+        guidance: vec![],
+        path: vec![[a.lon, a.lat], [b.lon, b.lat]],
+    }
+}
+
+/// 대중교통 경로의 첫 정류장(역)과 마지막 정류장(역) 좌표
+fn stop_ends(o: &RouteOption) -> Option<(Coordinate, Coordinate)> {
+    let first = o.steps.iter().find_map(|s| s.path.first())?;
+    let last = o.steps.iter().rev().find_map(|s| s.path.last())?;
+    Some((
+        Coordinate::new(first[0], first[1]).ok()?,
+        Coordinate::new(last[0], last[1]).ok()?,
+    ))
 }
 
 #[derive(Debug, Clone, Serialize)]
@@ -142,7 +211,77 @@ impl RouteService {
         self.per_client.allow(client)
     }
 
+    /// 길찾기. 대중교통은 정류장(역) 앞뒤 도보 시간을 붙입니다:
+    /// `detail` 번째 후보(기본 0)는 카카오 도보 API 로 실제 경로를 계산하고(호출 2회, 캐시),
+    /// 나머지 후보는 직선거리 기반 추정치를 씁니다. 도보 API 가 실패하면 추정치로 대신합니다.
     pub async fn route(
+        &self,
+        mode: Mode,
+        from: Coordinate,
+        to: Coordinate,
+        detail: Option<usize>,
+    ) -> Result<RouteResponse, RoutingError> {
+        let mut response = self.fetch(mode, from, to).await?;
+        if mode == Mode::Transit && !response.routes.is_empty() {
+            let detail = detail.unwrap_or(0).min(response.routes.len() - 1);
+            for (i, option) in response.routes.iter_mut().enumerate() {
+                let Some((first_stop, last_stop)) = stop_ends(option) else {
+                    continue;
+                };
+                let (access, egress) = if i == detail {
+                    (
+                        self.walk_leg(from, first_stop).await,
+                        self.walk_leg(last_stop, to).await,
+                    )
+                } else {
+                    (
+                        estimate_walk(from, first_stop),
+                        estimate_walk(last_stop, to),
+                    )
+                };
+                option.total_time_s = access.time_s + option.time_s + egress.time_s;
+                option.access_walk = Some(access);
+                option.egress_walk = Some(egress);
+            }
+            response.detail_index = Some(detail);
+        }
+        Ok(response)
+    }
+
+    /// 실제 도보 경로 (카카오 도보 API, 캐시). 아주 가깝거나 실패하면 추정치
+    async fn walk_leg(&self, a: Coordinate, b: Coordinate) -> WalkLeg {
+        if straight_distance_m(a, b) < NEGLIGIBLE_WALK_M {
+            return estimate_walk(a, b);
+        }
+        match self.fetch(Mode::Walk, a, b).await {
+            Ok(w) => match w.routes.first() {
+                Some(o) => WalkLeg {
+                    distance_m: o.distance_m,
+                    time_s: o.time_s,
+                    estimated: false,
+                    guidance: o
+                        .steps
+                        .iter()
+                        .map(|s| s.guidance.clone())
+                        .filter(|g| !g.is_empty())
+                        .collect(),
+                    path: o
+                        .steps
+                        .iter()
+                        .flat_map(|s| s.path.iter().copied())
+                        .collect(),
+                },
+                None => estimate_walk(a, b),
+            },
+            Err(e) => {
+                tracing::warn!("정류장 도보 경로 실패, 추정치 사용: {e}");
+                estimate_walk(a, b)
+            }
+        }
+    }
+
+    /// 카카오 경로 조회 1회 (캐시)
+    async fn fetch(
         &self,
         mode: Mode,
         from: Coordinate,
@@ -257,6 +396,7 @@ pub fn parse_walk(body: &Value) -> RouteResponse {
         landing_url: Some(text(&route["properties"]["landingUrl"])).filter(|s| !s.is_empty()),
         message: None,
         notices: vec![ROUTE_NOTICE],
+        detail_index: None,
     };
     if status != "OK" {
         response.message = Some(status_message(&status));
@@ -284,7 +424,13 @@ pub fn parse_walk(body: &Value) -> RouteResponse {
         fare: None,
         transfers: None,
         steps,
+        access_walk: None,
+        egress_walk: None,
+        total_time_s: 0,
     });
+    if let Some(o) = response.routes.last_mut() {
+        o.total_time_s = o.time_s;
+    }
     response
 }
 
@@ -297,6 +443,7 @@ pub fn parse_transit(body: &Value) -> RouteResponse {
         landing_url: Some(text(&body["properties"]["landingURL"])).filter(|s| !s.is_empty()),
         message: None,
         notices: vec![ROUTE_NOTICE, TRANSIT_WALK_NOTICE],
+        detail_index: None,
     };
     if status != "OK" {
         response.message = Some(status_message(&status));
@@ -345,6 +492,9 @@ pub fn parse_transit(body: &Value) -> RouteResponse {
             fare: p["fare"]["value"].as_i64(),
             transfers: p["transfers"].as_i64(),
             steps,
+            access_walk: None,
+            egress_walk: None,
+            total_time_s: int(&p["totalTime"]),
         });
     }
     if response.routes.is_empty() {
@@ -410,6 +560,21 @@ mod tests {
         assert!(r.message.unwrap().contains("너무 멀어"));
         let t = parse_transit(&json!({ "status": "NO_RESULTS", "properties": {} }));
         assert!(t.message.unwrap().contains("대중교통 경로가 없어요"));
+    }
+
+    #[test]
+    fn estimates_walk_from_straight_distance() {
+        // 위도 0.001도 ≈ 111m → ×1.3 ≈ 144m, 분당 70m ≈ 124초
+        let a = Coordinate::new(126.9780, 37.5665).unwrap();
+        let b = Coordinate::new(126.9780, 37.5675).unwrap();
+        let w = estimate_walk(a, b);
+        assert!(w.estimated);
+        assert!((140..=150).contains(&w.distance_m), "{}", w.distance_m);
+        assert!((115..=130).contains(&w.time_s), "{}", w.time_s);
+        assert_eq!(w.path.len(), 2);
+        // 아주 가까우면 0
+        let c = Coordinate::new(126.97801, 37.56651).unwrap();
+        assert_eq!(estimate_walk(a, c).time_s, 0);
     }
 
     #[test]

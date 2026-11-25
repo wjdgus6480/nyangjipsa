@@ -1108,7 +1108,7 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 
 ### 14-8. 길찾기 API
 
-`GET /api/route?mode=walk|transit&from_lat=…&from_lon=…&to_lat=…&to_lon=…`
+`GET /api/route?mode=walk|transit&from_lat=…&from_lon=…&to_lat=…&to_lon=…[&detail=N]`
 
 지도는 네이버를 쓰고, 경로 데이터만 카카오맵 경로 조회 REST API 에서 받아 옵니다. 좌표는 둘 다 WGS84 라 네이버 지도에 그대로 그릴 수 있습니다. 카카오 키는 서버에만 있습니다.
 
@@ -1116,11 +1116,15 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 |---|---|
 | `mode` | `walk` / `transit` |
 | `routes[]` | 경로 후보 (도보 1개, 대중교통 최대 5개). `kind`(WALK/BUS/SUBWAY/BUS_AND_SUBWAY), `time_s`(초), `distance_m`, 대중교통은 `fare`(원)·`transfers` |
+| `routes[].total_time_s` | **문 앞에서 문 앞까지 총 시간(초)**. 대중교통 = 앞 도보 + 대중교통 + 뒤 도보, 도보 경로는 `time_s` 와 같음 |
+| `routes[].access_walk` / `egress_walk` | 대중교통만. 출발지→첫 정류장(역), 마지막 정류장(역)→도착지 도보: `distance_m`, `time_s`, `estimated`, `guidance[]`, `path` |
+| `detail_index` | 대중교통만. 앞뒤 도보를 **실제 도보 경로**(카카오 도보 API 2회, 캐시)로 계산한 후보 번호. 기본 0, `detail=N` 으로 바꿈. 나머지 후보는 직선거리 × 1.3, 분당 70m 추정치(`estimated: true`). 도보 API 가 실패해도 추정치로 대신함 |
 | `routes[].steps[]` | 단계별 `kind`(WALKING/BUS/SUBWAY), `guidance`(안내 문구), `distance_m`, `time_s`, `vehicles[]`(노선명), `stops[]`(정류장·역), `path`(`[[경도, 위도], …]` — 지도에 선으로 그림) |
 | `landing_url` | 카카오맵에서 같은 길찾기를 여는 링크 (오류·한도 초과 시 대체 수단) |
 | `message` | 경로가 없을 때 안내 (예: 거리가 너무 멀어 도보 불가) |
-| `notices[]` | 출처 안내. 대중교통은 "출발지→첫 정류장, 마지막 정류장→도착지 도보는 포함되지 않음" 안내 포함 |
+| `notices[]` | 출처 안내. 대중교통은 앞뒤 도보 시간이 실제 계산인지 추정치인지 안내 포함 |
 
+- 대중교통 길찾기 1회 = 대중교통 1건 + 도보 최대 2건(앞뒤). 화면에서 다른 후보를 고르면 `detail=N` 으로 다시 요청(대중교통 결과는 캐시, 도보 2건만 추가)
 - 무료 쿼터: 카카오 개발자 계정의 **첫 번째 앱**에 도보·대중교통 각 하루 1,000건 (콘솔 [통계] > [쿼터] 에서 확인). 같은 요청은 서버가 10분간 캐시하고, 클라이언트당 분당 30회로 제한합니다.
 - 한도 초과·카카오 오류는 503 + 안내 문구. 잘못된 `mode`·좌표는 400.
 

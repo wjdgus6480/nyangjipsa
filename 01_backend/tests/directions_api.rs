@@ -24,6 +24,9 @@ struct Mock {
     /// 0 이면 정상, 그 외 HTTP 상태로 실패
     fail_status: u16,
     quota: bool,
+    /// true 면 도보(walk)만 500 으로 실패
+    walk_fail: bool,
+    walk_calls: AtomicUsize,
     last_auth: Mutex<String>,
     last_query: Mutex<HashMap<String, String>>,
 }
@@ -76,10 +79,16 @@ async fn handler(
 }
 
 async fn start_mock(fail_status: u16, quota: bool) -> (String, Arc<Mock>) {
+    start_mock_with(fail_status, quota, false).await
+}
+
+async fn start_mock_with(fail_status: u16, quota: bool, walk_fail: bool) -> (String, Arc<Mock>) {
     let mock = Arc::new(Mock {
         calls: AtomicUsize::new(0),
         fail_status,
         quota,
+        walk_fail,
+        walk_calls: AtomicUsize::new(0),
         last_auth: Mutex::new(String::new()),
         last_query: Mutex::new(HashMap::new()),
     });
@@ -90,6 +99,10 @@ async fn start_mock(fail_status: u16, quota: bool) -> (String, Arc<Mock>) {
                 |State(m): State<Arc<Mock>>,
                  h: HeaderMap,
                  Query(q): Query<HashMap<String, String>>| async move {
+                    m.walk_calls.fetch_add(1, Ordering::SeqCst);
+                    if m.walk_fail {
+                        return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({})));
+                    }
                     handler(m, h, q, walk_body()).await
                 },
             ),
@@ -143,6 +156,8 @@ async fn walk_route_is_normalized_and_key_stays_on_server(pool: PgPool) {
     assert_eq!(s, StatusCode::OK);
     assert_eq!(j["mode"], "walk");
     assert_eq!(j["routes"][0]["time_s"], 1620);
+    assert_eq!(j["routes"][0]["total_time_s"], 1620);
+    assert!(j["routes"][0].get("access_walk").is_none());
     assert_eq!(
         j["routes"][0]["steps"][0]["path"][0],
         json!([126.978, 37.567])
@@ -174,7 +189,54 @@ async fn transit_route_has_fare_vehicles_and_walk_notice(pool: PgPool) {
     );
     assert_eq!(r["steps"][0]["vehicles"], json!(["708"]));
     assert_eq!(j["landing_url"], "https://map.kakao.com/t");
-    assert!(j["notices"].to_string().contains("걷는 구간"));
+    assert!(j["notices"].to_string().contains("걷는 시간"));
+}
+
+#[sqlx::test]
+async fn transit_adds_walk_to_and_from_stops(pool: PgPool) {
+    let (base, mock) = start_mock(0, false).await;
+    let (_, j) = get_json(
+        &router(pool, &base, 30),
+        &format!("/api/route?mode=transit&{Q}"),
+    )
+    .await;
+    let r = &j["routes"][0];
+    assert_eq!(j["detail_index"], 0);
+    // 선택한 후보(0번)는 실제 도보 경로 (모의 도보 응답 1620초)
+    assert_eq!(r["access_walk"]["estimated"], false);
+    assert_eq!(r["egress_walk"]["estimated"], false);
+    assert_eq!(r["access_walk"]["time_s"], 1620);
+    assert!(r["access_walk"]["guidance"].as_array().is_some());
+    // 문 앞에서 문 앞까지 = 앞 도보 + 대중교통 + 뒤 도보
+    let total = r["access_walk"]["time_s"].as_i64().unwrap()
+        + r["time_s"].as_i64().unwrap()
+        + r["egress_walk"]["time_s"].as_i64().unwrap();
+    assert_eq!(r["total_time_s"].as_i64(), Some(total));
+    // 도보 API 는 앞·뒤 2번
+    assert_eq!(mock.walk_calls.load(Ordering::SeqCst), 2);
+}
+
+#[sqlx::test]
+async fn walk_legs_fall_back_to_estimates_when_walk_api_fails(pool: PgPool) {
+    let (base, _) = start_mock_with(0, false, true).await;
+    let (s, j) = get_json(
+        &router(pool, &base, 30),
+        &format!("/api/route?mode=transit&{Q}"),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK, "도보 실패해도 대중교통 길찾기는 성공");
+    let a = &j["routes"][0]["access_walk"];
+    assert_eq!(a["estimated"], true);
+    assert_eq!(
+        a["path"].as_array().unwrap().len(),
+        2,
+        "추정치는 직선 두 점"
+    );
+    // 출발지(시청)→첫 정류장 약 55m 직선 → ×1.3 ≈ 72m
+    assert!(
+        (50..=110).contains(&a["distance_m"].as_i64().unwrap()),
+        "{a}"
+    );
 }
 
 #[sqlx::test]

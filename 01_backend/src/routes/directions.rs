@@ -24,6 +24,8 @@ pub struct RouteQuery {
     pub from_lon: f64,
     pub to_lat: f64,
     pub to_lon: f64,
+    /// 대중교통: 앞뒤 도보를 실제 도보 경로로 계산할 후보 번호 (기본 0). 나머지 후보는 추정치
+    pub detail: Option<usize>,
 }
 
 pub async fn route(
@@ -45,7 +47,7 @@ pub async fn route(
         return Err(AppError::TooManyRequests);
     }
 
-    match service.route(mode, from, to).await {
+    match service.route(mode, from, to, q.detail).await {
         Ok(r) => Ok(Json(r)),
         Err(e @ RoutingError::QuotaExceeded) => Err(AppError::Unavailable(e.to_string())),
         Err(e) => {
