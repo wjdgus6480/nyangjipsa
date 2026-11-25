@@ -40,11 +40,15 @@ export interface HospitalMapCallbacks {
 // 좌표 변환은 이 함수 한 곳에서만: API {lon,lat} → 네이버 LatLng(위도, 경도)
 const toLatLng = (p: { lat: number; lon: number }) => new naver.maps.LatLng(p.lat, p.lon);
 
-// 브랜드 컬러 핀 (선택한 핀은 진한 파란색)
+// 고양이 얼굴 모양 핀 (선택 전: 하늘색, 선택한 핀: 진한 파란색). 색·크기는 map.css 의 .pin
+const CAT_HEAD_PATH =
+  "M16 2 L41 15 Q50 13 59 15 L84 2 L93 33 C99 46 99 60 96 72 C89 94 70 101 50 101 C30 101 11 94 4 72 C1 60 1 46 7 33 Z";
+const catPin = (cls: string) =>
+  `<div class="${cls}"><svg viewBox="0 0 100 104" aria-hidden="true"><path d="${CAT_HEAD_PATH}"/></svg></div>`;
 const pinIcon = (sel: boolean): naver.maps.HtmlIcon =>
   sel
-    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(8, 20) }
-    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(6, 15) };
+    ? { content: catPin("pin is-sel"), anchor: new naver.maps.Point(13, 27) }
+    : { content: catPin("pin"), anchor: new naver.maps.Point(9, 19) };
 
 const fmtKm = (m: number) => (m / 1000).toFixed(1);
 
