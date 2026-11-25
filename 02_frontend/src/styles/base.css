@@ -1,0 +1,4 @@
+/* 모든 화면 공통 (기존 세 화면 모두 body margin 0, box-sizing border-box) */
+* { box-sizing: border-box; }
+html, body, #root { height: 100%; }
+body { margin: 0; background: #fff; }

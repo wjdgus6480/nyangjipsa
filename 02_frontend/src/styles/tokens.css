@@ -1,0 +1,30 @@
+/* ===== 냥집사 디자인 토큰 =====
+   기존 화면의 값을 그대로 옮겼습니다 (임의 변경 금지).
+   - 사이트(홈) 토큰: home/css/styles.css
+   - 지도 화면 토큰: map-poc/index.html <style>
+   - 챗봇 토큰(--nj-*)은 chatbot.css 의 .nj-root 안에서 정의 (기존과 동일) */
+:root {
+  /* 사이트 (로고 색 #8BE4FF 기준) */
+  --sky: #8BE4FF;          /* 메인: 로고 배경색 */
+  --sky-soft: #E8F8FE;     /* 연한 하늘색 배경 */
+  --sky-deep: #3FB8DE;     /* 하늘색 강조(텍스트용) */
+  --navy: #14365A;         /* 강조: 진한 네이비 */
+  --navy-hover: #0E2843;
+  --white: #FFFFFF;
+  --ivory: #FFFBF3;
+  --gray-50: #F6F8FA;
+  --gray-200: #E4E9EE;
+  --gray-500: #6B7785;
+  --ink: #1D2A36;
+  --danger: #D9534F;
+  --radius: 18px;
+  --radius-sm: 12px;
+  --shadow: 0 6px 24px rgba(20, 54, 90, .08);
+  --shadow-hover: 0 12px 32px rgba(20, 54, 90, .14);
+  --header-h: 68px;
+
+  /* 지도 화면 (챗봇 chatbot.css 와 같은 값) */
+  --primary:#8be4ff; --primary-strong:#4cc9ef; --secondary:#e8f9ff;
+  --bg:#fff; --surface:#f6fafc; --fg:#1b2a41; --muted:#5b6b80; --line:#d6e3ea; --accent:#0e6e8c;
+  --font: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+}
