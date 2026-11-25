@@ -28,7 +28,7 @@ const CHAT_PLACE_LIMIT: i64 = 3;
 const CHAT_COMPARE_LIMIT: i64 = 10;
 
 /// 요청자 IP (ConnectInfo 가 없으면 "unknown"). 리버스 프록시 뒤에서는 프록시 IP 가 됩니다.
-pub struct ClientIp(String);
+pub struct ClientIp(pub String);
 
 impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
     type Rejection = Infallible;

@@ -22,6 +22,7 @@ pub mod ingest;
 pub mod public_data;
 pub mod region;
 pub mod routes;
+pub mod routing;
 pub mod sync;
 
 use std::sync::Arc;
@@ -36,11 +37,22 @@ pub struct AppState {
     pub pool: PgPool,
     /// None 이면 챗봇 비활성화 (`/api/chat` 은 503)
     pub chat: Option<Arc<chat::ChatService>>,
+    /// None 이면 길찾기 비활성화 (`/api/route` 는 503)
+    pub routing: Option<Arc<routing::RouteService>>,
 }
 
 impl AppState {
     pub fn new(pool: PgPool) -> Self {
-        Self { pool, chat: None }
+        Self {
+            pool,
+            chat: None,
+            routing: None,
+        }
+    }
+
+    pub fn with_routing(mut self, routing: routing::RouteService) -> Self {
+        self.routing = Some(Arc::new(routing));
+        self
     }
 
     pub fn with_chat(mut self, chat: chat::ChatService) -> Self {
