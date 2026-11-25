@@ -37,6 +37,7 @@ export function installFakeNaver() {
   class FakeMarker {
     setMap = vi.fn();
     setIcon = vi.fn();
+    setPosition = vi.fn();
     constructor(public opts: { title?: string; icon?: { content: string } }) { markers.push(this); }
   }
   class InfoWindow {
@@ -56,14 +57,19 @@ export function installFakeNaver() {
     constructor() { dataLayers.push(this); }
   }
   class Polygon { setMap = vi.fn(); }
+  const polylines: FakePolyline[] = [];
+  class FakePolyline {
+    setMap = vi.fn();
+    constructor(public opts: { path: LatLng[]; strokeColor?: string; strokeStyle?: string }) { polylines.push(this); }
+  }
   const Event = {
     addListener: vi.fn(() => { const l = {}; live.add(l); return l; }),
     removeListener: vi.fn((ls: object | object[]) => { for (const l of ([] as object[]).concat(ls)) live.delete(l); }),
   };
 
-  const naverNs = { maps: { LatLng, Point, LatLngBounds, Map: FakeMap, Marker: FakeMarker, InfoWindow, Data: FakeData, Polygon, Event } };
+  const naverNs = { maps: { LatLng, Point, LatLngBounds, Map: FakeMap, Marker: FakeMarker, InfoWindow, Data: FakeData, Polygon, Polyline: FakePolyline, Event } };
   vi.stubGlobal("naver", naverNs);
-  return { maps, markers, live, dataLayers, Event };
+  return { maps, markers, live, dataLayers, Event, polylines };
 }
 
 /** 행정구역 JSON·장소 API 응답 */
