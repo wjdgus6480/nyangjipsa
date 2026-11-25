@@ -1,0 +1,135 @@
+/* 행정구역 레이어: 명칭 라벨, 선택 경로 바, 출처 표기 */
+.map-wrap { position: relative; min-height: 0; }
+.map-wrap #map { position: absolute; inset: 0; }
+
+/* 지도 안에서만 쓰는 귀여운 글꼴 (Jua 는 굵기가 하나라 가짜 굵게를 막으려고 font-weight 400) */
+.map-wrap { --map-font: "Jua", system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif; }
+.map-wrap .rg-label,
+.map-wrap .rg-label *,
+.map-wrap .rg-bar,
+.map-wrap .rg-bar button,
+.map-wrap .iw,
+.map-wrap .iw b {
+  font-family: var(--map-font) !important;
+  font-weight: 400 !important;
+}
+.map-wrap .rg-bar { letter-spacing: .01em; }
+
+.rg-label {
+  white-space: nowrap;
+  padding: 3px 8px;
+  border-radius: 999px;
+  font-family: system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  font-weight: 700;
+  line-height: 1.25;
+  color: #1b2a41;
+  background: rgba(255, 255, 255, .88);
+  border: 1px solid rgba(20, 120, 200, .25);
+  box-shadow: 0 1px 4px rgba(27, 42, 65, .12);
+  pointer-events: none;
+  user-select: none;
+}
+/* 라벨이 경계 클릭을 가로막지 않게 (네이버 마커 감싸는 div 까지) */
+div:has(> .rg-label) { pointer-events: none !important; }
+.rg-label.rg-emd { font-weight: 600; background: rgba(255, 255, 255, .85); display: inline-flex; align-items: center; gap: 5px; }
+.rg-label.rg-emd .rg-count { font-size: .9em; font-weight: 800; color: #1478c8; background: #e8f9ff; padding: 0 6px; border-radius: 999px; }
+.rg-label.is-sel { background: #1478c8; color: #fff; border-color: #1478c8; }
+.rg-label.rg-emd.is-sel .rg-count { background: rgba(255, 255, 255, .25); color: #fff; }
+
+/* 시도·시군구: 고양이 얼굴 배지(동그란 얼굴 + 귀) 안에 병원 수, 아래에 이름. 반투명 브랜드 컬러 + 흰 테두리 */
+.rg-label.rg-badge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 2px;
+  padding: 0;
+  border: 0;
+  border-radius: 0;
+  background: none;
+  box-shadow: none;
+  color: #1b2a41;
+  text-align: center;
+}
+.rg-face { position: relative; flex: none; }
+.rg-cat {
+  position: absolute;
+  inset: 0;
+  width: 100%;
+  height: 100%;
+  overflow: visible;
+  fill: rgba(139, 228, 255, .7);
+  stroke: #fff;
+  stroke-width: 5;
+  stroke-linejoin: round;
+  filter: drop-shadow(0 1px 3px rgba(27, 42, 65, .25));
+}
+/* 개수: 얼굴 원 중심(세로 58%)에 */
+.rg-face .rg-count {
+  position: absolute;
+  left: 0;
+  right: 0;
+  top: 58%;
+  transform: translateY(-50%);
+  font-size: 12px;
+  line-height: 1;
+  letter-spacing: -.02em;
+}
+.rg-badge .rg-name {
+  line-height: 1.1;
+  white-space: nowrap;
+  text-shadow: 0 0 3px #fff, 0 0 3px #fff, 0 0 2px #fff;
+}
+.rg-label.rg-badge.is-sel { color: #1b2a41; }
+.rg-label.rg-badge.is-sel .rg-face .rg-count { color: #fff; }
+.rg-label.rg-badge.is-sel .rg-cat { fill: rgba(20, 120, 200, .88); filter: drop-shadow(0 2px 6px rgba(20, 120, 200, .45)); }
+.rg-label.rg-badge.is-sel .rg-name { color: #1478c8; }
+
+/* 선택 경로: 전국 › 부산광역시 › 해운대구 */
+.rg-bar {
+  position: absolute;
+  top: 12px;
+  left: 12px;
+  right: 12px;
+  z-index: 50;
+  display: flex;
+  flex-wrap: wrap;
+  align-items: center;
+  gap: 4px;
+  width: max-content;
+  max-width: calc(100% - 24px);
+  padding: 5px 6px 5px 10px;
+  border-radius: 999px;
+  background: rgba(255, 255, 255, .95);
+  border: 1px solid #d6e3ea;
+  box-shadow: 0 4px 14px rgba(27, 42, 65, .12);
+  font: 600 13px/1.2 system-ui, -apple-system, "Apple SD Gothic Neo", "Malgun Gothic", sans-serif;
+  color: #5b6b80;
+}
+.rg-level { font-size: 11.5px; font-weight: 700; color: #0e6e8c; background: #e8f9ff; padding: 3px 8px; border-radius: 999px; margin-right: 2px; }
+.rg-crumb { font: inherit; color: #1b2a41; background: none; border: 0; padding: 3px 4px; border-radius: 6px; cursor: pointer; }
+.rg-crumb:hover { background: #e8f9ff; }
+.rg-crumb.is-current { font-weight: 800; color: #1478c8; cursor: default; background: none; }
+.rg-sep { color: #b4c4cf; }
+.rg-here { font-weight: 600; color: #5b6b80; padding-right: 6px; }
+.rg-clear { font: inherit; font-size: 12px; font-weight: 700; color: #fff; background: #1478c8; border: 0; border-radius: 999px; padding: 4px 10px; margin-left: 4px; cursor: pointer; }
+.rg-clear:hover { background: #0f5f9f; }
+
+.rg-attr {
+  position: absolute;
+  left: 8px;
+  bottom: 26px;
+  z-index: 50;
+  max-width: calc(100% - 120px);
+  font: 10.5px/1.3 system-ui, sans-serif;
+  color: #5b6b80;
+  background: rgba(255, 255, 255, .8);
+  padding: 2px 6px;
+  border-radius: 4px;
+  pointer-events: auto;
+}
+.rg-attr a { color: inherit; }
+
+@media (max-width: 760px) {
+  .rg-bar { top: 8px; left: 8px; font-size: 12px; }
+  .rg-attr { font-size: 9.5px; max-width: calc(100% - 90px); }
+}
