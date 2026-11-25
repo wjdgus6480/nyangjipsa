@@ -22,6 +22,7 @@ Rust + Axum + SQLx + PostgreSQL/PostGIS 백엔드. 환경 구축은 `03_tech-sta
 - React 앱은 `02_frontend/src` (React + TypeScript + Vite, react-router: `/` 홈, `/map` 지도, `/chat` 챗봇)다. 새 기능은 여기에 컴포넌트로 추가한다. 구성·폴더 규칙은 `02_frontend/README.md` 와 `04_docs/06_프론트엔드_React_전환_기록.md` 를 따른다.
 - 옛 순수 JS 화면(`02_frontend/home`, `02_frontend/map-poc`, `02_frontend/serve.js`)에는 **새 기능을 추가하지 않는다.** 삭제는 팀 확인 후 별도 PR 로 한다.
 - API 호출은 `src/services/api`, 응답 타입은 `src/types/api.ts`(Rust serde 구조체 기준)에 둔다. 상태 관리 라이브러리 없이 화면별 로컬 상태 + Context 를 쓴다.
+- 분석 이벤트는 `src/services/analytics` 의 `analytics.track` 으로만 보낸다. 이벤트 이름·속성은 `04_docs/08_분석_이벤트_Amplitude.md` 표를 따르고, 상담 문장·이름·연락처·주소·정확한 위치는 넣지 않는다 (병원은 `hospital_id` 만).
 - 프론트 커밋 전: `02_frontend` 에서 `npm run check` (타입 검사·ESLint·Vitest·옛 Node 테스트·빌드)를 통과시킨다.
 - 백엔드 API(`/api/places/*`, `/api/hospitals/*`, `/api/chat`, `/api/route`)는 그대로 쓴다. 화면 때문에 API 를 바꿀 때는 기존 화면이 깨지지 않게 한다.
 

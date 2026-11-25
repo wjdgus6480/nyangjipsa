@@ -7,6 +7,7 @@ import { postChat } from "../../services/api/endpoints";
 import type { ChatHistoryItem, ChatRequest, ChatResponse, PriceComparison } from "../../types/api";
 import { requestMyLocation } from "../chatbot/geolocation";
 import type { LatLon } from "../chatbot/chatCore";
+import { createConsultTracker } from "../../services/analytics/consult";
 
 const SUGGESTIONS = [
   "고양이가 토를 너무 자주 해요.",
@@ -63,6 +64,8 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
   const state = useRef({ history: [] as ChatHistoryItem[], location: null as LatLon | null, busy: false });
   const inputRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
+  // 분석: 상담 시작·완료 (상담 문장은 보내지 않음)
+  const consult = useRef(createConsultTracker("home"));
 
   useImperativeHandle(ref, () => ({
     setInput,
@@ -101,6 +104,13 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
     try {
       const r = await askChat({ message: text, history: state.current.history, choiceKeyword: keyword, location: state.current.location });
       state.current.history.push({ role: "user", text }, { role: "assistant", text: r.answer });
+      consult.current.onReply({
+        hospitals: r.hospitals?.length ?? 0,
+        places: r.places?.length ?? 0,
+        comparison: !!r.price_comparison,
+        followUp: !!r.question || !!r.choices?.length,
+        fallback: !!r.fallback,
+      });
       next = { id: typingId, who: "bot", kind: "reply", reply: r, last: { text, keyword } };
     } catch (e) {
       next = { id: typingId, who: "bot", kind: "error", message: (e as Error).message };

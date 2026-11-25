@@ -80,7 +80,18 @@ async fn create_returns_card_and_reuses_code(pool: PgPool) {
         v["card"]["description"],
         "서울특별시 종로구 · 영업/정상 · 초진 12,000원 · 종합백신 35,500원 (참고용)"
     );
-    assert_eq!(v["share_url"], format!("https://api.example.com/s/{code}"));
+    assert_eq!(
+        v["share_url"],
+        format!(
+            "https://api.example.com/s/{code}?utm_source=share&utm_medium=referral&utm_campaign=hospital_card"
+        )
+    );
+    assert!(
+        v["map_url"]
+            .as_str()
+            .unwrap()
+            .contains("&utm_source=share&utm_medium=referral&utm_campaign=hospital_card")
+    );
     assert!(
         v["map_url"]
             .as_str()

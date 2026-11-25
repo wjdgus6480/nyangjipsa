@@ -210,12 +210,19 @@ pub fn map_url(settings: &ShareSettings, h: &SharedHospital, code: Option<&str>)
     if let Some(c) = code {
         q.push_str("&ref=");
         q.push_str(&encode(c));
+        // 공유 링크로 들어온 방문을 Amplitude 에서 구분 (모든 이벤트에 utm_* 가 붙음)
+        q.push('&');
+        q.push_str(SHARE_UTM);
     }
     format!("{}/map?{q}", trim(&settings.frontend_base_url))
 }
 
+/// 카카오톡 공유 카드 링크에 붙는 유입 경로 표시 (팀 분석 이벤트 기준)
+pub const SHARE_UTM: &str = "utm_source=share&utm_medium=referral&utm_campaign=hospital_card";
+
+/// 공유할 링크 (카카오톡 공유 카드의 링크). 열면 utm 이 붙은 지도 주소로 이동
 pub fn share_url(settings: &ShareSettings, code: &str) -> String {
-    format!("{}/s/{code}", trim(&settings.public_base_url))
+    format!("{}/s/{code}?{SHARE_UTM}", trim(&settings.public_base_url))
 }
 
 /// 카카오톡 공유 카드(피드 템플릿)에 그대로 넣을 수 있는 내용
@@ -391,7 +398,7 @@ mod tests {
         let url = map_url(&ShareSettings::default(), &h(), Some("abc123def0"));
         assert!(url.starts_with("http://localhost:5173/map?focus=37.575793,126.971065&name="));
         assert!(url.contains("&type=%EB%8F%99%EB%AC%BC%EB%B3%91%EC%9B%90"));
-        assert!(url.contains("&hospital=7&ref=abc123def0"));
+        assert!(url.ends_with("&hospital=7&ref=abc123def0&utm_source=share&utm_medium=referral&utm_campaign=hospital_card"));
         assert!(!url.contains('<') && !url.contains(' '));
     }
 
@@ -405,7 +412,7 @@ mod tests {
         );
         assert!(
             page.contains(
-                r#"<meta property="og:url" content="http://localhost:8080/s/abc123def0">"#
+                r#"<meta property="og:url" content="http://localhost:8080/s/abc123def0?utm_source=share&amp;utm_medium=referral&amp;utm_campaign=hospital_card">"#
             )
         );
         assert!(page.contains("og:image\" content=\"http://localhost:5173/assets/logo.png"));

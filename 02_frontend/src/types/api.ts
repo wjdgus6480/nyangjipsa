@@ -259,3 +259,30 @@ export interface SocialCompleteRequest {
 export type SocialCompleteResponse =
   | { status: "active"; user: AuthUser }
   | { status: "pending_verification"; email: string; email_sent: boolean };
+
+/** POST /api/share 요청 (routes/share.rs CreateShare) */
+export interface ShareRequest {
+  hospital_id: number;
+  /** kakaotalk(기본) | link | other */
+  channel?: "kakaotalk" | "link" | "other";
+}
+
+/** 카카오톡 공유 카드(피드 템플릿) 내용 (share.rs ShareCard) */
+export interface ShareCard {
+  title: string;
+  /** 지역 · 영업상태 · 대표 진료비(참고용) */
+  description: string;
+  image_url: string;
+  button_title: string;
+  /** 카드를 누르면 열 주소 (utm_source=share&utm_medium=referral&utm_campaign=hospital_card 포함) */
+  link_url: string;
+}
+
+/** POST /api/share 응답 (routes/share.rs ShareResponse) */
+export interface ShareResponse {
+  code: string;
+  share_url: string;
+  map_url: string;
+  card: ShareCard;
+  hospital: { id: number; name: string; address: string | null; phone: string | null; business_status: string | null; lat: number; lon: number };
+}

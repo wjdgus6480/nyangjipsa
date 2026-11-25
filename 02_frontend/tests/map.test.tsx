@@ -8,6 +8,8 @@ import { mockFetch } from "./helpers/fetch";
 vi.mock("../src/services/config/env", () => ({
   API_BASE: "",
   NAVER_MAP_CLIENT_ID: "test-key",
+  AMPLITUDE_API_KEY: "",
+  AMPLITUDE_SERVER_URL: "",
   asset: (p: string) => `/${p}`,
 }));
 

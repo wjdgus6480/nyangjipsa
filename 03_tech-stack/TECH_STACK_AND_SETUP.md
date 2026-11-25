@@ -1147,7 +1147,7 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 ```
 
 - `POST /api/share` `{"hospital_id": 7250, "channel": "kakaotalk"}` (`channel`: `kakaotalk`(기본)/`link`/`other`)
-  - 응답: `code`, `share_url`(공유할 링크), `map_url`(지도에서 바로 여는 주소), `hospital`(이름·주소·전화·좌표), `card`
+  - 응답: `code`, `share_url`(공유할 링크, `?utm_source=share&utm_medium=referral&utm_campaign=hospital_card` 포함 — 분석: `04_docs/08_분석_이벤트_Amplitude.md`), `map_url`(지도에서 바로 여는 주소), `hospital`(이름·주소·전화·좌표), `card`
   - `card` = 카카오톡 공유 피드 템플릿에 그대로 넣는 값: `title`, `description`, `image_url`, `button_title`, `link_url`
   - 카드 설명에 **대표 진료비 참고 가격**(초진 진찰료·종합백신 접종비)을 넣고 항상 "(참고용)"을 붙입니다 (현재 더미 가격). 예: `서울특별시 종로구 · 영업/정상 · 초진 12,000원 · 종합백신 35,500원 (참고용)`. 가격이 없으면 "냥집사에서 확인" 안내. 가격은 `hospital_fees` 에서 **읽기만** 함
   - 같은 병원·같은 채널은 **코드 하나를 재사용** → `share_links` 행 수는 (병원 수 × 채널 수)를 넘지 않음. 클라이언트당 분당 20회
