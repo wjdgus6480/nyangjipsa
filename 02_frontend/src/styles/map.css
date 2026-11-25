@@ -1,0 +1,63 @@
+/* 지도 화면 (기존 map-poc/index.html 의 <style> 을 그대로 옮기고 .map-page 아래로 한정)
+   - 브랜드 토큰(--primary 등)은 tokens.css
+   - 기존 html, body 규칙은 .map-page 로. 나머지 규칙은 선택자 앞에 .map-page 만 붙임
+   - 불러오는 순서(map.css → chatbot.css → region-layer.css)는 기존 화면과 같게 유지 */
+.map-page { margin:0; height:100%; font-family:var(--font); color:var(--fg); background:var(--bg); }
+.map-page .app { display:grid; grid-template-columns: 372px 1fr; height:100%; }
+.map-page aside { display:flex; flex-direction:column; border-right:1px solid var(--line); min-height:0; background:var(--bg); position:relative; z-index:1; box-shadow: 2px 0 12px rgba(27,42,65,.06); }
+
+/* 브랜드 헤더 (왼쪽 상단) */
+.map-page .brand { display:flex; align-items:center; gap:12px; padding:14px 16px; background:var(--primary); }
+.map-page .brand-mark { width:46px; height:46px; border-radius:24%; border:2px solid #fff; object-fit:contain; aspect-ratio:1/1; background:var(--primary); flex:none; box-shadow:0 2px 8px rgba(27,42,65,.12); }
+.map-page .brand-text { flex:1; min-width:0; }
+.map-page .brand h1 { margin:0; font-size:21px; font-weight:800; letter-spacing:-.02em; line-height:1.15; }
+.map-page .brand p { margin:2px 0 0; font-size:12.5px; font-weight:600; opacity:.78; }
+.map-page .brand-link { flex:none; font-size:12px; font-weight:700; color:var(--fg); text-decoration:none; background:rgba(255,255,255,.7); padding:6px 10px; border-radius:999px; }
+.map-page .brand-link:hover { background:#fff; }
+
+.map-page .filters { padding:12px 16px 12px; border-bottom:1px solid var(--line); }
+.map-page .row { display:flex; flex-wrap:wrap; gap:6px; align-items:center; font-size:13px; }
+.map-page .row label { position:relative; display:flex; gap:4px; align-items:center; padding:6px 12px; border:1px solid var(--line); border-radius:999px; cursor:pointer; font-weight:600; color:var(--muted); background:var(--bg); transition: background .15s, border-color .15s, color .15s; user-select:none; }
+.map-page .row label input { position:absolute; opacity:0; pointer-events:none; }
+.map-page .row label:hover { border-color:var(--primary-strong); }
+.map-page .row label:has(input:checked) { background:var(--primary); border-color:var(--primary); color:var(--fg); }
+.map-page .row label:has(input:focus-visible) { outline:2px solid var(--primary-strong); outline-offset:2px; }
+.map-page .row-sub { margin-top:10px; gap:8px; color:var(--muted); font-weight:600; }
+.map-page select { font:inherit; font-size:13px; font-weight:600; color:var(--fg); padding:5px 8px; border:1px solid var(--line); border-radius:8px; background:var(--bg); cursor:pointer; }
+.map-page select:focus-visible { outline:2px solid var(--primary-strong); outline-offset:1px; }
+.map-page .status { margin-top:10px; font-size:12px; color:var(--muted); display:flex; align-items:center; gap:6px; }
+.map-page .status::before { content:""; width:6px; height:6px; border-radius:50%; background:var(--primary-strong); flex:none; }
+
+.map-page ul { list-style:none; margin:0; padding:6px 8px 80px; overflow:auto; flex:1; background:var(--surface); }
+.map-page li { padding:11px 12px; margin:0 0 6px; border:1px solid transparent; border-radius:12px; background:var(--bg); cursor:pointer; transition: border-color .15s, background .15s; }
+.map-page li:hover { border-color:var(--line); background:var(--secondary); }
+.map-page li.sel { border-color:var(--primary-strong); background:var(--secondary); box-shadow: inset 3px 0 0 var(--primary-strong); }
+.map-page li .name { font-weight:700; font-size:14.5px; }
+.map-page li .meta { font-size:12px; color:var(--muted); margin-top:3px; line-height:1.45; }
+
+.map-page #map { width:100%; height:100%; }
+.map-page .iw { padding:11px 13px; font-size:13px; max-width:260px; line-height:1.5; color:var(--fg); }
+.map-page .iw b { font-size:14.5px; }
+.map-page li .fee { font-size:12px; color:var(--fg); margin-top:3px; font-weight:600; }
+.map-page .iw-fees { list-style:none; margin:8px 0 0; padding:6px 0 0; border-top:1px dashed #d6e3ea; }
+.map-page .iw-fees li { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; padding:1px 0; }
+.map-page .iw-fees b { font-size:12.5px; white-space:nowrap; }
+.map-page .iw-note { font-size:11px; color:var(--muted); margin-top:4px; }
+.map-page .err { padding:16px; color:#c2410c; font-size:14px; }
+
+/* 지도 핀 (브랜드 컬러) */
+.map-page .pin { width:12px; height:12px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:1.5px solid #fff; box-shadow:0 1px 4px rgba(27,42,65,.3); }
+/* 선택한 핀: 진한 파란색 + 흰 테두리, 조금 크게 */
+.map-page .pin.is-sel { width:16px; height:16px; background:#1478c8; border:2px solid #fff; box-shadow:0 2px 6px rgba(20,120,200,.45); }
+
+@media (max-width: 760px) {
+  .map-page .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
+  .map-page aside { order:2; border-right:0; border-top:1px solid var(--line); box-shadow: 0 -2px 12px rgba(27,42,65,.06); }
+  .map-page .brand { padding:10px 14px; gap:10px; }
+  .map-page .brand-mark { width:38px; height:38px; }
+  .map-page .brand h1 { font-size:18px; }
+  .map-page .brand p { font-size:11.5px; }
+  .map-page .filters { padding:10px 14px; }
+  .map-page .row label { padding:5px 10px; }
+}
+  

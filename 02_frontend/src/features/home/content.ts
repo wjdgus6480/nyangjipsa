@@ -1,0 +1,129 @@
+// 서비스 소개·건강 가이드 콘텐츠 (기존 home/js/data/content.js 그대로)
+// 실제 의료 정보는 수의학 자료로 검수한 뒤 `sources`(출처)와 `reviewedBy`(검수자)를 채워 게시합니다.
+// 아직 검수되지 않은 항목은 화면에 "검수 예정"으로 표시됩니다.
+
+export type IconName = "nurse" | "syringe" | "book" | "pin" | "hospital";
+
+export type ServiceAction =
+  | { type: "scroll"; target: string; label: string }
+  | { type: "guide"; id: string; label: string }
+  | { type: "hospital"; label: string };
+
+export interface Service {
+  icon: IconName;
+  title: string;
+  points: string[];
+  action: ServiceAction;
+}
+
+export interface Guide {
+  id: string;
+  tone: "sky" | "ivory" | "blue" | "gray";
+  emoji: string;
+  title: string;
+  summary: string;
+  sections: { h: string; items: string[] }[];
+  /** 검수 출처. 비어 있으면 "검수 예정" 안내 */
+  sources: string[];
+}
+export const SERVICES: Service[] = [
+  {
+    icon: "nurse",
+    title: "AI 건강 상담",
+    points: ["고양이의 이상 증상과 행동 변화 상담", "질병 관련 기초 정보 제공", "상황에 맞는 대처 방법 안내"],
+    action: { type: "scroll", target: "chat", label: "상담 시작하기" },
+  },
+  {
+    icon: "syringe",
+    title: "예방접종 및 건강검진",
+    points: ["연령별 예방접종 정보", "필수 건강검진 항목 안내", "기본 검사 및 관리 시기 안내"],
+    action: { type: "guide", id: "vaccine", label: "자세히 보기" },
+  },
+  {
+    icon: "book",
+    title: "질병 정보 및 건강 가이드",
+    points: ["고양이에게 자주 발생하는 질병 정보", "증상별 주의사항 안내", "초보 집사를 위한 기초 건강관리"],
+    action: { type: "scroll", target: "guide", label: "자세히 보기" },
+  },
+  {
+    icon: "pin",
+    title: "주변 동물병원 및 가격 비교",
+    points: ["위치 기반 주변 동물병원 검색", "병원별 진료 항목 및 가격 비교", "적절한 병원 선택 지원"],
+    action: { type: "hospital", label: "자세히 보기" },
+  },
+];
+
+export const GUIDES: Guide[] = [
+  {
+    id: "first-day",
+    tone: "sky",
+    emoji: "🏠",
+    title: "고양이를 처음 데려왔다면 해야 할 일",
+    summary: "낯선 환경에 적응할 수 있도록 조용한 공간과 기본 용품부터 준비해요.",
+    sections: [
+      { h: "첫 며칠", items: ["숨을 수 있는 조용한 공간과 화장실·물·밥을 가까이 두기", "억지로 안거나 만지기보다 스스로 다가올 때까지 기다리기", "식사량·배변·활동을 간단히 기록해 두기"] },
+      { h: "확인할 것", items: ["입양처에서 받은 접종·구충 기록 보관", "다른 반려동물이 있다면 처음에는 공간 분리", "가까운 동물병원과 야간 진료 병원 미리 알아두기"] },
+    ],
+    sources: [],
+  },
+  {
+    id: "first-checkup",
+    tone: "ivory",
+    emoji: "🩺",
+    title: "입양 후 첫 건강검진은 언제 받아야 할까?",
+    summary: "입양 후 가능한 빨리 기본 검진을 받아 현재 건강 상태를 확인하는 것이 좋아요.",
+    sections: [
+      { h: "첫 방문에서 주로 하는 것", items: ["신체검사(체중, 눈·귀·입·피부·심장 소리)", "분변 검사와 구충 상태 확인", "접종 기록 확인과 앞으로의 일정 상담"] },
+      { h: "준비물", items: ["입양처 기록(접종·구충)", "이동장", "최근 식사·배변 메모"] },
+    ],
+    sources: [],
+  },
+  {
+    id: "vaccine",
+    tone: "blue",
+    emoji: "💉",
+    title: "필수 예방접종과 접종 시기",
+    summary: "어린 고양이는 여러 차례 기초 접종이 필요하고, 이후 주기적인 추가 접종을 해요.",
+    sections: [
+      { h: "알아두기", items: ["종합백신(범백혈구감소증·허피스·칼리시 등)은 고양이의 기본 접종이에요", "기초 접종은 보통 몇 주 간격으로 여러 번 나누어 맞아요", "이후 추가 접종 주기는 나이·생활환경에 따라 수의사와 정해요"] },
+      { h: "접종 후 살펴볼 것", items: ["하루 정도 기운이 없거나 미열이 있을 수 있어요", "얼굴이 붓거나 구토·호흡곤란이 있으면 즉시 병원에 연락하세요"] },
+    ],
+    sources: [],
+  },
+  {
+    id: "basic-tests",
+    tone: "gray",
+    emoji: "🔬",
+    title: "고양이에게 필요한 기초 검사",
+    summary: "신체검사와 분변 검사부터 시작해, 필요하면 혈액검사로 상태를 확인해요.",
+    sections: [
+      { h: "자주 하는 검사", items: ["신체검사·체중 측정", "분변 검사(기생충)", "혈액검사(전혈구·혈액화학)", "필요 시 엑스선·초음파"] },
+      { h: "비용", items: ["병원과 지역에 따라 다릅니다. 병원 찾기 화면에서 지역별 참고 가격을 비교할 수 있어요."] },
+    ],
+    sources: [],
+  },
+  {
+    id: "normal",
+    tone: "sky",
+    emoji: "🍽️",
+    title: "고양이의 정상적인 식사량과 배변 상태",
+    summary: "평소 양과 횟수를 알아두면 이상 변화를 빨리 알아챌 수 있어요.",
+    sections: [
+      { h: "평소 기록하면 좋은 것", items: ["하루 먹는 양과 물 마시는 양", "소변 덩어리 개수와 크기", "변의 모양·색·횟수"] },
+      { h: "병원 상담이 필요한 변화", items: ["하루 이상 거의 먹지 않음", "물을 갑자기 많이 마시거나 소변량이 크게 변함", "설사·혈변이 계속되거나 화장실에 자주 가지만 소변이 안 나옴(응급)"] },
+    ],
+    sources: [],
+  },
+  {
+    id: "warning",
+    tone: "ivory",
+    emoji: "⚠️",
+    title: "병원에 방문해야 하는 이상 행동",
+    summary: "고양이는 아픈 티를 잘 내지 않아요. 작은 변화도 놓치지 마세요.",
+    sections: [
+      { h: "즉시 병원 (응급)", items: ["입을 벌리고 숨 쉬기·호흡곤란", "소변을 보려 하지만 나오지 않음", "경련, 의식 저하, 심한 출혈", "독성 물질(백합, 약 등) 섭취 의심"] },
+      { h: "빠른 상담 권장", items: ["반복되는 구토", "하루 이상 식욕 부진", "평소보다 숨어 지내거나 지나치게 조용함"] },
+    ],
+    sources: [],
+  },
+];
