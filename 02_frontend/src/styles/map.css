@@ -45,10 +45,13 @@
 .map-page .iw-note { font-size:11px; color:var(--muted); margin-top:4px; }
 .map-page .err { padding:16px; color:#c2410c; font-size:14px; }
 
-/* 지도 핀 (브랜드 컬러) */
-.map-page .pin { width:12px; height:12px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:1.5px solid #fff; box-shadow:0 1px 4px rgba(27,42,65,.3); }
+/* 지도 핀: 고양이 얼굴 모양 (선택 전 하늘색 + 회색 테두리) */
+.map-page .pin { width:18px; height:19px; line-height:0; filter:drop-shadow(0 1px 2px rgba(27,42,65,.3)); }
+.map-page .pin svg { width:100%; height:100%; overflow:visible; }
+.map-page .pin path { fill:var(--primary); stroke:#9aa3ad; stroke-width:6; stroke-linejoin:round; }
 /* 선택한 핀: 진한 파란색 + 흰 테두리, 조금 크게 */
-.map-page .pin.is-sel { width:16px; height:16px; background:#1478c8; border:2px solid #fff; box-shadow:0 2px 6px rgba(20,120,200,.45); }
+.map-page .pin.is-sel { width:26px; height:27px; filter:drop-shadow(0 2px 4px rgba(20,120,200,.45)); }
+.map-page .pin.is-sel path { fill:#1478c8; stroke:#fff; stroke-width:7; }
 
 @media (max-width: 760px) {
   .map-page .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
