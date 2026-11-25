@@ -20,8 +20,14 @@ window.REGION_CONFIG = {
     "제주특별자치도": "제주", "전북특별자치도": "전북",
   },
 
-  // 이 줌보다 작으면(전국 화면) 개별 병원 마커를 그리지 않음
-  markersMinZoom: 9,
+  // 이 줌보다 작으면(시도·시군구 화면) 개별 병원 핀 대신 구역별 개수 배지만 표시
+  markersMinZoom: 12,
+
+  // 시도·시군구 개수 배지(고양이 얼굴) 최소 크기(px)와 얼굴 아래 이름 글자 크기
+  badgeMinSize: 30,
+  badgeNameSize: 11,
+  // 배지끼리 간격(px). 음수면 그만큼 겹쳐도 허용
+  badgePadding: 0,
 
   // 라벨: 화면 안 최대 개수, 라벨끼리 최소 간격(px)
   maxLabels: 80,
@@ -30,14 +36,16 @@ window.REGION_CONFIG = {
   // 화면 밖 여유(비율). 이만큼 바깥까지 미리 불러와 이동 시 빈 곳이 덜 보이게
   boundsPadding: 0.25,
 
+  // 경계선은 지도를 가리지 않게 얇고 옅게. 선택한 구역만 진하게
   style: {
-    sido: { strokeColor: "#1478c8", strokeWeight: 2, strokeOpacity: 0.85 },
-    sigungu: { strokeColor: "#1478c8", strokeWeight: 1.5, strokeOpacity: 0.75 },
-    emd: { strokeColor: "#2a9fd6", strokeWeight: 1, strokeOpacity: 0.7 },
+    // (네이버 SDK 는 선 두께를 정수 px 로 내림 → 1 또는 2 만 의미 있음)
+    sido: { strokeColor: "#2a9fd6", strokeWeight: 2, strokeOpacity: 0.45 },
+    sigungu: { strokeColor: "#2a9fd6", strokeWeight: 1, strokeOpacity: 0.55 },
+    emd: { strokeColor: "#2a9fd6", strokeWeight: 1, strokeOpacity: 0.45 },
     fillColor: "#8be4ff",
-    fillOpacity: 0.04,
-    hoverFillOpacity: 0.16,
-    selected: { strokeColor: "#1478c8", strokeWeight: 3, strokeOpacity: 1, fillColor: "#1478c8", fillOpacity: 0.1 },
+    fillOpacity: 0.02,
+    hoverFillOpacity: 0.14,
+    selected: { strokeColor: "#1478c8", strokeWeight: 2.5, strokeOpacity: 0.9, fillColor: "#8be4ff", fillOpacity: 0.12 },
   },
 
   attribution: "행정구역: 통계청 SGIS(공공누리 1유형) · 가공 vuski/admdongkor (CC BY 4.0)",

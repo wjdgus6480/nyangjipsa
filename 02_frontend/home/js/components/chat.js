@@ -106,7 +106,9 @@ function renderReply(r) {
       r.keywords.map((k) => `<li><span class="kw__tag kw__tag--${esc(k.importance)}">${IMPORTANCE[k.importance] || "참고"}</span><strong>${esc(k.keyword)}</strong> ${esc(k.reason)}</li>`).join("") +
       `</ul></div>`;
   }
-  if (r.hospitals?.length) {
+  if (r.price_comparison) html += renderComparison(r.price_comparison);
+  // 가격 비교표가 있으면 같은 병원 목록을 다시 보여 주지 않음
+  if (r.hospitals?.length && !r.price_comparison) {
     html += `<div class="reply__block"><b>가까운 동물병원</b><ul class="list">` +
       r.hospitals.map((h) => {
         const url = mapFocusUrl({ lat: h.lat, lon: h.lon, name: h.name, address: h.address || "", phone: h.phone || "", typeLabel: "동물병원" });
@@ -136,6 +138,27 @@ function renderReply(r) {
   }
   html += `<p class="reply__note">${r.fallback ? "AI 연결이 원활하지 않아 기본 안내를 보여드려요. " : ""}${esc(r.disclaimer || "")}</p>`;
   return html;
+}
+
+const won = (n) => (Number.isFinite(n) ? n.toLocaleString("ko-KR") + "원" : "-");
+const dist = (m) => (m < 1000 ? `${m}m` : `${(m / 1000).toFixed(1)}km`);
+
+/** 근처 병원 진료비 비교표 (가격 낮은 순). 숫자는 모두 서버(DB) 값입니다. */
+function renderComparison(c) {
+  const title = esc(c.item_name) + (c.condition && c.condition !== "-" ? ` <span class="muted">(${esc(c.condition)})</span>` : "");
+  if (!c.rows?.length) {
+    return `<div class="reply__block"><b>${title} 가격 비교</b><p class="muted">반경 안에 이 항목의 가격 정보가 있는 병원이 없어요.</p></div>`;
+  }
+  const rows = c.rows.map((r, i) => {
+    const url = mapFocusUrl({ lat: r.lat, lon: r.lon, name: r.name, address: r.address || "", phone: r.phone || "", typeLabel: "동물병원" });
+    return `<tr class="${i === 0 ? "best" : ""}"><td class="rank">${i + 1}</td><td><strong>${esc(r.name)}</strong><br><span class="muted">${dist(r.distance_m)}${r.phone ? " · " + esc(r.phone) : ""}</span></td><td class="price">${won(r.price)}</td><td><a class="link link--sm" href="${esc(url)}" target="_blank" rel="noopener">지도</a></td></tr>`;
+  }).join("");
+  return `<div class="reply__block compare">
+    <b>${title} · 근처 병원 가격 비교 (${c.rows.length}곳)</b>
+    <div class="compare__sum"><span>최저 ${won(c.min)}</span><span>평균 ${won(c.avg)}</span><span>최고 ${won(c.max)}</span></div>
+    <table class="compare__table">${rows}</table>
+    <p class="reply__note">${esc(c.notice || "")}</p>
+  </div>`;
 }
 
 /** 브라우저 위치 권한 요청. 좌표는 서버의 병원 검색에만 쓰이고 AI 에는 전달되지 않습니다. */

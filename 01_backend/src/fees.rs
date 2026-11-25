@@ -127,9 +127,118 @@ pub async fn fill_missing_dummy_fees(pool: &PgPool) -> anyhow::Result<u64> {
         .rows_affected())
 }
 
+/// 고양이 진료비 항목 (region_fees·hospital_fees 의 item_name 과 정확히 같음, 항목마다 조건은 하나)
+pub const CAT_FEE_ITEMS: [&str; 17] = [
+    "초진 진찰료",
+    "재진 진찰료",
+    "진찰에 대한 상담료",
+    "입원비",
+    "종합백신 접종비",
+    "광견병백신 접종비",
+    "인플루엔자백신 접종비",
+    "전혈구 검사비와 판독료",
+    "혈액화학 검사비와 판독료",
+    "전해질 검사비와 판독료",
+    "엑스선 촬영비와 판독료",
+    "초음파 검사비와 판독료",
+    "컴퓨터단층촬영(CT)비와 판독료",
+    "자기공명영상(MRI)비와 판독료",
+    "심장사상충 예방비",
+    "외부기생충 예방비",
+    "광범위 구충비",
+];
+
+/// 사용자가 흔히 쓰는 표현 → 진료비 항목. 위에서부터 먼저 맞는 것을 씁니다.
+const FEE_ALIASES: [(&str, &str); 26] = [
+    ("재진", "재진 진찰료"),
+    ("초진", "초진 진찰료"),
+    ("진찰료", "초진 진찰료"),
+    ("진료비", "초진 진찰료"),
+    ("상담료", "진찰에 대한 상담료"),
+    ("입원", "입원비"),
+    ("광견병", "광견병백신 접종비"),
+    ("인플루엔자", "인플루엔자백신 접종비"),
+    ("독감", "인플루엔자백신 접종비"),
+    ("종합백신", "종합백신 접종비"),
+    ("백신", "종합백신 접종비"),
+    ("예방접종", "종합백신 접종비"),
+    ("접종", "종합백신 접종비"),
+    ("전혈구", "전혈구 검사비와 판독료"),
+    ("전해질", "전해질 검사비와 판독료"),
+    ("혈액화학", "혈액화학 검사비와 판독료"),
+    ("혈액", "혈액화학 검사비와 판독료"),
+    ("피검사", "혈액화학 검사비와 판독료"),
+    ("엑스레이", "엑스선 촬영비와 판독료"),
+    ("엑스선", "엑스선 촬영비와 판독료"),
+    ("초음파", "초음파 검사비와 판독료"),
+    ("ct", "컴퓨터단층촬영(CT)비와 판독료"),
+    ("mri", "자기공명영상(MRI)비와 판독료"),
+    ("심장사상충", "심장사상충 예방비"),
+    ("외부기생충", "외부기생충 예방비"),
+    ("구충", "광범위 구충비"),
+];
+
+/// 가격을 묻는 표현
+const PRICE_WORDS: [&str; 9] = [
+    "가격",
+    "비용",
+    "얼마",
+    "비교",
+    "싼",
+    "저렴",
+    "비싼",
+    "요금",
+    "진료비",
+];
+
+/// 메시지가 특정 진료비 항목의 가격을 묻고 있으면 그 항목 이름을 돌려줍니다.
+/// (AI 가 항목을 고르지 못했거나 AI 연결이 안 될 때의 안전장치)
+pub fn detect_fee_item(message: &str) -> Option<&'static str> {
+    let m = message.to_lowercase().replace(' ', "");
+    if !PRICE_WORDS.iter().any(|w| m.contains(w)) {
+        return None;
+    }
+    FEE_ALIASES
+        .iter()
+        .find(|(alias, _)| m.contains(alias))
+        .map(|(_, item)| *item)
+}
+
+/// AI 가 고른 값이 알려진 항목이면 그대로, 아니면 None
+pub fn known_fee_item(name: &str) -> Option<&'static str> {
+    CAT_FEE_ITEMS.iter().copied().find(|i| *i == name.trim())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
+
+    #[test]
+    fn detects_fee_item_only_when_price_is_asked() {
+        assert_eq!(
+            detect_fee_item("근처 병원 초진 진찰료 비교해줘"),
+            Some("초진 진찰료")
+        );
+        assert_eq!(
+            detect_fee_item("엑스레이 찍으면 얼마예요?"),
+            Some("엑스선 촬영비와 판독료")
+        );
+        assert_eq!(
+            detect_fee_item("고양이 예방접종 비용이 궁금해요"),
+            Some("종합백신 접종비")
+        );
+        assert_eq!(detect_fee_item("재진 가격"), Some("재진 진찰료"));
+        assert_eq!(
+            detect_fee_item("MRI 가격 비교"),
+            Some("자기공명영상(MRI)비와 판독료")
+        );
+        // 가격을 묻지 않으면 None
+        assert_eq!(detect_fee_item("예방접종은 언제 해야 하나요?"), None);
+        // 가격은 묻지만 항목이 없으면 None
+        assert_eq!(detect_fee_item("병원 가격 비교해줘"), None);
+        // 모든 별칭은 실제 항목을 가리킴
+        assert!(FEE_ALIASES.iter().all(|(_, i)| known_fee_item(i).is_some()));
+    }
 
     #[test]
     fn keeps_cat_and_common_items() {

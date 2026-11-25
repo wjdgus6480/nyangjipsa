@@ -11,7 +11,10 @@ use axum::{
 use crate::{
     AppState,
     animal_business::{self, BusinessType},
-    chat::{ChatPlace, ChatRequest, ChatResponse, DISCLAIMER, MAX_MESSAGE_CHARS},
+    chat::{
+        ChatPlace, ChatRequest, ChatResponse, DISCLAIMER, MAX_MESSAGE_CHARS,
+        build_price_comparison, ensure_compare_fee,
+    },
     coordinate::Coordinate,
     error::AppError,
     routes::hospitals::find_nearby,
@@ -21,6 +24,8 @@ use crate::{
 const CHAT_RADIUS_M: f64 = 3_000.0;
 const CHAT_HOSPITAL_LIMIT: i64 = 5;
 const CHAT_PLACE_LIMIT: i64 = 3;
+/// 가격 비교 때 비교할 병원 수
+const CHAT_COMPARE_LIMIT: i64 = 10;
 
 /// 요청자 IP (ConnectInfo 가 없으면 "unknown"). 리버스 프록시 뒤에서는 프록시 IP 가 됩니다.
 pub struct ClientIp(String);
@@ -74,25 +79,29 @@ pub async fn chat(
         return Err(AppError::TooManyRequests);
     }
 
-    let (reply, fallback) = service.reply(&req).await;
+    let (mut reply, fallback) = service.reply(&req).await;
+    // AI 가 비교 항목을 놓쳐도 "초진 진찰료 비교" 처럼 분명한 질문이면 서버가 채움
+    ensure_compare_fee(&mut reply, &req.message);
 
     // 병원·진료비·장소는 LLM 이 아니라 DB 에서 (읽기 전용)
     let mut hospitals = None;
     let mut places = None;
+    let mut price_comparison = None;
     let mut needs_location = false;
     if reply.search_hospitals {
         match location {
             Some(center) => {
-                hospitals = Some(
-                    find_nearby(
-                        &state.pool,
-                        center,
-                        CHAT_RADIUS_M,
-                        CHAT_HOSPITAL_LIMIT,
-                        true,
-                    )
-                    .await?,
-                );
+                // 가격 비교면 비교할 병원을 더 많이 가져옴
+                let limit = if reply.compare_fee.is_empty() {
+                    CHAT_HOSPITAL_LIMIT
+                } else {
+                    CHAT_COMPARE_LIMIT
+                };
+                let found = find_nearby(&state.pool, center, CHAT_RADIUS_M, limit, true).await?;
+                if !reply.compare_fee.is_empty() {
+                    price_comparison = Some(build_price_comparison(&reply.compare_fee, &found));
+                }
+                hospitals = Some(found);
             }
             None => needs_location = true,
         }
@@ -131,6 +140,7 @@ pub async fn chat(
         choices: reply.choices,
         hospitals,
         places,
+        price_comparison,
         needs_location,
         fallback,
         disclaimer: DISCLAIMER,

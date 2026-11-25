@@ -1,0 +1,42 @@
+{
+  "db_name": "PostgreSQL",
+  "query": "\n        SELECT ST_X(b.location::geometry) AS \"lon!\",\n               ST_Y(b.location::geometry) AS \"lat!\",\n               b.address_masked\n        FROM animal_businesses b\n        WHERE b.status_code = '01'\n          AND b.location IS NOT NULL\n          AND ($1::text[] IS NULL OR b.business_type = ANY($1))\n        ORDER BY b.id\n        ",
+  "describe": {
+    "columns": [
+      {
+        "ordinal": 0,
+        "name": "lon!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 1,
+        "name": "lat!",
+        "type_info": "Float8",
+        "origin": "Expression"
+      },
+      {
+        "ordinal": 2,
+        "name": "address_masked",
+        "type_info": "Bool",
+        "origin": {
+          "Table": {
+            "table": "animal_businesses",
+            "name": "address_masked"
+          }
+        }
+      }
+    ],
+    "parameters": {
+      "Left": [
+        "TextArray"
+      ]
+    },
+    "nullable": [
+      null,
+      null,
+      false
+    ]
+  },
+  "hash": "970afdf7114e35de8056a3cb9510ecf82015fde0e6bd07caa1fbd1eb8321bb41"
+}

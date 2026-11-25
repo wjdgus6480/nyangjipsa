@@ -414,6 +414,40 @@ pub async fn find_nearby(
     .await
 }
 
+/// 지역별 개수 집계용 위치 한 건 (이름·전화 등은 담지 않음).
+#[derive(Debug, Clone)]
+pub struct PlacePoint {
+    pub lon: f64,
+    pub lat: f64,
+    pub address_masked: bool,
+}
+
+/// 영업 중인 업소의 위치 전체 (지도에서 행정구역별 개수를 세는 용도, 읽기 전용).
+/// 필터는 `find_nearby` 와 같음: 영업/정상(`01`) + 좌표 있음 + 업종.
+pub async fn all_points(
+    pool: &PgPool,
+    types: Option<&[BusinessType]>,
+) -> Result<Vec<PlacePoint>, sqlx::Error> {
+    let type_names: Option<Vec<String>> =
+        types.map(|ts| ts.iter().map(|t| t.as_str().to_owned()).collect());
+    sqlx::query_as!(
+        PlacePoint,
+        r#"
+        SELECT ST_X(b.location::geometry) AS "lon!",
+               ST_Y(b.location::geometry) AS "lat!",
+               b.address_masked
+        FROM animal_businesses b
+        WHERE b.status_code = '01'
+          AND b.location IS NOT NULL
+          AND ($1::text[] IS NULL OR b.business_type = ANY($1))
+        ORDER BY b.id
+        "#,
+        type_names.as_deref(),
+    )
+    .fetch_all(pool)
+    .await
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

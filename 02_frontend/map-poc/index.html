@@ -49,12 +49,17 @@
     #map { width:100%; height:100%; }
     .iw { padding:11px 13px; font-size:13px; max-width:260px; line-height:1.5; color:var(--fg); }
     .iw b { font-size:14.5px; }
+    li .fee { font-size:12px; color:var(--fg); margin-top:3px; font-weight:600; }
+    .iw-fees { list-style:none; margin:8px 0 0; padding:6px 0 0; border-top:1px dashed #d6e3ea; }
+    .iw-fees li { display:flex; justify-content:space-between; gap:12px; font-size:12.5px; padding:1px 0; }
+    .iw-fees b { font-size:12.5px; white-space:nowrap; }
+    .iw-note { font-size:11px; color:var(--muted); margin-top:4px; }
     .err { padding:16px; color:#c2410c; font-size:14px; }
 
     /* 지도 핀 (브랜드 컬러) */
-    .pin { width:24px; height:24px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:1.5px solid #fff; box-shadow:0 2px 6px rgba(27,42,65,.28); }
+    .pin { width:12px; height:12px; border-radius:50% 50% 50% 0; transform:rotate(-45deg); background:var(--primary); border:1.5px solid #fff; box-shadow:0 1px 4px rgba(27,42,65,.3); }
     /* 선택한 핀: 진한 파란색 + 흰 테두리, 조금 크게 */
-    .pin.is-sel { width:32px; height:32px; background:#1478c8; border:2px solid #fff; box-shadow:0 3px 10px rgba(20,120,200,.45); }
+    .pin.is-sel { width:16px; height:16px; background:#1478c8; border:2px solid #fff; box-shadow:0 2px 6px rgba(20,120,200,.45); }
 
     @media (max-width: 760px) {
       .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
@@ -68,6 +73,10 @@
     }
   </style>
   <link rel="stylesheet" href="chatbot/chatbot.css" />
+  <!-- 지도 안 글꼴: Jua (Google Fonts, SIL Open Font License). 지도 위 라벨·배지·경로 바·정보창에만 적용 -->
+  <link rel="preconnect" href="https://fonts.googleapis.com" />
+  <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin />
+  <link rel="stylesheet" href="https://fonts.googleapis.com/css2?family=Jua&display=swap" />
   <link rel="stylesheet" href="regions/region-layer.css" />
 </head>
 <body>
@@ -141,8 +150,8 @@
 
   // 브랜드 컬러 핀 (선택한 핀은 진한 파란색)
   const pinIcon = (sel) => sel
-    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(16, 39) }
-    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(12, 30) };
+    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(8, 20) }
+    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(6, 15) };
 
   let map, infoWindow, timer, controller;
   const markers = new Map(); // id → marker
@@ -190,7 +199,29 @@
         window.__regionPerf = info; // 성능 확인용 (마지막 갱신 소요 ms)
       },
     });
+    loadRegionPoints();
+    document.querySelectorAll("#types input").forEach((el) => el.addEventListener("change", loadRegionPoints));
   }
+
+  // 구역별 개수용 위치 전체 (선택한 업종 기준). 개수는 regions 모듈이 경계 안에서 셈
+  let pointsController = null;
+  async function loadRegionPoints() {
+    const types = checkedTypes();
+    pointsController?.abort();
+    if (!types.length) { regions.setPoints([]); return; }
+    pointsController = new AbortController();
+    try {
+      const res = await fetch(`${API_BASE}/api/places/points?type=${types.join(",")}`, { signal: pointsController.signal });
+      const body = await res.json();
+      if (!res.ok) throw new Error(body.error || res.status);
+      regions.setPoints(body.points);
+    } catch (e) {
+      if (e.name !== "AbortError") console.warn("구역별 개수를 불러오지 못했습니다:", e.message);
+    }
+  }
+
+  const checkedTypes = () => [...document.querySelectorAll("#types input:checked")].map((i) => i.value);
+  const typesLabel = () => checkedTypes().map((t) => TYPE_LABEL[t]).join("·");
 
   function renderRegionBar() {
     const bar = $("#rg-bar");
@@ -229,16 +260,17 @@
   async function load() {
     const types = [...document.querySelectorAll("#types input:checked")].map((i) => i.value);
     if (!types.length) { render([]); status("업종을 하나 이상 선택하세요."); return; }
-    // 전국(시·도) 화면에서는 개별 마커를 그리지 않음 — 지역을 고르거나 확대하면 표시
-    if (map.getZoom() < REGION_CONFIG.markersMinZoom && !regionSel) {
+    // 시도·시군구 화면: 개별 핀 대신 구역별 개수 배지. 구역을 고르면 목록만 보여 줌
+    const pins = map.getZoom() >= REGION_CONFIG.markersMinZoom;
+    if (!pins && !regionSel) {
       controller?.abort();
       render([]);
-      status("지역을 누르거나 확대하면 병원이 표시돼요.");
+      status(`지도 숫자는 지역별 ${typesLabel()} 수예요. 지역을 누르거나 확대하면 목록이 나와요.`);
       return;
     }
     const c = map.getCenter();
     const radius = currentRadius();
-    const q = new URLSearchParams({ lon: c.lng().toFixed(6), lat: c.lat().toFixed(6), radius_m: radius, type: types.join(","), limit: LIMIT });
+    const q = new URLSearchParams({ lon: c.lng().toFixed(6), lat: c.lat().toFixed(6), radius_m: radius, type: types.join(","), limit: LIMIT, include_fees: "true" });
     controller?.abort();
     controller = new AbortController();
     status("검색 중…");
@@ -250,8 +282,12 @@
       // 행정구역을 골랐으면 그 경계 안의 업소만
       if (regionSel) {
         const inside = body.items.filter((p) => RegionCore.featureContains(regionSel.feature, p.lon, p.lat));
-        render(inside);
-        status(`${regionSel.name} 안 ${inside.length}곳${more}`);
+        render(inside, { pins });
+        // 구역 전체 개수(배지 값)와 목록 수 중 큰 값을 표시. 목록이 일부만 담았으면(상한·화면이 구역 밖) 함께 안내
+        // (배지 값은 약 10m 반올림 좌표로 세서 경계에 걸친 곳이 1~2곳 다를 수 있음)
+        const total = Math.max(inside.length, regions.countFor(regionSel.level, regionSel.code) ?? 0);
+        const shown = total > inside.length ? ` (목록은 지도 화면 근처 ${inside.length}곳)` : "";
+        status(`${regionSel.name} ${typesLabel()} ${total.toLocaleString("ko-KR")}곳${shown}`);
       } else {
         render(body.items);
         status(`반경 ${(radius / 1000).toFixed(1)}km · ${body.count}곳${more}`);
@@ -262,11 +298,11 @@
     }
   }
 
-  function render(items) {
+  function render(items, { pins = true } = {}) {
     places = items;
-    const keep = new Set(items.map((p) => p.id));
+    const keep = new Set(pins ? items.map((p) => p.id) : []);
     for (const [id, m] of markers) if (!keep.has(id)) { m.setMap(null); markers.delete(id); }
-    for (const p of items) {
+    for (const p of pins ? items : []) {
       if (markers.has(p.id)) continue;
       const m = new naver.maps.Marker({ position: toLatLng(p), map, title: p.name, icon: pinIcon(p.id === selectedId) });
       naver.maps.Event.addListener(m, "click", () => select(p.id, false));
@@ -281,6 +317,13 @@
       li.innerHTML = `<div class="name"></div><div class="meta"></div>`;
       li.querySelector(".name").textContent = p.name;
       li.querySelector(".meta").textContent = `${TYPE_LABEL[p.type] || p.type} · ${fmtDist(p.distance_m)} · ${p.road_address || p.lot_address || "주소 없음"}`;
+      const keyFees = pickFees(p.fees, LIST_FEES);
+      if (keyFees.length) {
+        const fee = document.createElement("div");
+        fee.className = "fee";
+        fee.textContent = keyFees.map((x) => `${shortFee(x.item_name)} ${fmtPrice(x.price)}`).join(" · ") + (keyFees.some((x) => x.is_dummy) ? " (참고)" : "");
+        li.appendChild(fee);
+      }
       li.addEventListener("click", () => select(p.id, true));
       list.appendChild(li);
     }
@@ -288,7 +331,14 @@
 
   function select(id, pan) {
     const p = places.find((x) => x.id === id), m = markers.get(id);
-    if (!p || !m) return;
+    if (!p) return;
+    // 핀을 숨긴 배율(시도·시군구)에서 목록을 누르면 그 업소로 확대 → 핀이 보이면 선택 표시
+    if (!m) {
+      selectedId = id;
+      document.querySelectorAll("#list li").forEach((li) => li.classList.toggle("sel", Number(li.dataset.id) === id));
+      map.morph(toLatLng(p), 16);
+      return;
+    }
     markers.get(selectedId)?.setIcon(pinIcon(false));
     m.setIcon(pinIcon(true));
     selectedId = id;
@@ -299,9 +349,37 @@
     div.querySelector("b").textContent = p.name;
     div.querySelector(".a").textContent = (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : "");
     div.querySelector(".t").textContent = `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`;
+    const iwFees = pickFees(p.fees, INFO_FEES);
+    if (iwFees.length) {
+      const ul = document.createElement("ul");
+      ul.className = "iw-fees";
+      for (const x of iwFees) {
+        const li = document.createElement("li");
+        li.innerHTML = "<span></span><b></b>";
+        li.querySelector("span").textContent = shortFee(x.item_name);
+        li.querySelector("b").textContent = fmtPrice(x.price);
+        ul.appendChild(li);
+      }
+      const note = document.createElement("div");
+      note.className = "iw-note";
+      note.textContent = iwFees.some((x) => x.is_dummy) ? "고양이 기준 참고 가격(추정치) · 병원에 확인하세요" : "고양이 기준 참고 가격";
+      div.append(ul, note);
+    }
     infoWindow.setContent(div);
     infoWindow.open(map, m);
     if (pan) map.panTo(toLatLng(p));
+  }
+
+  // ---- 진료비 표시 (서버 /api/places/nearby?include_fees=true 의 병원 fees, 고양이 기준) ----
+  const LIST_FEES = ["초진 진찰료", "종합백신 접종비"];
+  const INFO_FEES = ["초진 진찰료", "재진 진찰료", "종합백신 접종비", "혈액화학 검사비와 판독료", "엑스선 촬영비와 판독료", "입원비"];
+  const SHORT_FEE = { "진찰에 대한 상담료": "상담료", "혈액화학 검사비와 판독료": "혈액화학 검사", "전혈구 검사비와 판독료": "전혈구 검사", "전해질 검사비와 판독료": "전해질 검사", "엑스선 촬영비와 판독료": "엑스레이", "초음파 검사비와 판독료": "초음파", "컴퓨터단층촬영(CT)비와 판독료": "CT", "자기공명영상(MRI)비와 판독료": "MRI", "종합백신 접종비": "종합백신", "광견병백신 접종비": "광견병백신", "인플루엔자백신 접종비": "인플루엔자백신", "입원비": "입원(1일)" };
+  const shortFee = (name) => SHORT_FEE[name] || name;
+  const fmtPrice = (won) => (Number.isFinite(won) ? won.toLocaleString("ko-KR") + "원" : "");
+  /** fees 중 wanted 순서대로 있는 것만 */
+  function pickFees(fees, wanted) {
+    if (!Array.isArray(fees) || !fees.length) return [];
+    return wanted.map((name) => fees.find((f) => f.item_name === name)).filter(Boolean);
   }
 
   const fmtDist = (m) => (m < 1000 ? `${Math.round(m)}m` : `${(m / 1000).toFixed(1)}km`);
