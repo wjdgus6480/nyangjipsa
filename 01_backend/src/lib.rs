@@ -8,9 +8,12 @@
 //! - `sync`: 수집 → 병원 파생 → 더미 진료비 채우기, 주기 실행
 //! - `fees`: 지역 진료비 적재와 병원별 진료비
 //! - `chat`: Gemini 챗봇
+//! - `auth`: 회원 인증 (이메일 가입·인증, 이메일/카카오 로그인, 세션, 비밀번호 재설정)
 //! - `src/bin/collect.rs`: 공공데이터 → DB 수집 실행 파일
+//! - `src/bin/create_admin.rs`: 관리자 지정 (서버 운영자 전용, 공개 API 없음)
 
 pub mod animal_business;
+pub mod auth;
 pub mod chat;
 pub mod collector;
 pub mod config;
@@ -39,15 +42,28 @@ pub struct AppState {
     pub chat: Option<Arc<chat::ChatService>>,
     /// None 이면 길찾기 비활성화 (`/api/route` 는 503)
     pub routing: Option<Arc<routing::RouteService>>,
+    /// 회원 인증 설정·메일러·카카오 로그인·요청 제한
+    pub auth: Arc<auth::AuthService>,
 }
 
 impl AppState {
+    /// 회원 인증은 개발 기본값(메일 발송 끔, 카카오 로그인 없음)으로 시작합니다. 운영은 `with_auth`
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
             chat: None,
             routing: None,
+            auth: Arc::new(auth::AuthService::new(
+                auth::AuthConfig::default(),
+                auth::mailer::Mailer::Disabled,
+                Vec::new(),
+            )),
         }
+    }
+
+    pub fn with_auth(mut self, auth: auth::AuthService) -> Self {
+        self.auth = Arc::new(auth);
+        self
     }
 
     pub fn with_routing(mut self, routing: routing::RouteService) -> Self {

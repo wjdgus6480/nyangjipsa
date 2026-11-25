@@ -4,7 +4,14 @@ import { render, screen } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 
 // 개발자 PC 의 .env 키와 무관하게 "키 없음" 상태로 검사
-vi.mock("../src/services/config/env", () => ({ API_BASE: "", NAVER_MAP_CLIENT_ID: "", asset: (p: string) => `/${p}` }));
+vi.mock("../src/services/config/env", () => ({
+  API_BASE: "",
+  NAVER_MAP_CLIENT_ID: "",
+  // 회원 기능(분석)이 읽는 값 — 키 없음 = 이벤트 전송 안 함
+  AMPLITUDE_API_KEY: "",
+  AMPLITUDE_SERVER_URL: "",
+  asset: (p: string) => `/${p}`,
+}));
 const { App } = await import("../src/app/App");
 const { __resetNaverLoader, loadNaverMaps } = await import("../src/features/map/naverLoader");
 

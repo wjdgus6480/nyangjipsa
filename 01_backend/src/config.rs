@@ -22,6 +22,165 @@ pub struct Config {
     pub chat_ip_rpm: usize,
     /// 카카오맵 REST API 키 (길찾기: 도보·대중교통 경로 조회). 비어 있으면 `/api/route` 는 503
     pub kakao_rest_api_key: Option<String>,
+    /// 회원 인증 (세션·메일·카카오 로그인)
+    pub auth: AuthEnv,
+}
+
+/// 메일 발송 방식 (`MAIL_MODE`)
+#[derive(Debug, Clone, Copy, Default, PartialEq, Eq)]
+pub enum MailMode {
+    /// 보내지 않음 (기본). 가입은 되지만 인증 메일이 가지 않음
+    #[default]
+    Disabled,
+    /// 개발 전용: 메일 본문을 서버 로그에 출력
+    Log,
+    /// SMTP 로 실제 발송
+    Smtp,
+}
+
+/// 회원 인증 환경변수. 검증·기본값 적용은 `AuthService::from_env` 에서 합니다.
+#[derive(Clone)]
+pub struct AuthEnv {
+    /// APP_BASE_URL: 프론트엔드 주소 (메일 링크, 카카오 로그인 후 이동). 운영 필수
+    pub app_base_url: Option<String>,
+    /// COOKIE_SECURE: 비우면 운영 true / 개발 false
+    pub cookie_secure: Option<bool>,
+    /// SESSION_HOURS: "로그인 상태 유지" 를 끈 세션 시간 (기본 24)
+    pub session_hours: i32,
+    /// SESSION_REMEMBER_DAYS: "로그인 상태 유지" 세션 일수 (기본 30)
+    pub remember_days: i32,
+    /// AUTH_ALLOWED_ORIGINS: 회원 API 상태 변경 요청을 허용할 추가 출처 (쉼표 구분)
+    pub allowed_origins: Vec<String>,
+    pub mail_mode: MailMode,
+    pub smtp_host: Option<String>,
+    pub smtp_port: u16,
+    pub smtp_username: Option<String>,
+    pub smtp_password: Option<String>,
+    /// 예: "냥집사 <no-reply@example.com>"
+    pub smtp_from: Option<String>,
+    /// SMTP_TLS=tls 면 처음부터 TLS(465), 아니면 STARTTLS(587)
+    pub smtp_tls_implicit: bool,
+    /// KAKAO_LOGIN_REST_API_KEY: 카카오 로그인 앱 REST API 키 (OAuth client_id)
+    pub kakao_client_id: Option<String>,
+    /// KAKAO_LOGIN_CLIENT_SECRET: [카카오 로그인 > 보안] Client Secret (사용 시)
+    pub kakao_client_secret: Option<String>,
+    /// KAKAO_LOGIN_REDIRECT_URI: 카카오 콘솔에 등록한 Redirect URI
+    pub kakao_redirect_uri: Option<String>,
+    /// GOOGLE_LOGIN_CLIENT_ID: Google Cloud 콘솔 OAuth 클라이언트 ID (웹 애플리케이션)
+    pub google_client_id: Option<String>,
+    /// GOOGLE_LOGIN_CLIENT_SECRET: 같은 클라이언트의 보안 비밀번호
+    pub google_client_secret: Option<String>,
+    /// GOOGLE_LOGIN_REDIRECT_URI: 콘솔의 "승인된 리디렉션 URI" 에 등록한 값
+    pub google_redirect_uri: Option<String>,
+}
+
+impl Default for AuthEnv {
+    fn default() -> Self {
+        Self {
+            app_base_url: None,
+            cookie_secure: None,
+            session_hours: 24,
+            remember_days: 30,
+            allowed_origins: Vec::new(),
+            mail_mode: MailMode::Disabled,
+            smtp_host: None,
+            smtp_port: 587,
+            smtp_username: None,
+            smtp_password: None,
+            smtp_from: None,
+            smtp_tls_implicit: false,
+            kakao_client_id: None,
+            kakao_client_secret: None,
+            kakao_redirect_uri: None,
+            google_client_id: None,
+            google_client_secret: None,
+            google_redirect_uri: None,
+        }
+    }
+}
+
+impl AuthEnv {
+    pub fn from_env() -> Result<Self, ConfigError> {
+        let mail_mode = match optional("MAIL_MODE").as_deref().map(str::trim) {
+            None | Some("disabled") => MailMode::Disabled,
+            Some("log") => MailMode::Log,
+            Some("smtp") => MailMode::Smtp,
+            Some(other) => {
+                return Err(ConfigError::Invalid {
+                    name: "MAIL_MODE",
+                    value: other.to_string(),
+                });
+            }
+        };
+        let smtp_tls_implicit = match optional("SMTP_TLS").as_deref().map(str::trim) {
+            None | Some("starttls") => false,
+            Some("tls") => true,
+            Some(other) => {
+                return Err(ConfigError::Invalid {
+                    name: "SMTP_TLS",
+                    value: other.to_string(),
+                });
+            }
+        };
+        let cookie_secure = match optional("COOKIE_SECURE") {
+            None => None,
+            Some(_) => Some(parsed("COOKIE_SECURE", "false")?),
+        };
+        Ok(Self {
+            app_base_url: optional("APP_BASE_URL"),
+            cookie_secure,
+            session_hours: parsed("SESSION_HOURS", "24")?,
+            remember_days: parsed("SESSION_REMEMBER_DAYS", "30")?,
+            allowed_origins: optional("AUTH_ALLOWED_ORIGINS")
+                .map(|v| {
+                    v.split(',')
+                        .map(|o| o.trim().trim_end_matches('/').to_string())
+                        .filter(|o| !o.is_empty())
+                        .collect()
+                })
+                .unwrap_or_default(),
+            mail_mode,
+            smtp_host: optional("SMTP_HOST"),
+            smtp_port: parsed("SMTP_PORT", "587")?,
+            smtp_username: optional("SMTP_USERNAME"),
+            smtp_password: optional("SMTP_PASSWORD"),
+            smtp_from: optional("SMTP_FROM"),
+            smtp_tls_implicit,
+            kakao_client_id: optional("KAKAO_LOGIN_REST_API_KEY"),
+            kakao_client_secret: optional("KAKAO_LOGIN_CLIENT_SECRET"),
+            kakao_redirect_uri: optional("KAKAO_LOGIN_REDIRECT_URI"),
+            google_client_id: optional("GOOGLE_LOGIN_CLIENT_ID"),
+            google_client_secret: optional("GOOGLE_LOGIN_CLIENT_SECRET"),
+            google_redirect_uri: optional("GOOGLE_LOGIN_REDIRECT_URI"),
+        })
+    }
+}
+
+/// SMTP 비밀번호·카카오 Client Secret 이 로그에 찍히지 않도록
+impl fmt::Debug for AuthEnv {
+    fn fmt(&self, f: &mut fmt::Formatter<'_>) -> fmt::Result {
+        let hidden = |k: &Option<String>| k.as_ref().map(|_| "<hidden>");
+        f.debug_struct("AuthEnv")
+            .field("app_base_url", &self.app_base_url)
+            .field("cookie_secure", &self.cookie_secure)
+            .field("session_hours", &self.session_hours)
+            .field("remember_days", &self.remember_days)
+            .field("allowed_origins", &self.allowed_origins)
+            .field("mail_mode", &self.mail_mode)
+            .field("smtp_host", &self.smtp_host)
+            .field("smtp_port", &self.smtp_port)
+            .field("smtp_username", &hidden(&self.smtp_username))
+            .field("smtp_password", &hidden(&self.smtp_password))
+            .field("smtp_from", &self.smtp_from)
+            .field("smtp_tls_implicit", &self.smtp_tls_implicit)
+            .field("kakao_client_id", &hidden(&self.kakao_client_id))
+            .field("kakao_client_secret", &hidden(&self.kakao_client_secret))
+            .field("kakao_redirect_uri", &self.kakao_redirect_uri)
+            .field("google_client_id", &hidden(&self.google_client_id))
+            .field("google_client_secret", &hidden(&self.google_client_secret))
+            .field("google_redirect_uri", &self.google_redirect_uri)
+            .finish()
+    }
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -54,6 +213,7 @@ impl Config {
             chat_global_rpm: parsed("CHAT_GLOBAL_RPM", "10")?,
             chat_ip_rpm: parsed("CHAT_IP_RPM", "5")?,
             kakao_rest_api_key: optional("KAKAO_REST_API_KEY"),
+            auth: AuthEnv::from_env()?,
         })
     }
 
@@ -87,6 +247,7 @@ impl fmt::Debug for Config {
             .field("chat_global_rpm", &self.chat_global_rpm)
             .field("chat_ip_rpm", &self.chat_ip_rpm)
             .field("kakao_rest_api_key", &hidden(&self.kakao_rest_api_key))
+            .field("auth", &self.auth)
             .finish()
     }
 }
@@ -127,11 +288,26 @@ mod tests {
             chat_global_rpm: 10,
             chat_ip_rpm: 5,
             kakao_rest_api_key: Some("kakao_secret".into()),
+            auth: AuthEnv {
+                smtp_username: Some("smtp_user_secret".into()),
+                smtp_password: Some("smtp_pw_secret".into()),
+                kakao_client_id: Some("kakao_login_id_secret".into()),
+                kakao_client_secret: Some("kakao_login_secret".into()),
+                google_client_id: Some("google_id_secret".into()),
+                google_client_secret: Some("google_pw_secret".into()),
+                ..AuthEnv::default()
+            },
         };
         let printed = format!("{config:?}");
         assert!(!printed.contains("secret_pw"));
         assert!(!printed.contains("secret_key"));
         assert!(!printed.contains("gemini_secret"));
         assert!(!printed.contains("kakao_secret"));
+        assert!(!printed.contains("smtp_user_secret"));
+        assert!(!printed.contains("smtp_pw_secret"));
+        assert!(!printed.contains("kakao_login_id_secret"));
+        assert!(!printed.contains("kakao_login_secret"));
+        assert!(!printed.contains("google_id_secret"));
+        assert!(!printed.contains("google_pw_secret"));
     }
 }

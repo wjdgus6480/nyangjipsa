@@ -1,8 +1,11 @@
+pub mod admin;
+pub mod auth;
 pub mod chat;
 pub mod directions;
 pub mod health;
 pub mod hospitals;
 pub mod places;
+pub mod users;
 
 use axum::{
     Router,
@@ -20,5 +23,9 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/hospitals", hospitals::router())
         .route("/api/chat", post(chat::chat))
         .route("/api/route", get(directions::route))
+        // 회원 (상태 변경 요청은 CSRF 검사)
+        .nest("/api/auth", auth::router(state.clone()))
+        .nest("/api/users", users::router(state.clone()))
+        .nest("/api/admin", admin::router(state.clone()))
         .with_state(state)
 }
