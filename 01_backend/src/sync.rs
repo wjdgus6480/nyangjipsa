@@ -1,4 +1,4 @@
-//! 공공데이터 동기화: 5개 업종 수집 → 병원 파생(`hospitals`) → 신규 병원 더미 진료비 채우기.
+//! 공공데이터 동기화: 5개 업종 수집 → (좌표 없는 병원 주소→좌표) → 병원 파생(`hospitals`) → 신규 병원 더미 진료비 채우기.
 //!
 //! 서버가 켜져 있으면 `SYNC_INTERVAL_HOURS` 주기로 자동 실행할 수 있습니다(기본 꺼짐).
 //! 수동 실행은 `cargo run --bin collect` 입니다.
@@ -15,9 +15,13 @@ use crate::{
     animal_business::BusinessType,
     collector::{self, DeriveStats},
     fees,
+    geocode::{self, GeocodeStats, Geocoder},
     ingest::{self, Summary},
     public_data::PublicDataClient,
 };
+
+/// 동기화 1회에 주소→좌표 변환할 최대 병원 수 (카카오 무료 한도 보호)
+pub const GEOCODE_PER_SYNC: i64 = 500;
 
 /// 실패 시 다음 시도까지 최대 대기 시간
 const RETRY_AFTER: Duration = Duration::from_secs(3600);
@@ -58,6 +62,8 @@ pub struct Report {
     pub hospitals: Option<DeriveStats>,
     /// 새로 채운 더미 진료비 행 수
     pub new_fees: Option<u64>,
+    /// 좌표 없는 병원 주소→좌표 변환 결과 (카카오 키가 있을 때)
+    pub geocoded: Option<GeocodeStats>,
 }
 
 impl Report {
@@ -79,6 +85,14 @@ impl Report {
         for (t, e) in &self.failed {
             tracing::error!("[{}] 실패: {e}", t.label_ko());
         }
+        if let Some(g) = &self.geocoded {
+            tracing::info!(
+                "좌표 없는 병원 주소→좌표: 시도 {} / 채움 {} / 실패 {}",
+                g.tried,
+                g.filled,
+                g.failed
+            );
+        }
         if let Some(h) = &self.hospitals {
             tracing::info!(
                 "병원 파생(hospitals): 저장 {} / 폐업 삭제 {} / 시군구 미확인 {} | 신규 진료비 {}건",
@@ -97,6 +111,16 @@ pub async fn collect_and_derive(
     client: &PublicDataClient,
     pool: &PgPool,
     opts: &CollectOptions,
+) -> Report {
+    collect_and_derive_with(client, pool, opts, None).await
+}
+
+/// `collect_and_derive` + 좌표 없는 영업 중 병원의 주소→좌표 변환(`geocoder` 가 있을 때, 병원 파생 전에)
+pub async fn collect_and_derive_with(
+    client: &PublicDataClient,
+    pool: &PgPool,
+    opts: &CollectOptions,
+    geocoder: Option<&Geocoder>,
 ) -> Report {
     let mut report = Report::default();
     let mut hospital_ok = false;
@@ -125,6 +149,15 @@ pub async fn collect_and_derive(
     }
 
     if hospital_ok {
+        if let Some(g) = geocoder {
+            match geocode::fill_missing_hospital_locations(pool, g, GEOCODE_PER_SYNC).await {
+                Ok(s) => report.geocoded = Some(s),
+                Err(e) => report.failed.push((
+                    BusinessType::Hospital,
+                    format!("주소→좌표 변환 실패: {e:#}"),
+                )),
+            }
+        }
         match collector::sync_hospitals_from_businesses(pool).await {
             Ok(h) => report.hospitals = Some(h),
             Err(e) => report
@@ -145,8 +178,12 @@ pub async fn collect_and_derive(
 }
 
 /// 자동 동기화 1회 (증분)
-async fn run_scheduled(client: &PublicDataClient, pool: &PgPool) -> anyhow::Result<()> {
-    let report = collect_and_derive(client, pool, &CollectOptions::all_auto()).await;
+async fn run_scheduled(
+    client: &PublicDataClient,
+    pool: &PgPool,
+    geocoder: Option<&Geocoder>,
+) -> anyhow::Result<()> {
+    let report = collect_and_derive_with(client, pool, &CollectOptions::all_auto(), geocoder).await;
     report.log();
     if !report.failed.is_empty() {
         bail!(
@@ -179,13 +216,19 @@ async fn initial_delay(pool: &PgPool, every: Duration) -> Duration {
 }
 
 /// 백그라운드에서 `every` 주기로 동기화를 반복합니다. (한 번에 하나씩만 실행됨)
-pub fn spawn_scheduler(client: PublicDataClient, pool: PgPool, every: Duration) {
+/// `geocoder` 가 있으면 좌표 없는 영업 중 병원의 좌표를 주소로 채웁니다.
+pub fn spawn_scheduler(
+    client: PublicDataClient,
+    pool: PgPool,
+    every: Duration,
+    geocoder: Option<Geocoder>,
+) {
     tokio::spawn(async move {
         let mut delay = initial_delay(&pool, every).await;
         loop {
             tracing::info!("다음 공공데이터 동기화까지 {}분", delay.as_secs() / 60);
             tokio::time::sleep(delay).await;
-            delay = match run_scheduled(&client, &pool).await {
+            delay = match run_scheduled(&client, &pool, geocoder.as_ref()).await {
                 Ok(()) => every,
                 Err(e) => {
                     tracing::error!("공공데이터 동기화 실패: {e:#}");

@@ -3,6 +3,7 @@ pub mod directions;
 pub mod health;
 pub mod hospitals;
 pub mod places;
+pub mod share;
 
 use axum::{
     Router,
@@ -20,5 +21,8 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/hospitals", hospitals::router())
         .route("/api/chat", post(chat::chat))
         .route("/api/route", get(directions::route))
+        .route("/api/share", post(share::create))
+        .route("/api/share/{code}", get(share::resolve))
+        .route("/s/{code}", get(share::open))
         .with_state(state)
 }

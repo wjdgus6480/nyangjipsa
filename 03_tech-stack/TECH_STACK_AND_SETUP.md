@@ -584,7 +584,10 @@ ls -l 01_backend/.env
 | `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` | 기본 모델이 실패(일시 오류·한도 초과·모델 없음)하면 한 번 더 시도할 보조 모델. 빈 값이면 사용 안 함 |
 | `CHAT_GLOBAL_RPM` | `10` | 챗봇 전체 분당 Gemini 호출 상한 (무료 한도 보호, 초과 시 대체 응답) |
 | `CHAT_IP_RPM` | `5` | 클라이언트(IP)당 분당 챗봇 요청 상한 (초과 시 429) |
-| `KAKAO_REST_API_KEY` | (빈 값) | 길찾기용 카카오맵 **REST API 키**(JavaScript 키 아님). 비어 있으면 `/api/route` 는 503. ⚠️ Windows 환경변수에 같은 이름이 있으면 `.env` 보다 그 값이 우선합니다 — [14-8](#14-8-길찾기-api) |
+| `KAKAO_REST_API_KEY` | (빈 값) | 길찾기용 카카오맵 **REST API 키**(JavaScript 키 아님). 비어 있으면 `/api/route` 는 503. 동기화 때 좌표 없는 병원의 주소→좌표 변환([14-11](#14-11-좌표-없는-병원-주소좌표))에도 씀. ⚠️ Windows 환경변수에 같은 이름이 있으면 `.env` 보다 그 값이 우선합니다 — [14-8](#14-8-길찾기-api) |
+| `PUBLIC_BASE_URL` | `http://localhost:8080` | 공유 링크(`/s/{code}`) 앞부분 = 백엔드의 공개 주소. **카카오톡 미리보기 카드는 인터넷에서 열리는 주소여야** 보입니다 — [14-9](#14-9-병원-공유-api) |
+| `FRONTEND_BASE_URL` | `http://localhost:5173` | 공유 링크를 열면 이동할 냥집사 화면(React) 주소 |
+| `SHARE_IMAGE_URL` | (빈 값) | 공유 카드 이미지. 비우면 `{FRONTEND_BASE_URL}/assets/logo.png` |
 | `MAP_PROVIDER` 등 | (주석 처리) | 지도 API — **미정**, 확정 후 사용 |
 
 > WSL Ubuntu에서도 `127.0.0.1:5432` 로 Docker DB에 접속됩니다 (기준 PC 확인).
@@ -1011,6 +1014,10 @@ curl -s http://127.0.0.1:8080/health/db
 | GET | `/api/hospitals/{id}` | 병원 한 곳과 진료비 (`hospital_id` 로 조회) | ✅ |
 | GET | `/api/route` | 길찾기 — 도보·대중교통 경로 (카카오맵 경로 조회). 키가 없으면 503 | ✅ |
 | POST | `/api/chat` | 고양이 병원·진료 안내 챗봇 (Gemini) — 키가 없으면 503 | ✅ |
+| POST | `/api/share` | 병원 공유 링크 + 카카오톡 공유 카드 내용 | ✅ |
+| GET | `/api/share/{code}` | 공유된 병원 요약 + 지도 주소 | ✅ |
+| GET | `/api/hospitals/emergency` | 응급 버튼 — 가까운 24시 병원 (이름 기준 추정) | ✅ |
+| GET | `/s/{code}` | 공유 링크 열기 — 미리보기(OG) HTML, 냥집사 지도의 그 병원으로 이동 | ✅ |
 
 ### 14-5. 주변 검색 API 사용법
 
@@ -1022,6 +1029,7 @@ curl -s http://127.0.0.1:8080/health/db
 | `type` | | 업종, 쉼표로 여러 개: `hospital`, `pharmacy`, `grooming`, `cremation`, `boarding` | 생략 시 전체 |
 | `limit` | | 최대 개수 | 50 / 1 ~ 200 |
 | `include_fees` | | `true` 면 병원 항목에 고양이 진료비 `fees[]` 를 붙임 (지도 목록·정보창 표시용) | false |
+| `cat_friendly` | | `true` 면 **고양이 친화병원 인증 병원만** (다른 업종은 빠짐). 모든 항목에 `cat_friendly`(true/false)가 들어감 — [14-10](#14-10-고양이-친화병원-인증) | false |
 
 예 (청담동 근처 1km 안의 동물병원·약국):
 
@@ -1068,8 +1076,9 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 | `radius` | | 1000 / 1~5000 (m) | 반경 |
 | `limit` | | 50 / 1~100 | 최대 개수 |
 | `include_fees` | | true | 병원별 진료비 포함 여부 |
+| `cat_friendly` | | false | `true` 면 고양이 친화병원 인증 병원만 |
 
-- 영업 중인 병원만, 가까운 순입니다. 각 병원에 `distance_m`(반올림 미터)와 `fees[]` 가 들어갑니다.
+- 영업 중인 병원만, 가까운 순입니다. 각 병원에 `distance_m`(반올림 미터), `cat_friendly`(친화병원 인증 여부), `fees[]` 가 들어갑니다. `GET /api/hospitals/{id}` 에도 `cat_friendly` 가 있습니다.
 - `fees[].is_dummy: true` 는 실제 가격이 아니라 **지역 평균 기반 임의 값(±20%)** 입니다. 화면에는 "참고용"으로 표시하세요.
 - 진료비 통계 출처: 농림축산식품부 동물병원 진료비 조사·공개 시스템(2025년 조사) — 서비스에서 쓸 때 출처를 표기해야 합니다.
 
@@ -1127,6 +1136,71 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 - 대중교통 길찾기 1회 = 대중교통 1건 + 도보 최대 2건(앞뒤). 화면에서 다른 후보를 고르면 `detail=N` 으로 다시 요청(대중교통 결과는 캐시, 도보 2건만 추가)
 - 무료 쿼터: 카카오 개발자 계정의 **첫 번째 앱**에 도보·대중교통 각 하루 1,000건 (콘솔 [통계] > [쿼터] 에서 확인). 같은 요청은 서버가 10분간 캐시하고, 클라이언트당 분당 30회로 제한합니다.
 - 한도 초과·카카오 오류는 503 + 안내 문구. 잘못된 `mode`·좌표는 400.
+
+### 14-9. 병원 공유 API
+
+카카오톡으로 병원을 공유하면, 받은 사람이 냥집사 지도 안에서 그 병원을 보고 길찾기까지 하게 합니다 (예산 0원 추천 장치).
+
+```text
+지도에서 병원 선택 → POST /api/share → 카카오톡으로 card 내용 공유
+  → 받은 사람이 /s/{code} 열기 → 미리보기 카드(OG) → {FRONTEND_BASE_URL}/map?focus=위도,경도&name=…&hospital=id&ref=code
+```
+
+- `POST /api/share` `{"hospital_id": 7250, "channel": "kakaotalk"}` (`channel`: `kakaotalk`(기본)/`link`/`other`)
+  - 응답: `code`, `share_url`(공유할 링크), `map_url`(지도에서 바로 여는 주소), `hospital`(이름·주소·전화·좌표), `card`
+  - `card` = 카카오톡 공유 피드 템플릿에 그대로 넣는 값: `title`, `description`, `image_url`, `button_title`, `link_url`
+  - 카드 설명에 **대표 진료비 참고 가격**(초진 진찰료·종합백신 접종비)을 넣고 항상 "(참고용)"을 붙입니다 (현재 더미 가격). 예: `서울특별시 종로구 · 영업/정상 · 초진 12,000원 · 종합백신 35,500원 (참고용)`. 가격이 없으면 "냥집사에서 확인" 안내. 가격은 `hospital_fees` 에서 **읽기만** 함
+  - 같은 병원·같은 채널은 **코드 하나를 재사용** → `share_links` 행 수는 (병원 수 × 채널 수)를 넘지 않음. 클라이언트당 분당 20회
+- `GET /s/{code}` → 1KB 정도의 HTML(OG 태그 + 즉시 이동). 화면을 새로 만들지 않고 기존 `/map` 화면에 위치만 넘깁니다
+  - 사람이 연 횟수만 DB 의 `share_links.open_count` 에 내부적으로 셈 (카카오톡 미리보기 봇 등 제외). **API 응답·화면에는 내보내지 않고**, 누가 공유·열람했는지도 저장하지 않음
+  - 유입 분석은 나중에 프론트에서 Amplitude 이벤트로 기록할 예정 — 지도 주소의 `ref`(공유 코드)·`hospital` 값을 이벤트 속성으로 쓰면 됨
+  - 병원이 폐업으로 삭제되면 공유 링크도 함께 삭제(`ON DELETE CASCADE`) → "찾을 수 없음" 안내 + 지도 링크 (404)
+- `GET /api/share/{code}` → `code`, `hospital`, `map_url` (React 화면에서 `ref` 로 받은 코드 확인용)
+- 카카오톡 미리보기·이미지는 카카오 서버가 직접 가져가므로 **localhost 로는 보이지 않습니다.** 배포 주소를 `PUBLIC_BASE_URL`·`FRONTEND_BASE_URL` 에 넣어야 하고, 카카오톡 공유 버튼(JavaScript SDK)을 쓰려면 카카오 개발자 콘솔에 그 도메인을 등록해야 합니다.
+
+### 14-10. 고양이 친화병원 인증
+
+팀이 조사한 **ISFM 고양이 친화병원(Cat Friendly Clinic) 목록**으로 병원에 "친화병원" 표시를 붙입니다. "고양이 병원만 보기"의 객관적인 근거로 씁니다.
+
+- 목록 파일: `05_data/03_고양이친화병원/isfm_cat_friendly_hospitals.csv` (열: `sido,name,external_id`)
+- 저장: `cat_friendly_hospitals` 테이블 (마이그레이션 0007). **`hospitals` 는 바꾸지 않고** 이 테이블이 병원 id 를 가리킵니다
+- 적재 (01_backend 에서, 목록을 고친 뒤 다시 실행하면 목록 전체를 교체):
+
+```bash
+cargo run --bin import_cat_friendly -- --dry-run   # 매칭 결과만 확인 (DB 변경 없음)
+cargo run --bin import_cat_friendly                # 적재
+```
+
+- 매칭: 같은 시도 안에서 이름을 정규화(띄어쓰기·"24시"·VIP/브이아이피)해 비교 → 지점명("○○점") → 포함 관계. 확실하지 않으면 매칭하지 않고 `ambiguous`/`unmatched` 로 남깁니다
+  - 이름이 크게 다르면(예: 목록 "24시 잠실온동물의료센터" ↔ 공공데이터 "24시잠실ON동물의료센터") CSV 의 `external_id` 에 공공데이터 관리번호를 넣어 고정(`pinned`)
+  - 확인: `SELECT match_status, listed_name, match_note FROM cat_friendly_hospitals WHERE hospital_id IS NULL;`
+- 병원이 폐업으로 삭제되면 `hospital_id` 만 NULL 이 되고 인증 기록은 남습니다
+- API: `/api/hospitals/nearby`·`/api/places/nearby` 의 `cat_friendly=true` 필터, 응답 항목의 `cat_friendly` 필드, `/api/hospitals/{id}` 의 `cat_friendly`
+- 2026-11 기준 93곳 중 86곳 연결 (좌표 채우기 후). 남은 곳은 공공데이터에 이름이 없거나 후보가 여럿인 곳입니다
+- 화면 표시(팀 결정): 마커·목록에 친화병원 배지 + "고양이 친화병원만 보기" 필터(기본 꺼짐)
+
+### 14-11. 좌표 없는 병원 주소→좌표
+
+공공데이터의 신규 병원은 좌표가 비어 있어 지도에 나오지 않는 경우가 많습니다(2026-11 기준 영업 중 234곳). 팀 결정으로 **좌표가 없는 영업 중 동물병원만** 카카오 로컬 주소 검색으로 좌표를 채웁니다.
+
+```bash
+cargo run --bin geocode_hospitals -- --dry-run   # 대상 수만 확인
+cargo run --bin geocode_hospitals                # 채우기 → hospitals 갱신 → 신규 병원 더미 가격 (기존 가격 유지)
+```
+
+- 자동 동기화·`collect` 도 `KAKAO_REST_API_KEY` 가 있으면 병원 파생 전에 1회 최대 500곳을 채웁니다
+- `animal_businesses.location_source`: `public`(공공데이터) / `geocoded`(주소로 채움). 공공데이터 좌표가 생기면 그것을 쓰고, 주소가 바뀌면 다시 변환합니다. 실패한 곳은 `geocode_failed_at` 기록 후 30일 뒤 재시도
+- 주소가 가려진 업소(미용·위탁)는 대상이 아닙니다. 카카오에는 병원 주소(공공데이터)만 보냅니다
+- 카카오 로컬 API 무료 한도는 하루 100,000건(앱 기준)이라 여유가 있습니다
+- ⚠️ Windows 환경변수에 `KAKAO_REST_API_KEY` 가 따로 있으면 `.env` 보다 우선합니다(401 원인)
+
+### 14-12. 응급 버튼 (24시 병원)
+
+`GET /api/hospitals/emergency?lat=…&lon=…[&radius=10000&limit=10]` (반경 최대 30000m, limit 최대 30)
+
+- "고양이 친화병원만 보기" 필터와 **별개**인 응급 버튼용 API (팀 결정: 응급 버튼 따로). 이름에 "24시"·"24hr" 등이 들어간 영업 중 병원을 가까운 순으로
+- 진료 시간 데이터가 없어 **이름으로 추정**합니다. 응답의 `notice`(방문 전 전화 확인 안내)를 화면에 함께 보여 주세요
+- `/api/hospitals/nearby`·`/api/hospitals/{id}` 응답에도 `open_24h`(이름 기준 추정) 필드가 있습니다
 
 ---
 

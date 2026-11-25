@@ -6,7 +6,7 @@ Rust + Axum + SQLx + PostgreSQL/PostGIS 백엔드. 환경 구축은 `03_tech-sta
 
 - **병원·진료비 데이터(`animal_businesses`, `hospitals`, `region_fees`, `hospital_fees`)는 팀이 명시적으로 수정을 요구하지 않는 한 건드리지 않는다.**
 - 더미 진료비 가격은 한 번 정해지면 유지한다. `--regenerate`, `generate_dummy_hospital_fees`, 임의의 DELETE/TRUNCATE/DROP, `docker compose down -v` 는 요청 없이 실행하지 않는다.
-- 허용된 자동 수정은 공공데이터 동기화(신설 추가, 상태 갱신, **폐업만** 삭제, 없는 가격만 더미로 채움) 하나뿐이다.
+- 허용된 자동 수정은 공공데이터 동기화(신설 추가, 상태 갱신, **폐업만** 삭제, 좌표 없는 영업 중 병원만 주소로 좌표 채움, 없는 가격만 더미로 채움) 하나뿐이다.
 - 데이터·동기화 관련 작업 전에는 `hospital-data-sync` 스킬(`.claude/skills/hospital-data-sync/SKILL.md`)을 먼저 읽는다.
 
 ## 챗봇 (Gemini)

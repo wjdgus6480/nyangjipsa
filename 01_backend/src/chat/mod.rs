@@ -528,6 +528,7 @@ mod tests {
             lon: 127.0,
             lat: 37.5,
             distance_m: 120.4,
+            cat_friendly: false,
         };
         let hidden = ChatPlace::from(place(true));
         assert!(hidden.lat.is_none() && hidden.lon.is_none() && hidden.phone.is_none());

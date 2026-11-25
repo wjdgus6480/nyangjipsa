@@ -258,7 +258,23 @@ pub async fn upsert<'e>(
             address_masked     = EXCLUDED.address_masked,
             source_x           = EXCLUDED.source_x,
             source_y           = EXCLUDED.source_y,
-            location           = EXCLUDED.location,
+            -- 공공데이터 좌표가 있으면 그것을, 없으면 주소로 채운 좌표를 주소가 같을 때만 유지 (geocode.rs)
+            location           = CASE
+                WHEN EXCLUDED.location IS NOT NULL THEN EXCLUDED.location
+                WHEN animal_businesses.location_source = 'geocoded'
+                 AND animal_businesses.road_address IS NOT DISTINCT FROM EXCLUDED.road_address
+                 AND animal_businesses.lot_address IS NOT DISTINCT FROM EXCLUDED.lot_address THEN animal_businesses.location
+                ELSE NULL END,
+            location_source    = CASE
+                WHEN EXCLUDED.location IS NULL
+                 AND animal_businesses.location_source = 'geocoded'
+                 AND animal_businesses.road_address IS NOT DISTINCT FROM EXCLUDED.road_address
+                 AND animal_businesses.lot_address IS NOT DISTINCT FROM EXCLUDED.lot_address THEN 'geocoded'
+                ELSE 'public' END,
+            geocode_failed_at  = CASE
+                WHEN animal_businesses.road_address IS NOT DISTINCT FROM EXCLUDED.road_address
+                 AND animal_businesses.lot_address IS NOT DISTINCT FROM EXCLUDED.lot_address THEN animal_businesses.geocode_failed_at
+                ELSE NULL END,
             source_updated_at  = EXCLUDED.source_updated_at,
             collected_at       = now()
         RETURNING (xmax = 0) AS "inserted!"
@@ -361,6 +377,8 @@ pub struct NearbyPlace {
     pub lon: f64,
     pub lat: f64,
     pub distance_m: f64,
+    /// 고양이 친화병원 인증(ISFM 등) 병원이면 true (병원이 아닌 업소는 항상 false)
+    pub cat_friendly: bool,
 }
 
 /// `center` 에서 `radius_m` 미터 안의 **영업 중**(`status_code = '01'`) 업소를 가까운 순으로 찾습니다.
@@ -372,6 +390,18 @@ pub async fn find_nearby(
     radius_m: f64,
     types: Option<&[BusinessType]>,
     limit: i64,
+) -> Result<Vec<NearbyPlace>, sqlx::Error> {
+    find_nearby_filtered(pool, center, radius_m, types, limit, false).await
+}
+
+/// `find_nearby` + 고양이 친화병원만 보기(`cat_friendly_only`: 인증 병원만 남김)
+pub async fn find_nearby_filtered(
+    pool: &PgPool,
+    center: Coordinate,
+    radius_m: f64,
+    types: Option<&[BusinessType]>,
+    limit: i64,
+    cat_friendly_only: bool,
 ) -> Result<Vec<NearbyPlace>, sqlx::Error> {
     let type_names: Option<Vec<String>> =
         types.map(|ts| ts.iter().map(|t| t.as_str().to_owned()).collect());
@@ -392,7 +422,8 @@ pub async fn find_nearby(
                b.address_masked,
                ST_X(b.location::geometry) AS "lon!",
                ST_Y(b.location::geometry) AS "lat!",
-               ST_Distance(b.location, c.g) AS "distance_m!"
+               ST_Distance(b.location, c.g) AS "distance_m!",
+               EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id) AS "cat_friendly!"
         FROM animal_businesses b
         CROSS JOIN center c
         LEFT JOIN hospitals h
@@ -401,6 +432,8 @@ pub async fn find_nearby(
           AND b.location IS NOT NULL
           AND ST_DWithin(b.location, c.g, $3::float8)
           AND ($4::text[] IS NULL OR b.business_type = ANY($4))
+          AND (NOT $6::bool
+               OR EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id))
         ORDER BY ST_Distance(b.location, c.g), b.id
         LIMIT $5
         "#,
@@ -409,6 +442,7 @@ pub async fn find_nearby(
         radius_m,
         type_names.as_deref(),
         limit,
+        cat_friendly_only,
     )
     .fetch_all(pool)
     .await
