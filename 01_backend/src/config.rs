@@ -20,6 +20,8 @@ pub struct Config {
     pub chat_global_rpm: usize,
     /// 클라이언트(IP)당 분당 챗봇 요청 상한. 초과 시 429
     pub chat_ip_rpm: usize,
+    /// 카카오맵 REST API 키 (길찾기: 도보·대중교통 경로 조회). 비어 있으면 `/api/route` 는 503
+    pub kakao_rest_api_key: Option<String>,
 }
 
 #[derive(Debug, thiserror::Error)]
@@ -51,6 +53,7 @@ impl Config {
             },
             chat_global_rpm: parsed("CHAT_GLOBAL_RPM", "10")?,
             chat_ip_rpm: parsed("CHAT_IP_RPM", "5")?,
+            kakao_rest_api_key: optional("KAKAO_REST_API_KEY"),
         })
     }
 
@@ -83,6 +86,7 @@ impl fmt::Debug for Config {
             .field("gemini_fallback_model", &self.gemini_fallback_model)
             .field("chat_global_rpm", &self.chat_global_rpm)
             .field("chat_ip_rpm", &self.chat_ip_rpm)
+            .field("kakao_rest_api_key", &hidden(&self.kakao_rest_api_key))
             .finish()
     }
 }
@@ -122,10 +126,12 @@ mod tests {
             gemini_fallback_model: None,
             chat_global_rpm: 10,
             chat_ip_rpm: 5,
+            kakao_rest_api_key: Some("kakao_secret".into()),
         };
         let printed = format!("{config:?}");
         assert!(!printed.contains("secret_pw"));
         assert!(!printed.contains("secret_key"));
         assert!(!printed.contains("gemini_secret"));
+        assert!(!printed.contains("kakao_secret"));
     }
 }

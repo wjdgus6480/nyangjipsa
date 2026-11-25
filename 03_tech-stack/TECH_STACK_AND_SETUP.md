@@ -584,6 +584,7 @@ ls -l 01_backend/.env
 | `GEMINI_FALLBACK_MODEL` | `gemini-3.1-flash-lite` | 기본 모델이 실패(일시 오류·한도 초과·모델 없음)하면 한 번 더 시도할 보조 모델. 빈 값이면 사용 안 함 |
 | `CHAT_GLOBAL_RPM` | `10` | 챗봇 전체 분당 Gemini 호출 상한 (무료 한도 보호, 초과 시 대체 응답) |
 | `CHAT_IP_RPM` | `5` | 클라이언트(IP)당 분당 챗봇 요청 상한 (초과 시 429) |
+| `KAKAO_REST_API_KEY` | (빈 값) | 길찾기용 카카오맵 **REST API 키**(JavaScript 키 아님). 비어 있으면 `/api/route` 는 503. ⚠️ Windows 환경변수에 같은 이름이 있으면 `.env` 보다 그 값이 우선합니다 — [14-8](#14-8-길찾기-api) |
 | `MAP_PROVIDER` 등 | (주석 처리) | 지도 API — **미정**, 확정 후 사용 |
 
 > WSL Ubuntu에서도 `127.0.0.1:5432` 로 Docker DB에 접속됩니다 (기준 PC 확인).
@@ -1008,6 +1009,7 @@ curl -s http://127.0.0.1:8080/health/db
 | GET | `/api/places/nearby` | 주변 동물 업소 검색 (5개 업종, 영업 중, 거리순). 병원에는 `hospital_id` 가 붙음 | ✅ |
 | GET | `/api/hospitals/nearby` | 반경 안의 영업 중인 병원 + 고양이 진료비 | ✅ |
 | GET | `/api/hospitals/{id}` | 병원 한 곳과 진료비 (`hospital_id` 로 조회) | ✅ |
+| GET | `/api/route` | 길찾기 — 도보·대중교통 경로 (카카오맵 경로 조회). 키가 없으면 503 | ✅ |
 | POST | `/api/chat` | 고양이 병원·진료 안내 챗봇 (Gemini) — 키가 없으면 503 | ✅ |
 
 ### 14-5. 주변 검색 API 사용법
@@ -1101,6 +1103,26 @@ http://127.0.0.1:8080/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&t
 무료 한도 대비책: ① 전체 분당 호출 상한(`CHAT_GLOBAL_RPM`) ② IP당 요청 상한(`CHAT_IP_RPM`, 초과 시 429) ③ 첫 질문 1시간 캐시(위치 공유 여부별로 구분) ④ 일시 오류(5xx)는 같은 모델로 1회 재시도, 그래도 실패하거나 한도 초과·모델 없음이면 보조 모델(`GEMINI_FALLBACK_MODEL`)로 전환 — 무료 한도는 모델별로 따로 계산됨 ⑤ 모든 모델이 실패·응답 이상이면 대체 응답(선택지 제공, 병원 검색은 계속 동작) ⑥ 모델명 설정화.
 
 > 개인정보: 프롬프트에는 사용자 위치·개인정보를 넣지 않습니다. 무료 Gemini 입력은 서비스 개선에 쓰일 수 있습니다.
+
+---
+
+### 14-8. 길찾기 API
+
+`GET /api/route?mode=walk|transit&from_lat=…&from_lon=…&to_lat=…&to_lon=…`
+
+지도는 네이버를 쓰고, 경로 데이터만 카카오맵 경로 조회 REST API 에서 받아 옵니다. 좌표는 둘 다 WGS84 라 네이버 지도에 그대로 그릴 수 있습니다. 카카오 키는 서버에만 있습니다.
+
+| 응답 필드 | 설명 |
+|---|---|
+| `mode` | `walk` / `transit` |
+| `routes[]` | 경로 후보 (도보 1개, 대중교통 최대 5개). `kind`(WALK/BUS/SUBWAY/BUS_AND_SUBWAY), `time_s`(초), `distance_m`, 대중교통은 `fare`(원)·`transfers` |
+| `routes[].steps[]` | 단계별 `kind`(WALKING/BUS/SUBWAY), `guidance`(안내 문구), `distance_m`, `time_s`, `vehicles[]`(노선명), `stops[]`(정류장·역), `path`(`[[경도, 위도], …]` — 지도에 선으로 그림) |
+| `landing_url` | 카카오맵에서 같은 길찾기를 여는 링크 (오류·한도 초과 시 대체 수단) |
+| `message` | 경로가 없을 때 안내 (예: 거리가 너무 멀어 도보 불가) |
+| `notices[]` | 출처 안내. 대중교통은 "출발지→첫 정류장, 마지막 정류장→도착지 도보는 포함되지 않음" 안내 포함 |
+
+- 무료 쿼터: 카카오 개발자 계정의 **첫 번째 앱**에 도보·대중교통 각 하루 1,000건 (콘솔 [통계] > [쿼터] 에서 확인). 같은 요청은 서버가 10분간 캐시하고, 클라이언트당 분당 30회로 제한합니다.
+- 한도 초과·카카오 오류는 503 + 안내 문구. 잘못된 `mode`·좌표는 400.
 
 ---
 

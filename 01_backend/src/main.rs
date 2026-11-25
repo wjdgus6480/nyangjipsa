@@ -63,6 +63,15 @@ async fn main() -> anyhow::Result<()> {
         None => tracing::info!("챗봇 꺼짐 (GEMINI_API_KEY 없음)"),
     }
 
+    // 길찾기 (KAKAO_REST_API_KEY 가 있을 때만). 클라이언트당 분당 30회
+    match &config.kakao_rest_api_key {
+        Some(key) => {
+            state = state.with_routing(nyangjipsa_api::routing::RouteService::new(key, 30)?);
+            tracing::info!("길찾기 켜짐 (카카오맵 도보·대중교통)");
+        }
+        None => tracing::info!("길찾기 꺼짐 (KAKAO_REST_API_KEY 없음)"),
+    }
+
     let router = app(state, config.is_development());
 
     let addr = config.server_addr();
