@@ -26,7 +26,7 @@ cargo run                                # → http://127.0.0.1:8080/health/db
 | 폴더 | 내용 |
 |---|---|
 | `01_backend/` | Rust 백엔드 (Axum API, SQLx, 공공데이터 수집) |
-| `02_frontend/` | 프론트엔드 자리 (React + TypeScript 후보, 미착수) |
+| `02_frontend/` | 프론트엔드 (React + TypeScript + Vite). 실행: `cd 02_frontend && npm install && npm run dev` |
 | `03_tech-stack/` | 기술 스택 및 개발환경 구축 가이드 |
 | `04_docs/` | 개발 기록, 설계 문서, 테스트 기록 |
 | `05_data/` | 기획·분석용 조사 데이터 (시장 트렌드 분석, 전국 동물병원 진료비 통계) |
@@ -34,4 +34,4 @@ cargo run                                # → http://127.0.0.1:8080/health/db
 ## 기술 스택
 
 Rust · Axum · Tokio · SQLx · PostgreSQL 18 · PostGIS 3.7 · reqwest · Docker Compose
-(프론트엔드와 지도 API는 미정)
+· 프론트엔드: React · TypeScript · Vite · 네이버 지도 v3
