@@ -11,9 +11,12 @@
 //! - `chat`: Gemini 챗봇
 //! - `share`: 병원 공유 링크·카카오톡 공유 카드
 //! - `cat_friendly`: 고양이 친화병원 인증 목록 적재·매칭
+//! - `auth`: 회원 인증 (이메일 가입·인증, 이메일/카카오 로그인, 세션, 비밀번호 재설정)
 //! - `src/bin/collect.rs`: 공공데이터 → DB 수집 실행 파일
+//! - `src/bin/create_admin.rs`: 관리자 지정 (서버 운영자 전용, 공개 API 없음)
 
 pub mod animal_business;
+pub mod auth;
 pub mod cat_friendly;
 pub mod chat;
 pub mod collector;
@@ -47,16 +50,29 @@ pub struct AppState {
     pub routing: Option<Arc<routing::RouteService>>,
     /// 병원 공유 (항상 켜짐, 주소 설정은 `with_share`)
     pub share: Arc<share::ShareService>,
+    /// 회원 인증 설정·메일러·카카오 로그인·요청 제한
+    pub auth: Arc<auth::AuthService>,
 }
 
 impl AppState {
+    /// 회원 인증은 개발 기본값(메일 발송 끔, 카카오 로그인 없음)으로 시작합니다. 운영은 `with_auth`
     pub fn new(pool: PgPool) -> Self {
         Self {
             pool,
             chat: None,
             routing: None,
             share: Arc::new(share::ShareService::default()),
+            auth: Arc::new(auth::AuthService::new(
+                auth::AuthConfig::default(),
+                auth::mailer::Mailer::Disabled,
+                Vec::new(),
+            )),
         }
+    }
+
+    pub fn with_auth(mut self, auth: auth::AuthService) -> Self {
+        self.auth = Arc::new(auth);
+        self
     }
 
     pub fn with_routing(mut self, routing: routing::RouteService) -> Self {

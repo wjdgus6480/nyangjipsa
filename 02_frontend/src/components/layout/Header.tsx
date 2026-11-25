@@ -2,8 +2,8 @@
 import { useEffect, useState, type MouseEvent } from "react";
 import { Link, useNavigate } from "react-router";
 import { ROUTES, SITE } from "../../services/config/site";
+import { useAuth } from "../../features/auth/authContext";
 import { scrollToSection } from "../common/scroll";
-import { useModal } from "../ui/Modal";
 import { useToast } from "../ui/Toast";
 
 type MenuItem = { label: string; target: string } | { label: string; to: string };
@@ -19,8 +19,8 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
-  const modal = useModal();
   const toast = useToast();
+  const { user, logout } = useAuth();
 
   useEffect(() => {
     const onScroll = () => setScrolled(window.scrollY > 8);
@@ -37,39 +37,16 @@ export function Header() {
     else navigate(`${ROUTES.home}#${target}`);
   };
 
-  const openAuth = () => {
+  const doLogout = async () => {
     setOpen(false);
-    const close = modal.open(
-      "로그인 / 회원가입",
-      <>
-        <form
-          className="auth"
-          onSubmit={(e) => {
-            e.preventDefault();
-            close();
-            toast("회원 기능은 준비 중이에요. 로그인 없이 이용해 주세요.");
-          }}
-        >
-          <label>이메일<input type="email" required placeholder="you@example.com" autoComplete="email" /></label>
-          <label>비밀번호<input type="password" required minLength={8} placeholder="8자 이상" autoComplete="current-password" /></label>
-          <button className="btn btn--primary btn--block">로그인</button>
-          <p className="muted center">
-            아직 회원이 아니신가요?{" "}
-            <a
-              href="#"
-              onClick={(e) => {
-                e.preventDefault();
-                close();
-                toast("회원가입은 준비 중이에요.");
-              }}
-            >
-              회원가입
-            </a>
-          </p>
-        </form>
-        <p className="notice">회원 기능은 준비 중입니다. 지금은 로그인 없이 AI 상담을 이용할 수 있어요.</p>
-      </>,
-    );
+    // 먼저 홈으로 (내 정보 같은 로그인 필요 화면에서 로그아웃하면 로그인 화면으로 튕기지 않게)
+    navigate(ROUTES.home);
+    try {
+      await logout();
+      toast("로그아웃했어요.");
+    } catch {
+      toast("로그아웃 중 문제가 생겼어요. 다시 시도해 주세요.");
+    }
   };
 
   return (
@@ -94,7 +71,20 @@ export function Header() {
                 <a key={m.label} className="nav__link" href={`#${m.target}`} onClick={(e) => goSection(e, m.target)}>{m.label}</a>
               ),
             )}
-            <button className="btn btn--outline btn--sm" onClick={openAuth}>로그인 / 회원가입</button>
+            {user?.status === "active" ? (
+              <>
+                <Link className="nav__link" to={ROUTES.me} onClick={() => setOpen(false)}>
+                  {user.nickname ? `${user.nickname}님` : "내 정보"}
+                </Link>
+                <button type="button" className="btn btn--outline btn--sm" onClick={doLogout}>로그아웃</button>
+              </>
+            ) : user ? (
+              <Link className="btn btn--primary btn--sm" to={user.pending_step === "profile" ? ROUTES.socialComplete : ROUTES.signupCheckEmail} onClick={() => setOpen(false)}>
+                가입 마무리하기
+              </Link>
+            ) : (
+              <Link className="btn btn--outline btn--sm" to={ROUTES.login} onClick={() => setOpen(false)}>로그인 / 회원가입</Link>
+            )}
           </nav>
         </div>
       </header>

@@ -32,19 +32,30 @@ export function buildUrl(path: string, query?: Query): string {
 }
 
 interface RequestOptions {
-  method?: "GET" | "POST";
+  method?: "GET" | "POST" | "PATCH" | "DELETE";
   query?: Query;
   body?: unknown;
   signal?: AbortSignal;
 }
 
+/**
+ * 상태를 바꾸는 요청(POST·PATCH·DELETE)에 붙이는 헤더. 백엔드 회원 API 가 CSRF 방어로 요구합니다
+ * (01_backend/src/auth/extract.rs csrf_guard). 다른 API 에는 영향이 없습니다.
+ */
+export const CSRF_HEADER = { "X-Requested-With": "nyangjipsa" } as const;
+
 export async function request<T>(path: string, { method = "GET", query, body, signal }: RequestOptions = {}): Promise<T> {
   let res: Response;
+  const headers: Record<string, string> = {};
+  if (body !== undefined) headers["Content-Type"] = "application/json";
+  if (method !== "GET") Object.assign(headers, CSRF_HEADER);
   try {
     res = await fetch(buildUrl(path, query), {
       method,
-      headers: body === undefined ? undefined : { "Content-Type": "application/json" },
+      headers: Object.keys(headers).length ? headers : undefined,
       body: body === undefined ? undefined : JSON.stringify(body),
+      // 세션 쿠키(HttpOnly): 같은 출처면 기본 전송, 다른 출처 API(VITE_API_BASE)면 include
+      credentials: API_BASE ? "include" : "same-origin",
       signal,
     });
   } catch (e) {

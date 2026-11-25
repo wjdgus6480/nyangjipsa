@@ -25,6 +25,14 @@ Rust + Axum + SQLx + PostgreSQL/PostGIS 백엔드. 환경 구축은 `03_tech-sta
 - 프론트 커밋 전: `02_frontend` 에서 `npm run check` (타입 검사·ESLint·Vitest·옛 Node 테스트·빌드)를 통과시킨다.
 - 백엔드 API(`/api/places/*`, `/api/hospitals/*`, `/api/chat`, `/api/route`)는 그대로 쓴다. 화면 때문에 API 를 바꿀 때는 기존 화면이 깨지지 않게 한다.
 
+## 회원 인증 (항상 적용)
+
+- 구성·API·설정은 `04_docs/07_회원_인증_구현_기록.md`. 코드는 `01_backend/src/auth/`, `routes/{auth,users,admin}.rs`, 프론트 `src/features/auth/`.
+- `role` 은 서버만 정한다. 공개 API 로 관리자를 만들거나 role·status 를 받지 않는다 (요청 구조체 `deny_unknown_fields`). 관리자 지정은 `cargo run --bin create_admin` 만.
+- 관리자 API 는 `AdminUser`, 로그인 필요 API 는 `CurrentUser`/`SessionUser` 추출기로 매 요청 서버에서 확인한다.
+- 비밀번호·세션·인증 토큰 원문은 DB·로그·분석 이벤트에 남기지 않는다 (DB 는 Argon2id·SHA-256 해시만). `MAIL_MODE=log` 는 개발 전용.
+- 소셜 계정을 이메일이 같다는 이유만으로 기존 계정에 자동 연결하지 않는다.
+
 ## 규칙
 
 - 인증키·비밀번호는 `.env` 에만 둔다. 코드·문서·로그·커밋·채팅에 쓰지 않는다.
