@@ -121,6 +121,7 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
     <section id="chat" className="section">
       <div className="container">
         <div className="section__head reveal">
+          <img className="section__mascot" src={SITE.characters.phone} alt="" />
           <span className="eyebrow">AI 건강 상담</span>
           <h2>
             우리 아이가 아픈 것 같다면?<br />AI에게 먼저 물어보세요.

@@ -22,7 +22,7 @@ export function Hero({ onStartChat }: { onStartChat(): void }) {
           </ul>
         </div>
         <div className="hero__art reveal">
-          <img src={SITE.logo} alt={`${SITE.brandName} 고양이 간호사 캐릭터`} />
+          <img src={SITE.characters.standing} alt={`${SITE.brandName} 고양이 간호사 캐릭터`} />
         </div>
       </div>
     </section>

@@ -1,12 +1,14 @@
 import { Fragment, useCallback } from "react";
 import { useModal } from "../../components/ui/Modal";
 import { GUIDES } from "./content";
+import { SITE } from "../../services/config/site";
 
 export function Guides({ onOpenGuide }: { onOpenGuide(id: string): void }) {
   return (
     <section id="guide" className="section">
       <div className="container">
         <div className="section__head reveal">
+          <img className="section__mascot" src={SITE.characters.heart} alt="" />
           <span className="eyebrow">건강관리 가이드</span>
           <h2>처음이라면 이것부터 확인하세요!</h2>
           <p>초보 집사들이 가장 많이 궁금해하는 내용을 모았어요.</p>

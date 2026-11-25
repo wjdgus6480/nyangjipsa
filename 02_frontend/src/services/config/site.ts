@@ -28,6 +28,17 @@ export const SITE = {
   logo: asset("assets/logo.png"),
   /** 지도·챗봇 로고 (기존 map-poc/assets/logo.png) */
   mapLogo: asset("assets/logo-map.png"),
+  /** 고양이 간호사 캐릭터 (배경 투명 webp) */
+  characters: {
+    standing: asset("assets/characters/cat-standing.webp"),
+    pointing: asset("assets/characters/cat-pointing.webp"),
+    phone: asset("assets/characters/cat-phone.webp"),
+    wave: asset("assets/characters/cat-wave.webp"),
+    heart: asset("assets/characters/cat-heart.webp"),
+    sleep: asset("assets/characters/cat-sleep.webp"),
+    cheer: asset("assets/characters/cat-cheer.webp"),
+    peek: asset("assets/characters/cat-peek.webp"),
+  },
 } as const;
 
 export interface MapFocusTarget {
