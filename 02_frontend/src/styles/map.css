@@ -72,3 +72,31 @@
 .map-page .ha-share { background:#FEE500; border-color:#FEE500; color:#191919; }
 .map-page .ha-share:disabled { opacity:.6; cursor:progress; }
 .map-page .ha-msg { margin:8px 0 0; font-size:12px; color:var(--muted); }
+
+/* 내 위치 (파란 점 + 버튼) */
+.my-loc { width:22px; height:22px; border-radius:50%; background:#2f80ed; border:3px solid #fff; box-shadow:0 0 0 6px rgba(47,128,237,.25), 0 2px 6px rgba(0,0,0,.25); }
+.map-page .map-wrap { position:relative; }
+.map-page .my-loc-btn { position:absolute; right:14px; bottom:96px; z-index:20; display:flex; align-items:center; gap:6px; padding:9px 12px; border:1px solid var(--line); border-radius:999px; background:var(--bg); color:var(--accent); font:inherit; font-size:13px; font-weight:700; box-shadow:0 4px 14px rgba(27,42,65,.15); cursor:pointer; }
+.map-page .my-loc-btn:hover { border-color:var(--primary-strong); }
+.map-page .my-loc-btn:disabled { opacity:.6; cursor:progress; }
+.map-page .my-loc-btn:focus-visible { outline:2px solid var(--primary-strong); outline-offset:2px; }
+
+/* 길찾기 패널 — RoutePanel.tsx */
+.map-page .route-panel { padding:12px 16px 14px; border-bottom:1px solid var(--line); background:var(--bg); max-height:46vh; overflow:auto; }
+.map-page .rp-head { display:flex; align-items:center; justify-content:space-between; gap:8px; font-size:14px; }
+.map-page .rp-close { border:0; background:none; font-size:20px; line-height:1; color:var(--muted); cursor:pointer; padding:2px 6px; }
+.map-page .rp-modes { display:flex; gap:6px; margin:10px 0; }
+.map-page .rp-modes button { flex:1; font:inherit; font-size:13px; font-weight:700; padding:7px 0; border:1px solid var(--line); border-radius:10px; background:var(--bg); color:var(--muted); cursor:pointer; }
+.map-page .rp-modes button.is-on { background:var(--primary); border-color:var(--primary); color:var(--fg); }
+.map-page .rp-msg { margin:8px 0; font-size:13px; color:var(--muted); }
+.map-page .rp-err { color:#b3261e; }
+.map-page .rp-locate { width:100%; font:inherit; font-size:13px; font-weight:700; padding:9px; border:0; border-radius:10px; background:var(--accent); color:#fff; cursor:pointer; }
+.map-page .rp-locate:disabled { opacity:.6; cursor:progress; }
+.map-page .route-panel ul.rp-options { list-style:none; padding:0; margin:0 0 8px; overflow:visible; flex:none; background:none; display:flex; flex-direction:column; gap:6px; }
+.map-page .route-panel ul.rp-options li { padding:0; margin:0; border:0; background:none; cursor:default; }
+.map-page .rp-options button { width:100%; text-align:left; font:inherit; font-size:13px; padding:8px 10px; border:1px solid var(--line); border-radius:10px; background:var(--bg); cursor:pointer; }
+.map-page .rp-options button.is-on { border-color:var(--primary-strong); background:var(--secondary); font-weight:700; }
+.map-page .rp-summary { font-size:13px; font-weight:700; margin:4px 0 6px; }
+.map-page .rp-steps { margin:0; padding-left:20px; font-size:13px; line-height:1.55; color:var(--fg); }
+.map-page .rp-note { margin:8px 0 0; font-size:11px; color:var(--muted); }
+.map-page .rp-kakao { display:inline-block; margin-top:10px; font-size:12px; font-weight:700; color:var(--accent); }

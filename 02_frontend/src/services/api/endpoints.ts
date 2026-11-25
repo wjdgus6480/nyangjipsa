@@ -8,6 +8,8 @@ import type {
   NearbyPlacesQuery,
   NearbyPlacesResponse,
   PlacePointsResponse,
+  RouteQuery,
+  RouteResponse,
   ServiceStats,
   ShareRequest,
   ShareResponse,
@@ -41,3 +43,6 @@ export const postShare = (body: ShareRequest, signal?: AbortSignal) =>
 
 /** GET /api/stats — 랜딩 페이지 숫자 (병원·친화병원·24시 병원 수, 데이터 기준 시각) */
 export const getStats = (signal?: AbortSignal) => request<ServiceStats>("/api/stats", { signal });
+
+/** GET /api/route — 길찾기(도보·대중교통). 출발지 좌표는 길찾기 계산에만 쓰고 저장·분석에 쓰지 않습니다 */
+export const getRoute = (q: RouteQuery, signal?: AbortSignal) => request<RouteResponse>("/api/route", { query: { ...q }, signal });

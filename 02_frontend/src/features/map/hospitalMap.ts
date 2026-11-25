@@ -11,6 +11,8 @@ import { INFO_FEES, TYPE_LABEL, fmtPrice, pickFees, shortFee } from "../hospital
 import { REGION_CONFIG, type RegionLevel } from "./regions/regionConfig";
 import * as RegionCore from "./regions/regionCore";
 import { createRegionLayer, type RegionLayer, type RegionSelection } from "./regions/regionLayer";
+import { LINE_STYLE, type RouteLine } from "./routeCore";
+import { naverReady } from "./naverLoader";
 
 export const START: LatLon = { lon: 127.049, lat: 37.5233 }; // 청담동 (API 예시 좌표)
 export const MAX_RADIUS = 20000;
@@ -61,6 +63,10 @@ export class HospitalMap implements MapBridge {
   private controller: AbortController | null = null;
   private pointsController: AbortController | null = null;
   private focusMarker: naver.maps.Marker | null = null;
+  /** 내 위치 (파란 점) — 좌표는 화면 표시·길찾기에만 쓰고 저장·분석에 쓰지 않음 */
+  private myMarker: naver.maps.Marker | null = null;
+  /** 길찾기 경로 선 */
+  private routeLines: naver.maps.Polyline[] = [];
   private destroyed = false;
 
   constructor(
@@ -112,6 +118,7 @@ export class HospitalMap implements MapBridge {
         this.scheduleLoad();
       },
       onChange: (info) => {
+        if (this.destroyed) return;
         if (info.error) {
           this.cb.onStatus(info.error);
           return;
@@ -277,6 +284,58 @@ export class HospitalMap implements MapBridge {
     this.infoWindow.open(this.map, this.focusMarker);
   }
 
+  // ---------- 내 위치·길찾기 ----------
+  /** 내 위치에 파란 점을 찍고 그 위치로 이동 (이동하면 idle 이벤트로 주변을 다시 검색) */
+  showMyLocation(p: LatLon, { move = true }: { move?: boolean } = {}) {
+    if (this.destroyed || !naverReady()) return;
+    const pos = toLatLng(p);
+    if (this.myMarker) this.myMarker.setPosition(pos);
+    else
+      this.myMarker = new naver.maps.Marker({
+        position: pos,
+        map: this.map,
+        title: "내 위치",
+        zIndex: 1100,
+        icon: { content: '<div class="my-loc" aria-label="내 위치"></div>', anchor: new naver.maps.Point(11, 11) },
+      });
+    if (move) {
+      this.map.setZoom(Math.max(this.map.getZoom(), 15), false);
+      this.map.setCenter(pos);
+    }
+  }
+
+  /** 길찾기 경로를 선으로 그리고 전체가 보이게 맞춤 (도보 점선·버스 초록·지하철 파랑) */
+  drawRoute(lines: RouteLine[]) {
+    this.clearRoute();
+    if (this.destroyed || lines.length === 0 || !naverReady()) return;
+    let minLat = 90, minLon = 180, maxLat = -90, maxLon = -180;
+    for (const l of lines) {
+      const style = LINE_STYLE[l.kind];
+      this.routeLines.push(
+        new naver.maps.Polyline({
+          map: this.map,
+          path: l.path.map(([lon, lat]) => new naver.maps.LatLng(lat, lon)),
+          strokeColor: style.color,
+          strokeWeight: l.kind === "WALKING" ? 4 : 6,
+          strokeOpacity: 0.9,
+          strokeStyle: style.dashed ? "shortdash" : "solid",
+          strokeLineCap: "round",
+          zIndex: 900,
+        }),
+      );
+      for (const [lon, lat] of l.path) {
+        minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+        minLon = Math.min(minLon, lon); maxLon = Math.max(maxLon, lon);
+      }
+    }
+    this.map.fitBounds(new naver.maps.LatLngBounds(new naver.maps.LatLng(minLat, minLon), new naver.maps.LatLng(maxLat, maxLon)), { top: 60, right: 60, bottom: 60, left: 60 });
+  }
+
+  clearRoute() {
+    for (const l of this.routeLines) l.setMap(null);
+    this.routeLines = [];
+  }
+
   /** 화면을 떠날 때: 타이머·요청·이벤트·오버레이·지도 인스턴스 정리 (재진입 시 중복 생성 방지) */
   destroy() {
     if (this.destroyed) return;
@@ -284,6 +343,18 @@ export class HospitalMap implements MapBridge {
     clearTimeout(this.timer);
     this.controller?.abort();
     this.pointsController?.abort();
+    // 네이버 인증 실패 등으로 SDK 가 비었으면 SDK 정리는 건너뜀 (예외로 화면 전체가 멈추지 않게)
+    if (!naverReady()) {
+      try {
+        this.regions?.destroy();
+      } catch {
+        /* SDK 가 비어 정리할 수 없음 */
+      }
+      this.listeners.length = 0;
+      this.markers.clear();
+      this.routeLines = [];
+      return;
+    }
     naver.maps.Event.removeListener(this.listeners);
     this.listeners.length = 0;
     this.regions?.destroy();
@@ -291,6 +362,8 @@ export class HospitalMap implements MapBridge {
     for (const m of this.markers.values()) m.setMap(null);
     this.markers.clear();
     this.focusMarker?.setMap(null);
+    this.myMarker?.setMap(null);
+    this.clearRoute();
     this.map.destroy();
   }
 }

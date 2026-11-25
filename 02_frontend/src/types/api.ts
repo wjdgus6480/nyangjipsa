@@ -300,3 +300,65 @@ export interface ShareResponse {
   card: ShareCard;
   hospital: { id: number; name: string; address: string | null; phone: string | null; business_status: string | null; lat: number; lon: number };
 }
+
+/** GET /api/route 쿼리 (routes/directions.rs RouteQuery) */
+export interface RouteQuery {
+  /** walk(도보, 기본) | transit(대중교통) */
+  mode: "walk" | "transit";
+  from_lat: number;
+  from_lon: number;
+  to_lat: number;
+  to_lon: number;
+  /** 대중교통: 앞뒤 도보를 실제 경로로 계산할 후보 번호 (기본 0) */
+  detail?: number;
+}
+
+/** 경로 좌표 [경도, 위도] */
+export type LonLat = [number, number];
+
+/** routing.rs WalkLeg — 대중교통 앞뒤 도보 */
+export interface WalkLeg {
+  distance_m: number;
+  time_s: number;
+  /** true 면 직선거리 기반 추정치 */
+  estimated: boolean;
+  guidance?: string[];
+  path: LonLat[];
+}
+
+/** routing.rs RouteStep */
+export interface RouteStep {
+  /** WALKING | BUS | SUBWAY */
+  kind: string;
+  guidance: string;
+  distance_m: number;
+  time_s: number;
+  vehicles?: string[];
+  stops?: string[];
+  path: LonLat[];
+}
+
+/** routing.rs RouteOption */
+export interface RouteOption {
+  /** WALK | BUS | SUBWAY | BUS_AND_SUBWAY */
+  kind: string;
+  time_s: number;
+  distance_m: number;
+  fare?: number;
+  transfers?: number;
+  steps: RouteStep[];
+  access_walk?: WalkLeg;
+  egress_walk?: WalkLeg;
+  /** 문 앞에서 문 앞까지 총 시간(초) */
+  total_time_s?: number;
+}
+
+/** GET /api/route 응답 (routing.rs RouteResponse) */
+export interface RouteResponse {
+  mode: "walk" | "transit";
+  routes: RouteOption[];
+  landing_url?: string;
+  message?: string;
+  notices: string[];
+  detail_index?: number;
+}
