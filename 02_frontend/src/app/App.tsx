@@ -2,6 +2,7 @@
 import { Route, Routes } from "react-router";
 import { ROUTES } from "../services/config/site";
 import { HomePage } from "../features/home/HomePage";
+import { LandingPage } from "../features/landing/LandingPage";
 import { MapPage } from "../features/map/MapPage";
 import { ChatPage } from "../features/chatbot/ChatPage";
 import { AuthProvider } from "../features/auth/AuthProvider";
@@ -21,6 +22,8 @@ export function App() {
     <AuthProvider>
       <Routes>
         <Route path={ROUTES.home} element={<HomePage />} />
+        {/* 랜딩: 처음 온 사람(광고·공유 유입)용. 홈과 달리 메뉴 없이 이야기 순서 + 행동 하나 */}
+        <Route path={ROUTES.landing} element={<LandingPage />} />
         <Route path={ROUTES.map} element={<MapPage />} />
         <Route path={ROUTES.chat} element={<ChatPage />} />
 

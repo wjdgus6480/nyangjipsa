@@ -8,6 +8,7 @@ import type {
   NearbyPlacesQuery,
   NearbyPlacesResponse,
   PlacePointsResponse,
+  ServiceStats,
   ShareRequest,
   ShareResponse,
 } from "../../types/api";
@@ -26,7 +27,7 @@ export const getPlacePoints = (types: readonly string[], signal?: AbortSignal) =
 
 /** GET /api/hospitals/nearby — 병원 테이블 반경 검색 (최대 5km, 진료비 포함) */
 export const getNearbyHospitals = (
-  q: { lat: number; lon: number; radius?: number; limit?: number; include_fees?: boolean },
+  q: { lat: number; lon: number; radius?: number; limit?: number; include_fees?: boolean; cat_friendly?: boolean },
   signal?: AbortSignal,
 ) => request<HospitalsNearbyResponse>("/api/hospitals/nearby", { query: q, signal });
 
@@ -37,3 +38,6 @@ export const getHospital = (id: number, signal?: AbortSignal) =>
 /** POST /api/share — 병원 공유 링크 + 카카오톡 공유 카드 내용 (같은 병원·채널은 같은 링크) */
 export const postShare = (body: ShareRequest, signal?: AbortSignal) =>
   request<ShareResponse>("/api/share", { method: "POST", body, signal });
+
+/** GET /api/stats — 랜딩 페이지 숫자 (병원·친화병원·24시 병원 수, 데이터 기준 시각) */
+export const getStats = (signal?: AbortSignal) => request<ServiceStats>("/api/stats", { signal });

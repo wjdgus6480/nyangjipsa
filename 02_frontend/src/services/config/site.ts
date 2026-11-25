@@ -3,6 +3,8 @@ import { asset } from "./env";
 
 export const ROUTES = {
   home: "/",
+  /** 처음 온 사람을 위한 랜딩 페이지 (광고·공유 유입). 메뉴 없이 이야기 순서 + 행동 하나 */
+  landing: "/intro",
   /** 지도 기반 병원 검색 (기존 map-poc/index.html) */
   map: "/map",
   /** 챗봇 단독 화면 (기존 map-poc/chat.html) */

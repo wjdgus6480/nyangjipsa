@@ -13,11 +13,11 @@
 
 | 페이지 | 이벤트 | 언제 기록하나 | 속성 | 기록 위치 (02_frontend) | 알 수 있는 것 |
 |---|---|---|---|---|---|
-| 첫 화면 | `landing_viewed` | 첫 화면(`/`)이 열릴 때 (한 번) | (utm) | `src/features/home/HomePage.tsx` `HomePage` 의 `useEffect` | 방문자 수, 어디서 왔는지 |
+| 첫 화면 | `landing_viewed` | 홈(`/`) 또는 랜딩(`/intro`)이 열릴 때 (한 번) | 랜딩은 `page`=landing (utm) | `src/features/home/HomePage.tsx` `HomePage`, `src/features/landing/LandingPage.tsx` `LandingPage` 의 `useEffect` | 방문자 수, 어디서 왔는지 (홈·랜딩 구분) |
 | AI 상담 | `consult_started` | 한 대화에서 AI 가 첫 질문에 답했을 때 | `surface`(home/chatbot/map), `fallback` | `src/services/analytics/consult.ts` `onReply` ← `src/features/home/HomeChat.tsx` `send`, `src/features/chatbot/Chatbot.tsx` `request` | 상담 시작률 |
 | AI 상담 | `consult_completed` | 상담 결과가 나왔을 때 (한 번): 병원·장소 목록·가격 비교가 나오거나, AI 가 더 묻지 않고 답을 마침 | `surface`, `result_type`(hospitals/price/places/answer), `reply_count`, `fallback` | 위와 같음 (`consult.ts` `resultType`) | 상담 완료율 |
 | 지도 | `cost_viewed` | 지도에서 고른 병원의 예상 진료비(정보창)가 보일 때 (병원마다 한 번) | `hospital_id` | `src/features/map/MapPage.tsx` `selectedId` `useEffect` | 진료비 확인률 |
-| 지도 | `hospital_clicked` | 병원 상세(목록·핀 선택 → 정보창)·전화·길찾기를 눌렀을 때 | `hospital_id`, `click_type`(detail/call/route) | detail: `MapPage.tsx` `selectedId` `useEffect` / call·route: `src/features/hospital/HospitalActions.tsx` `onCall`·`onRoute` | 핵심 지표(노스스타) |
+| 지도 | `hospital_clicked` | 병원 상세(목록·핀 선택 → 정보창)·전화·길찾기를 눌렀을 때, 랜딩 미리보기의 "지도에서 보기" | `hospital_id`, `click_type`(detail/call/route), 랜딩은 `page`=landing | detail: `MapPage.tsx` `selectedId` `useEffect`, `LandingPage.tsx` `PreviewCard` / call·route: `src/features/hospital/HospitalActions.tsx` `onCall`·`onRoute` | 핵심 지표(노스스타) |
 | 지도 | `result_shared` | 병원 정보 카카오톡 공유 버튼을 눌렀을 때 | `hospital_id`, `share_type`=hospital | `HospitalActions.tsx` `onShare` | 공유율 |
 | 공유받은 지도 | `route_viewed` | 길찾기를 열었을 때 | `hospital_id` | `HospitalActions.tsx` `onRoute` | 길찾기 이용 |
 
