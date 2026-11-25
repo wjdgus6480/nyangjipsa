@@ -32,7 +32,17 @@ async fn main() -> anyhow::Result<()> {
     match (&config.public_data_service_key, config.sync_interval_hours) {
         (Some(key), hours) if hours > 0 => {
             let client = PublicDataClient::new(&config.public_data_base_url, key.as_str())?;
-            sync::spawn_scheduler(client, pool.clone(), Duration::from_secs(hours * 3600));
+            // 카카오 키가 있으면 좌표 없는 병원의 좌표를 주소로 채움
+            let geocoder = match &config.kakao_rest_api_key {
+                Some(k) => Some(nyangjipsa_api::geocode::Geocoder::new(k)?),
+                None => None,
+            };
+            sync::spawn_scheduler(
+                client,
+                pool.clone(),
+                Duration::from_secs(hours * 3600),
+                geocoder,
+            );
         }
         _ => tracing::info!(
             "공공데이터 자동 동기화 꺼짐 (SYNC_INTERVAL_HOURS=0 또는 PUBLIC_DATA_SERVICE_KEY 없음)"
@@ -72,6 +82,20 @@ async fn main() -> anyhow::Result<()> {
         None => tracing::info!("길찾기 꺼짐 (KAKAO_REST_API_KEY 없음)"),
     }
 
+    // 병원 공유 링크. 클라이언트당 분당 20회 생성
+    state = state.with_share(nyangjipsa_api::share::ShareService::new(
+        nyangjipsa_api::share::ShareSettings {
+            public_base_url: config.public_base_url.clone(),
+            frontend_base_url: config.frontend_base_url.clone(),
+            image_url: config.share_image_url.clone(),
+        },
+        20,
+    ));
+    tracing::info!(
+        "공유 링크: {}/s/{{code}} → {}/map",
+        config.public_base_url,
+        config.frontend_base_url
+    );
     // 회원 인증 (운영에서 위험한 설정 — APP_BASE_URL 없음, MAIL_MODE=log 등 — 이면 시작하지 않음)
     let auth = nyangjipsa_api::auth::AuthService::from_env(&config.auth, config.is_development())
         .map_err(anyhow::Error::msg)

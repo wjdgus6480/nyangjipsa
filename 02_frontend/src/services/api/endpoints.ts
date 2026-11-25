@@ -8,6 +8,8 @@ import type {
   NearbyPlacesQuery,
   NearbyPlacesResponse,
   PlacePointsResponse,
+  ShareRequest,
+  ShareResponse,
 } from "../../types/api";
 
 /** POST /api/chat — AI 답변 + DB 에서 붙인 병원·장소·가격 비교 */
@@ -31,3 +33,7 @@ export const getNearbyHospitals = (
 /** GET /api/hospitals/{id} — 병원 한 곳과 진료비 (지도 항목의 hospital_id 로 조회) */
 export const getHospital = (id: number, signal?: AbortSignal) =>
   request<HospitalDetail>(`/api/hospitals/${encodeURIComponent(id)}`, { signal });
+
+/** POST /api/share — 병원 공유 링크 + 카카오톡 공유 카드 내용 (같은 병원·채널은 같은 링크) */
+export const postShare = (body: ShareRequest, signal?: AbortSignal) =>
+  request<ShareResponse>("/api/share", { method: "POST", body, signal });

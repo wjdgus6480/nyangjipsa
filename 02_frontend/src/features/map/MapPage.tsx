@@ -2,6 +2,8 @@
 // - 네이버 지도 SDK 는 브라우저에서만, 마운트 후에 불러와 초기화합니다.
 // - 화면을 떠나면(언마운트) 지도·마커·이벤트를 모두 정리해 재진입 시 중복 생성되지 않습니다.
 // - 기존 ?focus=위도,경도&name=…&addr=…&tel=…&type=… 쿼리를 그대로 지원합니다.
+// - 공유 링크(/s/{code})로 들어오면 &hospital=병원id 가 붙어 그 병원의 전화·길찾기·공유 버튼을 바로 보여 줍니다.
+// - 분석: 병원 선택(hospital_clicked detail), 진료비 표시(cost_viewed) — 병원 id 만 보냄
 import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import "../../styles/map.css";
@@ -15,6 +17,8 @@ import { Chatbot } from "../chatbot/Chatbot";
 import type { MapBridge } from "../chatbot/mapBridge";
 import { PLACE_TYPES } from "../hospital/fees";
 import { PlaceList } from "../hospital/PlaceList";
+import { HospitalActions, type ActionHospital } from "../hospital/HospitalActions";
+import { analytics } from "../../services/analytics/analytics";
 import { HospitalMap, type RadiusOption, type RegionBarState } from "./hospitalMap";
 import { loadNaverMaps } from "./naverLoader";
 import { RegionBar } from "./RegionBar";
@@ -45,10 +49,35 @@ export function MapPage() {
   const [loaded, setLoaded] = useState(false);
   const filters = useRef({ types, radius });
   const paramsRef = useRef(params);
+  const itemsRef = useRef(items);
   useLayoutEffect(() => {
     filters.current = { types, radius };
     paramsRef.current = params;
+    itemsRef.current = items;
   });
+
+  // 병원을 고르면(목록·핀) 상세 정보창이 열림 → hospital_clicked(detail), 진료비가 보이면 cost_viewed (병원마다 한 번)
+  const costSeen = useRef(new Set<number>());
+  useEffect(() => {
+    const p = itemsRef.current.find((x) => x.id === selectedId);
+    if (!p?.hospital_id) return;
+    analytics.track("hospital_clicked", { hospital_id: p.hospital_id, click_type: "detail" });
+    if (p.fees?.length && !costSeen.current.has(p.hospital_id)) {
+      costSeen.current.add(p.hospital_id);
+      analytics.track("cost_viewed", { hospital_id: p.hospital_id });
+    }
+  }, [selectedId]);
+
+  // 행동 버튼을 보여 줄 병원: 고른 병원, 없으면 공유 링크로 받은 병원(?hospital=id)
+  const actionHospital = useMemo<ActionHospital | null>(() => {
+    const p = items.find((x) => x.id === selectedId);
+    if (p?.hospital_id) return { hospitalId: p.hospital_id, name: p.name, phone: p.phone, lat: p.lat, lon: p.lon };
+    const sharedId = Number(params.get("hospital"));
+    const focus = parseMapFocus(params);
+    if (Number.isInteger(sharedId) && sharedId > 0 && focus)
+      return { hospitalId: sharedId, name: focus.name, phone: focus.phone ?? null, lat: focus.lat, lon: focus.lon };
+    return null;
+  }, [items, selectedId, params]);
 
   // 지도 생성/정리 (StrictMode 이중 실행·화면 재진입에도 인스턴스 하나만 유지)
   useEffect(() => {
@@ -143,6 +172,7 @@ export function MapPage() {
             </div>
             <div className="status" id="status" role="status">{status}</div>
           </div>
+          {actionHospital && <HospitalActions key={actionHospital.hospitalId} hospital={actionHospital} />}
           <PlaceList items={items} selectedId={selectedId} onSelect={(id) => hmRef.current?.select(id, true)} />
         </aside>
         <div className="map-wrap">

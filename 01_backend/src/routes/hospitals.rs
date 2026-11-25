@@ -2,6 +2,8 @@
 //!
 //! - `GET /api/hospitals/nearby?lat=37.5665&lon=126.9780&radius=1000&limit=50&include_fees=true`
 //!   반경 안의 영업 중인 병원을 가까운 순으로 (진료비 포함)
+//!   `cat_friendly=true` 면 고양이 친화병원 인증(ISFM 등)이 있는 병원만
+//! - `GET /api/hospitals/emergency?lat=…&lon=…` 응급 버튼용: 가까운 24시 병원 (이름 기준 추정)
 //! - `GET /api/hospitals/{id}` 병원 한 곳과 진료비.
 //!   지도 API(`/api/places/nearby`)가 병원에 붙여 주는 `hospital_id` 로 조회합니다.
 
@@ -25,6 +27,7 @@ pub const MAX_LIMIT: i64 = 100;
 pub fn router() -> Router<AppState> {
     Router::new()
         .route("/nearby", get(nearby))
+        .route("/emergency", get(emergency))
         .route("/{id}", get(detail))
 }
 
@@ -40,6 +43,8 @@ pub struct NearbyParams {
     limit: Option<i64>,
     /// 진료비 포함 여부. 기본 true
     include_fees: Option<bool>,
+    /// true 면 고양이 친화병원 인증 병원만. 기본 false
+    cat_friendly: Option<bool>,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -52,6 +57,8 @@ struct HospitalRow {
     lat: f64,
     lon: f64,
     distance_m: f64,
+    cat_friendly: bool,
+    open_24h: bool,
 }
 
 #[derive(Debug, sqlx::FromRow)]
@@ -85,6 +92,10 @@ pub struct HospitalOut {
     pub lon: f64,
     /// 검색 중심점으로부터의 거리(m, 반올림)
     pub distance_m: i64,
+    /// 고양이 친화병원 인증(ISFM 등) 여부 — 팀이 조사한 인증 목록 기준
+    pub cat_friendly: bool,
+    /// 이름에 "24시" 등이 들어간 병원 (야간 진료 가능 **추정**, 실제 여부는 전화 확인)
+    pub open_24h: bool,
     #[serde(skip_serializing_if = "Option::is_none")]
     pub fees: Option<Vec<FeeOut>>,
 }
@@ -135,15 +146,48 @@ pub async fn find_nearby(
     limit: i64,
     include_fees: bool,
 ) -> Result<Vec<HospitalOut>, sqlx::Error> {
+    find_nearby_filtered(
+        pool,
+        center,
+        radius_m,
+        limit,
+        include_fees,
+        HospitalFilter::default(),
+    )
+    .await
+}
+
+/// 주변 병원 검색 필터
+#[derive(Debug, Clone, Copy, Default)]
+pub struct HospitalFilter {
+    /// 고양이 친화병원 인증 병원만
+    pub cat_friendly_only: bool,
+    /// 이름에 "24시" 등이 들어간 병원만 (응급 버튼)
+    pub open_24h_only: bool,
+}
+
+/// `find_nearby` + 필터(고양이 친화병원만, 24시 병원만)
+pub async fn find_nearby_filtered(
+    pool: &PgPool,
+    center: Coordinate,
+    radius_m: f64,
+    limit: i64,
+    include_fees: bool,
+    filter: HospitalFilter,
+) -> Result<Vec<HospitalOut>, sqlx::Error> {
     let rows = sqlx::query_as::<_, HospitalRow>(
         "SELECT h.id, h.name, h.address, h.phone, h.business_status,
                 ST_Y(h.location::geometry) AS lat,
                 ST_X(h.location::geometry) AS lon,
-                ST_Distance(h.location, q.p) AS distance_m
+                ST_Distance(h.location, q.p) AS distance_m,
+                EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id) AS cat_friendly,
+                h.name ~* '24[[:space:]]*(시|hr|h|hour)' AS open_24h
          FROM hospitals h,
               (SELECT ST_SetSRID(ST_MakePoint($1::float8, $2::float8), 4326)::geography AS p) q
          WHERE h.business_status LIKE '영업%'
            AND ST_DWithin(h.location, q.p, $3::float8)
+           AND (NOT $5::bool OR EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id))
+           AND (NOT $6::bool OR h.name ~* '24[[:space:]]*(시|hr|h|hour)')
          ORDER BY distance_m, h.id
          LIMIT $4",
     )
@@ -151,6 +195,8 @@ pub async fn find_nearby(
     .bind(center.lat)
     .bind(radius_m)
     .bind(limit)
+    .bind(filter.cat_friendly_only)
+    .bind(filter.open_24h_only)
     .fetch_all(pool)
     .await?;
 
@@ -174,6 +220,8 @@ pub async fn find_nearby(
             lat: r.lat,
             lon: r.lon,
             distance_m: r.distance_m.round() as i64,
+            cat_friendly: r.cat_friendly,
+            open_24h: r.open_24h,
         })
         .collect())
 }
@@ -198,12 +246,16 @@ async fn nearby(
         )));
     }
 
-    let hospitals = find_nearby(
+    let hospitals = find_nearby_filtered(
         &state.pool,
         center,
         radius,
         limit,
         p.include_fees.unwrap_or(true),
+        HospitalFilter {
+            cat_friendly_only: p.cat_friendly.unwrap_or(false),
+            open_24h_only: false,
+        },
     )
     .await?;
 
@@ -223,6 +275,8 @@ struct DetailRow {
     business_status: Option<String>,
     lat: f64,
     lon: f64,
+    cat_friendly: bool,
+    open_24h: bool,
 }
 
 /// 병원 한 곳과 진료비 (거리 없음)
@@ -235,6 +289,10 @@ pub struct HospitalDetail {
     business_status: Option<String>,
     lat: f64,
     lon: f64,
+    /// 고양이 친화병원 인증 여부
+    cat_friendly: bool,
+    /// 이름 기준 24시 병원 추정
+    open_24h: bool,
     fees: Vec<FeeOut>,
 }
 
@@ -247,9 +305,11 @@ async fn detail(
         .map_err(|_| AppError::BadRequest(format!("id 는 숫자여야 합니다: {id}")))?;
 
     let row = sqlx::query_as::<_, DetailRow>(
-        "SELECT id, name, address, phone, business_status,
-                ST_Y(location::geometry) AS lat, ST_X(location::geometry) AS lon
-         FROM hospitals WHERE id = $1",
+        "SELECT h.id, h.name, h.address, h.phone, h.business_status,
+                ST_Y(h.location::geometry) AS lat, ST_X(h.location::geometry) AS lon,
+                EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id) AS cat_friendly,
+                h.name ~* '24[[:space:]]*(시|hr|h|hour)' AS open_24h
+         FROM hospitals h WHERE h.id = $1",
     )
     .bind(id)
     .fetch_optional(&state.pool)
@@ -282,6 +342,71 @@ async fn detail(
         business_status: row.business_status,
         lat: row.lat,
         lon: row.lon,
+        cat_friendly: row.cat_friendly,
+        open_24h: row.open_24h,
         fees,
+    }))
+}
+
+/// 응급 버튼 검색 반경 기본값·최대값 (밤에는 24시 병원이 멀 수 있어 일반 검색보다 넓게)
+pub const EMERGENCY_DEFAULT_RADIUS_M: f64 = 10_000.0;
+pub const EMERGENCY_MAX_RADIUS_M: f64 = 30_000.0;
+pub const EMERGENCY_NOTICE: &str = "이름에 '24시'가 들어간 병원을 가까운 순으로 보여줍니다. 실제 야간·응급 진료 여부는 방문 전에 꼭 전화로 확인하세요.";
+
+#[derive(Debug, Deserialize)]
+pub struct EmergencyParams {
+    lat: f64,
+    lon: f64,
+    /// 반경(m). 기본 10000, 최대 30000
+    radius: Option<f64>,
+    /// 최대 결과 수. 기본 10, 최대 30
+    limit: Option<i64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct EmergencyResponse {
+    count: usize,
+    radius_m: f64,
+    /// 화면에 함께 보여줄 안내 (이름 기준 추정임)
+    notice: &'static str,
+    hospitals: Vec<HospitalOut>,
+}
+
+/// 응급 버튼: "지금 진료 가능한 24시 병원" — 친화병원 필터와 별개로, 가까운 24시 병원을 찾습니다.
+/// 진료 시간 데이터가 없어서 이름("24시", "24hr" 등)으로 추정합니다.
+async fn emergency(
+    State(state): State<AppState>,
+    Query(p): Query<EmergencyParams>,
+) -> Result<Json<EmergencyResponse>, AppError> {
+    let center = Coordinate::new(p.lon, p.lat).map_err(|e| AppError::BadRequest(e.to_string()))?;
+    let radius = p.radius.unwrap_or(EMERGENCY_DEFAULT_RADIUS_M);
+    if !radius.is_finite() || radius <= 0.0 || radius > EMERGENCY_MAX_RADIUS_M {
+        return Err(AppError::BadRequest(format!(
+            "radius 는 1~{EMERGENCY_MAX_RADIUS_M}(m) 범위여야 합니다: {radius}"
+        )));
+    }
+    let limit = p.limit.unwrap_or(10);
+    if !(1..=30).contains(&limit) {
+        return Err(AppError::BadRequest(format!(
+            "limit 는 1~30 범위여야 합니다: {limit}"
+        )));
+    }
+    let hospitals = find_nearby_filtered(
+        &state.pool,
+        center,
+        radius,
+        limit,
+        false,
+        HospitalFilter {
+            cat_friendly_only: false,
+            open_24h_only: true,
+        },
+    )
+    .await?;
+    Ok(Json(EmergencyResponse {
+        count: hospitals.len(),
+        radius_m: radius,
+        notice: EMERGENCY_NOTICE,
+        hospitals,
     }))
 }

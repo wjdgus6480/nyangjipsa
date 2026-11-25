@@ -10,9 +10,17 @@ import { HomeChat, type HomeChatHandle } from "./HomeChat";
 import { Services } from "./Services";
 import { Guides, useGuideModal } from "./Guides";
 import { HospitalCta } from "./HospitalCta";
+import { analytics } from "../../services/analytics/analytics";
 
 export function HomePage() {
   useDocumentTitle("냥집사 — AI 반려묘 건강관리");
+  // 분석: 첫 화면이 열릴 때 한 번 (StrictMode 이중 실행에도 한 번)
+  const landed = useRef(false);
+  useEffect(() => {
+    if (landed.current) return;
+    landed.current = true;
+    analytics.track("landing_viewed");
+  }, []);
   return (
     <SiteLayout>
       <HomeSections />

@@ -22,6 +22,12 @@ pub struct Config {
     pub chat_ip_rpm: usize,
     /// 카카오맵 REST API 키 (길찾기: 도보·대중교통 경로 조회). 비어 있으면 `/api/route` 는 503
     pub kakao_rest_api_key: Option<String>,
+    /// 공유 링크(`/s/{code}`)에 쓰는 백엔드 공개 주소. 카카오톡 미리보기는 인터넷에서 열리는 주소여야 함
+    pub public_base_url: String,
+    /// 공유 링크를 열면 이동할 냥집사 화면(React) 주소
+    pub frontend_base_url: String,
+    /// 공유 카드 이미지 주소. 없으면 `{FRONTEND_BASE_URL}/assets/logo.png`
+    pub share_image_url: Option<String>,
     /// 회원 인증 (세션·메일·카카오 로그인)
     pub auth: AuthEnv,
 }
@@ -213,6 +219,13 @@ impl Config {
             chat_global_rpm: parsed("CHAT_GLOBAL_RPM", "10")?,
             chat_ip_rpm: parsed("CHAT_IP_RPM", "5")?,
             kakao_rest_api_key: optional("KAKAO_REST_API_KEY"),
+            public_base_url: optional("PUBLIC_BASE_URL")
+                .unwrap_or_else(|| "http://localhost:8080".into()),
+            // 비우면 회원 인증의 APP_BASE_URL(같은 프론트 주소)을 씀
+            frontend_base_url: optional("FRONTEND_BASE_URL")
+                .or_else(|| optional("APP_BASE_URL"))
+                .unwrap_or_else(|| "http://localhost:5173".into()),
+            share_image_url: optional("SHARE_IMAGE_URL"),
             auth: AuthEnv::from_env()?,
         })
     }
@@ -247,6 +260,9 @@ impl fmt::Debug for Config {
             .field("chat_global_rpm", &self.chat_global_rpm)
             .field("chat_ip_rpm", &self.chat_ip_rpm)
             .field("kakao_rest_api_key", &hidden(&self.kakao_rest_api_key))
+            .field("public_base_url", &self.public_base_url)
+            .field("frontend_base_url", &self.frontend_base_url)
+            .field("share_image_url", &self.share_image_url)
             .field("auth", &self.auth)
             .finish()
     }
@@ -288,6 +304,9 @@ mod tests {
             chat_global_rpm: 10,
             chat_ip_rpm: 5,
             kakao_rest_api_key: Some("kakao_secret".into()),
+            public_base_url: "http://localhost:8080".into(),
+            frontend_base_url: "http://localhost:5173".into(),
+            share_image_url: None,
             auth: AuthEnv {
                 smtp_username: Some("smtp_user_secret".into()),
                 smtp_password: Some("smtp_pw_secret".into()),

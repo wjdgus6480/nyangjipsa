@@ -102,6 +102,8 @@ pub struct NearbyQuery {
     pub limit: Option<i64>,
     /// true 면 병원(hospital_id 가 있는 항목)에 고양이 진료비(`fees`)를 붙입니다. 기본 false
     pub include_fees: Option<bool>,
+    /// true 면 고양이 친화병원 인증 병원만 (다른 업종은 빠짐). 기본 false
+    pub cat_friendly: Option<bool>,
 }
 
 /// 검색 결과 한 건 + (요청 시) 병원 진료비
@@ -152,9 +154,15 @@ async fn nearby(
         ),
     };
 
-    let places =
-        animal_business::find_nearby(&state.pool, center, radius_m, types.as_deref(), limit)
-            .await?;
+    let places = animal_business::find_nearby_filtered(
+        &state.pool,
+        center,
+        radius_m,
+        types.as_deref(),
+        limit,
+        q.cat_friendly.unwrap_or(false),
+    )
+    .await?;
 
     // 병원 진료비 (지도 목록·정보창에 표시)
     let mut fees = if q.include_fees.unwrap_or(false) {

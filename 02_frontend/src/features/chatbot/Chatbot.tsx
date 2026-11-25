@@ -14,6 +14,7 @@ import type { AssistantMessage, ChatMessage, Comparison, LatLon, PlaceCard } fro
 import type { FocusCard, MapBridge } from "./mapBridge";
 import { CloseIcon, PhoneIcon, PinIcon, ResetIcon, SendIcon } from "./icons";
 import { requestMyLocation } from "./geolocation";
+import { createConsultTracker } from "../../services/analytics/consult";
 
 const SEARCH_RADIUS_M = 3000; // 백엔드 CHAT_RADIUS_M 과 동일
 const FALLBACK_LIMIT = 5;
@@ -42,6 +43,8 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
   const inputRef = useRef<HTMLTextAreaElement>(null);
   const fabRef = useRef<HTMLButtonElement>(null);
   const controllerRef = useRef<AbortController | null>(null);
+  // 분석: 상담 시작·완료 (상담 문장은 보내지 않음). 지도 위 챗봇 = map, 단독 화면 = chatbot
+  const consult = useRef(createConsultTracker(isPage ? "chatbot" : "map"));
   // 비동기 콜백에서 최신 값을 읽기 위한 거울
   const latest = useRef({ busy, messages, myLocation, open });
   useLayoutEffect(() => {
@@ -134,6 +137,13 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
         msg.cards = msg.cards.concat(extra);
       }
       if (controller !== controllerRef.current) return;
+      consult.current.onReply({
+        hospitals: msg.cards.length,
+        places: 0,
+        comparison: !!msg.comparison,
+        followUp: !!msg.question || msg.choices.length > 0,
+        fallback: msg.fallback,
+      });
       setMessages((ms) => [...ms, msg]);
       setLastRequest(null);
       setBusy(false);
@@ -160,6 +170,7 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
   const reset = () => {
     controllerRef.current?.abort();
     controllerRef.current = null;
+    consult.current.reset();
     setMessages([]);
     setLastRequest(null);
     setBusy(false);

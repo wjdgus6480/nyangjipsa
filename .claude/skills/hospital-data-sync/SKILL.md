@@ -20,6 +20,7 @@ description: 냥집사(동물병원 지도 서비스)의 공공데이터 동기�
 ### 허용된 자동 수정 (유일)
 수집(`collect`, 또는 `SYNC_INTERVAL_HOURS` 자동 동기화)이 하는 일:
 1. 공공데이터 5개 업종 → `animal_businesses` upsert (신규 추가, 상태 갱신)
+   - 좌표가 없는 **영업 중 동물병원**만 카카오 주소 검색으로 좌표를 채움 (`geocode.rs`, 팀 결정 2026-11, `KAKAO_REST_API_KEY` 있을 때, 1회 최대 500곳). `location_source='geocoded'`. 공공데이터 좌표가 생기면 그것으로 바꾸고, 주소가 바뀌면 다시 변환. 실패는 30일 뒤 재시도. **기존 공공데이터 좌표는 바꾸지 않음**
 2. **폐업은 저장하지 않고 이미 있으면 삭제.** 병원이면 `hospitals`(와 FK CASCADE 로 `hospital_fees`)에서도 삭제
 3. 병원 → `hospitals` 파생 (`external_id = mng_no` 로 같은 행 갱신, 병원 id 유지)
 4. 진료비가 없는 (병원, 항목)에만 더미 가격 채우기 (`fees::fill_missing_dummy_fees`) — **기존 가격은 바뀌지 않음**
@@ -36,6 +37,8 @@ description: 냥집사(동물병원 지도 서비스)의 공공데이터 동기�
 | `region.rs` | 주소 → 시도/시군구 (통합 전 명칭으로 정규화) |
 | `bin/collect.rs` | 수동 수집 (`--incremental`, `--since`, `--max-pages`) |
 | `bin/import_fees.rs` | 진료비 xlsx 적재. 기본은 없는 가격만 채움 |
+| `geocode.rs`, `bin/geocode_hospitals.rs` | 좌표 없는 영업 중 병원 주소→좌표 (카카오 로컬), 수동 실행은 `geocode_hospitals [--dry-run]` |
+| `cat_friendly.rs`, `bin/import_cat_friendly.rs` | 고양이 친화병원 인증 목록(`05_data/03_고양이친화병원/*.csv`) → `cat_friendly_hospitals`. `hospitals` 는 읽기만 하고 매칭 결과만 저장. 목록 교체는 팀이 목록을 고쳤을 때만 |
 
 ## 자주 하는 작업
 

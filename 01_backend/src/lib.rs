@@ -7,13 +7,17 @@
 //! - `collector`: 수집한 병원(animal_businesses) → 서비스용 `hospitals` 파생
 //! - `sync`: 수집 → 병원 파생 → 더미 진료비 채우기, 주기 실행
 //! - `fees`: 지역 진료비 적재와 병원별 진료비
+//! - `geocode`: 좌표 없는 동물병원의 주소 → 좌표 (카카오 로컬)
 //! - `chat`: Gemini 챗봇
+//! - `share`: 병원 공유 링크·카카오톡 공유 카드
+//! - `cat_friendly`: 고양이 친화병원 인증 목록 적재·매칭
 //! - `auth`: 회원 인증 (이메일 가입·인증, 이메일/카카오 로그인, 세션, 비밀번호 재설정)
 //! - `src/bin/collect.rs`: 공공데이터 → DB 수집 실행 파일
 //! - `src/bin/create_admin.rs`: 관리자 지정 (서버 운영자 전용, 공개 API 없음)
 
 pub mod animal_business;
 pub mod auth;
+pub mod cat_friendly;
 pub mod chat;
 pub mod collector;
 pub mod config;
@@ -21,11 +25,13 @@ pub mod coordinate;
 pub mod db;
 pub mod error;
 pub mod fees;
+pub mod geocode;
 pub mod ingest;
 pub mod public_data;
 pub mod region;
 pub mod routes;
 pub mod routing;
+pub mod share;
 pub mod sync;
 
 use std::sync::Arc;
@@ -42,6 +48,8 @@ pub struct AppState {
     pub chat: Option<Arc<chat::ChatService>>,
     /// None 이면 길찾기 비활성화 (`/api/route` 는 503)
     pub routing: Option<Arc<routing::RouteService>>,
+    /// 병원 공유 (항상 켜짐, 주소 설정은 `with_share`)
+    pub share: Arc<share::ShareService>,
     /// 회원 인증 설정·메일러·카카오 로그인·요청 제한
     pub auth: Arc<auth::AuthService>,
 }
@@ -53,6 +61,7 @@ impl AppState {
             pool,
             chat: None,
             routing: None,
+            share: Arc::new(share::ShareService::default()),
             auth: Arc::new(auth::AuthService::new(
                 auth::AuthConfig::default(),
                 auth::mailer::Mailer::Disabled,
@@ -68,6 +77,11 @@ impl AppState {
 
     pub fn with_routing(mut self, routing: routing::RouteService) -> Self {
         self.routing = Some(Arc::new(routing));
+        self
+    }
+
+    pub fn with_share(mut self, share: share::ShareService) -> Self {
+        self.share = Arc::new(share);
         self
     }
 

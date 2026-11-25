@@ -11,6 +11,7 @@
 //! 폐업 업소는 저장하지 않고, 이미 있으면 삭제합니다.
 //! 병원(hospital)을 수집하면 서비스용 `hospitals` 갱신과 신규 병원의 더미 진료비 채우기도 함께 합니다.
 //! (기존 병원 id 와 진료비 가격은 바뀌지 않습니다.)
+//! KAKAO_REST_API_KEY 가 있으면 좌표가 없는 영업 중 병원의 좌표를 주소로 채운 뒤 병원을 갱신합니다.
 
 use std::time::Instant;
 
@@ -44,7 +45,11 @@ async fn main() -> anyhow::Result<()> {
     let client = PublicDataClient::new(&config.public_data_base_url, service_key)?;
 
     let started = Instant::now();
-    let report = sync::collect_and_derive(&client, &pool, &opts).await;
+    let geocoder = match &config.kakao_rest_api_key {
+        Some(k) => Some(nyangjipsa_api::geocode::Geocoder::new(k)?),
+        None => None,
+    };
+    let report = sync::collect_and_derive_with(&client, &pool, &opts, geocoder.as_ref()).await;
     report.log();
     tracing::info!("전체 소요 시간 {:.1}초", started.elapsed().as_secs_f64());
 
