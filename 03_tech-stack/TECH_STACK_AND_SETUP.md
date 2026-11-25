@@ -1016,6 +1016,7 @@ curl -s http://127.0.0.1:8080/health/db
 | POST | `/api/chat` | 고양이 병원·진료 안내 챗봇 (Gemini) — 키가 없으면 503 | ✅ |
 | POST | `/api/share` | 병원 공유 링크 + 카카오톡 공유 카드 내용 | ✅ |
 | GET | `/api/share/{code}` | 공유된 병원 요약 + 지도 주소 | ✅ |
+| GET | `/api/stats` | 랜딩 페이지 숫자 — 영업 중 병원·친화병원·24시 병원·시도·진료비 항목 수, 데이터 기준 시각 (10분 캐시) | ✅ |
 | GET | `/api/hospitals/emergency` | 응급 버튼 — 가까운 24시 병원 (이름 기준 추정) | ✅ |
 | GET | `/s/{code}` | 공유 링크 열기 — 미리보기(OG) HTML, 냥집사 지도의 그 병원으로 이동 | ✅ |
 
@@ -1201,6 +1202,14 @@ cargo run --bin geocode_hospitals                # 채우기 → hospitals 갱�
 - "고양이 친화병원만 보기" 필터와 **별개**인 응급 버튼용 API (팀 결정: 응급 버튼 따로). 이름에 "24시"·"24hr" 등이 들어간 영업 중 병원을 가까운 순으로
 - 진료 시간 데이터가 없어 **이름으로 추정**합니다. 응답의 `notice`(방문 전 전화 확인 안내)를 화면에 함께 보여 주세요
 - `/api/hospitals/nearby`·`/api/hospitals/{id}` 응답에도 `open_24h`(이름 기준 추정) 필드가 있습니다
+
+
+### 14-13. 랜딩 페이지 통계
+
+`GET /api/stats` → `{ hospitals, cat_friendly, open_24h, regions, fee_items, data_updated_at }`
+
+- 랜딩 페이지(`/intro`)의 숫자 영역에 씁니다. 집계만 하고 개인정보는 없습니다. 같은 값을 자주 읽어서 서버가 10분간 캐시합니다
+- `open_24h` 는 이름 기준 추정, `data_updated_at` 은 공공데이터 마지막 수집 시각(한국 시간)
 
 ---
 

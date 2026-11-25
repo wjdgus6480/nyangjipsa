@@ -75,15 +75,29 @@ export interface HospitalOut {
   lat: number;
   lon: number;
   distance_m: number;
+  /** 고양이 친화병원 인증(ISFM 등) */
+  cat_friendly?: boolean;
+  /** 이름 기준 24시 병원 추정 */
+  open_24h?: boolean;
   fees?: Fee[];
 }
 
-/** GET /api/hospitals/nearby 응답 */
+/** GET /api/hospitals/nearby 응답 (routes/hospitals.rs NearbyResponse) */
 export interface HospitalsNearbyResponse {
-  center: Coordinate;
   radius_m: number;
   count: number;
-  items: HospitalOut[];
+  hospitals: HospitalOut[];
+}
+
+/** GET /api/stats 응답 (routes/stats.rs ServiceStats) — 랜딩 페이지 숫자 */
+export interface ServiceStats {
+  hospitals: number;
+  cat_friendly: number;
+  open_24h: number;
+  regions: number;
+  fee_items: number;
+  /** 공공데이터 마지막 수집 시각 (RFC 3339) */
+  data_updated_at: string | null;
 }
 
 /** GET /api/hospitals/{id} 응답 (routes/hospitals.rs HospitalDetail) */
