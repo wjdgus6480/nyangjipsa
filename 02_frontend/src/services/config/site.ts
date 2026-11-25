@@ -7,6 +7,17 @@ export const ROUTES = {
   map: "/map",
   /** 챗봇 단독 화면 (기존 map-poc/chat.html) */
   chat: "/chat",
+  // 회원 (메일 링크·소셜 로그인 후 이동 주소는 백엔드와 같아야 함: 01_backend/src/auth/mod.rs, routes/auth.rs)
+  login: "/login",
+  signup: "/signup",
+  signupCheckEmail: "/signup/check-email",
+  verifyEmail: "/verify-email",
+  forgotPassword: "/forgot-password",
+  resetPassword: "/reset-password",
+  socialComplete: "/signup/social",
+  socialDone: "/auth/social/done",
+  me: "/me",
+  withdraw: "/me/withdraw",
 } as const;
 
 export const SITE = {

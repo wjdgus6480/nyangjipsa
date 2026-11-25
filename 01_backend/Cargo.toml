@@ -21,15 +21,40 @@ sqlx = { version = "0.9", default-features = false, features = [
     "macros",
     "migrate",
     "derive",
+    "uuid",
+    "chrono",
 ] }
 
 # 공공데이터 API 호출 (rustls TLS: sqlx와 같은 aws-lc-rs 암호화 구현 사용)
+# form: 카카오 로그인 토큰 교환(application/x-www-form-urlencoded)
 reqwest = { version = "0.13", default-features = false, features = [
     "rustls",
     "json",
     "query",
+    "form",
     "charset",
     "http2",
+] }
+
+# 회원 인증: 비밀번호 Argon2id, 토큰 SHA-256 해시·base64url, 사용자 id UUID, 시각
+argon2 = "0.5"
+# OS 난수(OsRng): 솔트와 세션·인증 토큰 생성
+password-hash = { version = "0.5", features = ["getrandom"] }
+sha2 = "0.10"
+base64 = "0.22"
+uuid = { version = "1", features = ["serde"] }
+chrono = { version = "0.4", default-features = false, features = ["clock", "serde", "std"] }
+
+# 인증·비밀번호 재설정 메일 발송 (SMTP, rustls + aws-lc-rs: reqwest·sqlx 와 같은 TLS 구현)
+lettre = { version = "0.11", default-features = false, features = [
+    "builder",
+    "smtp-transport",
+    "pool",
+    "hostname",
+    "tokio1",
+    "tokio1-rustls",
+    "aws-lc-rs",
+    "rustls-platform-verifier",
 ] }
 
 # 직렬화

@@ -184,3 +184,78 @@ export interface ChatResponse {
 export interface ApiErrorBody {
   error: string;
 }
+
+// ---------- 회원 인증 (01_backend/src/routes/auth.rs, users.rs, auth/users.rs) ----------
+
+export type SocialProvider = "kakao" | "google";
+
+/** auth/users.rs UserOut */
+export interface AuthUser {
+  id: string;
+  email: string | null;
+  nickname: string | null;
+  role: "user" | "admin";
+  /** pending = 가입 절차 미완료 (이메일 인증 또는 소셜 가입 약관·이메일) */
+  status: "pending" | "active";
+  email_verified: boolean;
+  has_password: boolean;
+  /** 연결된 로그인 수단 */
+  providers: ("email" | SocialProvider)[];
+  /** pending 일 때 남은 절차 */
+  pending_step: "profile" | "email_verification" | null;
+  created_at: string;
+}
+
+export interface UserResponse {
+  user: AuthUser;
+}
+
+export interface MessageResponse {
+  message: string;
+}
+
+/** POST /api/auth/register — role 같은 필드는 보내지 않음 (서버가 거부) */
+export interface RegisterRequest {
+  email: string;
+  password: string;
+  password_confirm: string;
+  nickname?: string;
+  agree_terms: boolean;
+  agree_privacy: boolean;
+}
+
+export interface RegisterResponse {
+  status: "pending_verification";
+  email: string;
+  /** false 면 메일 발송 실패 → 재발송 안내 */
+  email_sent: boolean;
+}
+
+export interface LoginRequest {
+  email: string;
+  password: string;
+  remember: boolean;
+}
+
+export interface ResetPasswordRequest {
+  token: string;
+  password: string;
+  password_confirm: string;
+}
+
+export interface ChangePasswordRequest {
+  current_password: string;
+  new_password: string;
+  new_password_confirm: string;
+}
+
+export interface SocialCompleteRequest {
+  email?: string;
+  nickname?: string;
+  agree_terms: boolean;
+  agree_privacy: boolean;
+}
+
+export type SocialCompleteResponse =
+  | { status: "active"; user: AuthUser }
+  | { status: "pending_verification"; email: string; email_sent: boolean };

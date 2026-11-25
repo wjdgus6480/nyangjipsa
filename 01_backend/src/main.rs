@@ -72,6 +72,22 @@ async fn main() -> anyhow::Result<()> {
         None => tracing::info!("길찾기 꺼짐 (KAKAO_REST_API_KEY 없음)"),
     }
 
+    // 회원 인증 (운영에서 위험한 설정 — APP_BASE_URL 없음, MAIL_MODE=log 등 — 이면 시작하지 않음)
+    let auth = nyangjipsa_api::auth::AuthService::from_env(&config.auth, config.is_development())
+        .map_err(anyhow::Error::msg)
+        .context("회원 인증 설정 오류 (.env 확인)")?;
+    tracing::info!(
+        "회원 인증 켜짐 (프론트={}, 메일={}, 소셜 로그인={:?}, 쿠키 Secure={})",
+        auth.config.app_base_url,
+        auth.mailer.mode_name(),
+        auth.social
+            .iter()
+            .map(|c| c.provider().as_str())
+            .collect::<Vec<_>>(),
+        auth.config.cookie_secure
+    );
+    let state = state.with_auth(auth);
+
     let router = app(state, config.is_development());
 
     let addr = config.server_addr();

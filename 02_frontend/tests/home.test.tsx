@@ -42,16 +42,13 @@ describe("홈 화면", () => {
     expect(nav).not.toHaveClass("open");
   });
 
-  test("로그인 모달: 닫기 버튼 포커스, 제출하면 닫히고 토스트", () => {
+  // 회원 기능 구현으로 "준비 중" 모달 → 로그인 화면 링크로 바뀜 (모달 포커스 동작은 tests/auth.test.tsx 약관 모달에서 검사)
+  test("헤더 '로그인 / 회원가입' 은 로그인 화면으로 이동", () => {
     renderHome();
-    fireEvent.click(screen.getByRole("button", { name: "로그인 / 회원가입" }));
-    const dialog = screen.getByRole("dialog");
-    expect(within(dialog).getByRole("button", { name: "닫기" })).toHaveFocus();
-    fireEvent.submit(dialog.querySelector("form")!);
-    expect(screen.queryByRole("dialog")).toBeNull();
-    const toast = document.getElementById("toast")!;
-    expect(toast).toHaveTextContent("회원 기능은 준비 중이에요");
-    expect(toast).toHaveClass("show");
+    const link = screen.getByRole("link", { name: "로그인 / 회원가입" });
+    expect(link).toHaveAttribute("href", "/login");
+    fireEvent.click(link);
+    expect(screen.getByRole("heading", { level: 1, name: "로그인" })).toBeInTheDocument();
   });
 
   test("푸터 문서 모달은 Esc·배경 클릭으로 닫힌다", () => {
