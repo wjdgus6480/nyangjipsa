@@ -56,7 +56,6 @@ describe("랜딩 페이지", () => {
     expect(titles).toEqual([
       "고양이는 처음이라,병원도 처음이니까.",
       "이런 순간, 막막하셨죠?",
-      "막막한 순간마다, 이렇게 도와드려요",
       "우리 동네 고양이 친화병원은?",
       "병원을 찾은 다음에도",
       "서툰 첫 집사도,좋은 집사가 될 수 있어요.",
@@ -101,6 +100,46 @@ describe("랜딩 페이지", () => {
     expect(go.getAttribute("href")).toContain("&hospital=1");
     fireEvent.click(go);
     expect(track).toHaveBeenCalledWith("hospital_clicked", { hospital_id: 1, click_type: "detail", page: "landing" });
+  });
+
+  test("고민 고르기: 고민을 고르면 짝이 되는 해결이 보이고, 발도장이 모이며, '밤' 고민은 밤 화면", async () => {
+    api();
+    const track = vi.spyOn(analytics, "track");
+    const { container } = renderLanding();
+    const tabs = within(screen.getByRole("tablist", { name: "고민 고르기" })).getAllByRole("tab");
+    expect(tabs.map((t) => t.getAttribute("aria-selected"))).toEqual(["true", "false", "false"]);
+    expect(screen.getByRole("tabpanel", { name: /어느 병원으로 가지/ })).toHaveTextContent("고양이를 위한 병원을 표시해요");
+    expect(screen.getByText(/확인한 고민 0\/3/)).toBeInTheDocument();
+
+    fireEvent.click(tabs[1]);
+    expect(screen.getByRole("tabpanel", { name: /진료비가 걱정돼요/ })).toHaveTextContent("가기 전에 진료비를 가늠해요");
+    expect(track).toHaveBeenCalledWith("landing_interaction", { action: "worry_selected", worry: "fee", from: "tabs", page: "landing" });
+
+    // 키보드: 오른쪽 화살표로 다음 고민 → 밤 화면
+    fireEvent.keyDown(tabs[1], { key: "ArrowRight" });
+    expect(tabs[2]).toHaveAttribute("aria-selected", "true");
+    expect(container.querySelector(".lp-worries")).toHaveClass("is-night");
+
+    // 첫 화면 바로가기로 남은 고민을 고르면 발도장 3개 완료 (한 번만 기록)
+    fireEvent.click(screen.getByRole("button", { name: "어느 병원으로 가지?" }));
+    expect(screen.getByText(/확인한 고민 3\/3/)).toBeInTheDocument();
+    expect(screen.getByText("발도장 3개를 다 모았어요!")).toBeInTheDocument();
+    expect(container.querySelector(".lp-worries")).not.toHaveClass("is-night");
+    fireEvent.click(tabs[2]);
+    expect(track.mock.calls.filter((c) => c[0] === "landing_interaction" && c[1]?.action === "stamps_completed")).toHaveLength(1);
+    expect(screen.getByText(/발도장 다 모았네요/)).toBeInTheDocument();
+  });
+
+  test("간호냥을 누르면 말풍선이 바뀌고, 처음 한 번만 기록", () => {
+    api();
+    const track = vi.spyOn(analytics, "track");
+    renderLanding();
+    const cat = screen.getByRole("button", { name: "간호냥 쓰다듬기" });
+    expect(screen.getByText("안녕하세요, 처음 오셨죠?")).toBeInTheDocument();
+    fireEvent.click(cat);
+    expect(screen.getByText("골골… 기분 좋아요!")).toBeInTheDocument();
+    fireEvent.click(cat);
+    expect(track.mock.calls.filter((c) => c[0] === "landing_interaction" && c[1]?.action === "mascot_pet")).toHaveLength(1);
   });
 
   test("API 가 실패해도 화면은 그대로 (숫자 없이 문구만)", async () => {
