@@ -344,31 +344,28 @@ async fn load_amplitude(
 ) -> Result<AmplitudeData, String> {
     let empty = Segmentation::default();
     let mut metrics = Vec::new();
-    // 이벤트마다 현재·이전 기간(+ 오늘 보기일 때 그래프용 앞 기간)을 동시에 요청 (Amplitude 동시 요청 상한 5 이하)
+    // 이벤트마다 현재·이전 기간(+ 오늘 보기일 때 그래프용 앞 기간)을 차례로 요청.
+    // 무료 플랜은 동시 조회 "비용" 상한이 낮아(90일 조회 하나가 수백) 동시에 보내면 429 가 남
     for event in std::iter::once(ACTIVE_EVENT).chain(FUNNEL_EVENTS) {
-        let extra = async {
-            if p.chart_start < p.prev_start {
-                client
-                    .segmentation(
-                        event,
-                        Metric::Uniques,
-                        p.chart_start,
-                        p.prev_start - Days::new(1),
-                        None,
-                    )
-                    .await
-                    .map(Some)
-            } else {
-                Ok(None)
-            }
+        let cur = client
+            .segmentation(event, Metric::Uniques, p.start, p.end, None)
+            .await?;
+        let prev = client
+            .segmentation(event, Metric::Uniques, p.prev_start, p.prev_end, None)
+            .await?;
+        let extra = if p.chart_start < p.prev_start {
+            client
+                .segmentation(
+                    event,
+                    Metric::Uniques,
+                    p.chart_start,
+                    p.prev_start - Days::new(1),
+                    None,
+                )
+                .await?
+        } else {
+            empty.clone()
         };
-        let (cur, prev, extra) = tokio::join!(
-            client.segmentation(event, Metric::Uniques, p.start, p.end, None),
-            client.segmentation(event, Metric::Uniques, p.prev_start, p.prev_end, None),
-            extra,
-        );
-        let (cur, prev, extra) = (cur?, prev?, extra?);
-        let extra = extra.unwrap_or_else(|| empty.clone());
         metrics.push(MetricSeries {
             key: if event == ACTIVE_EVENT {
                 "active_users".into()
@@ -381,25 +378,45 @@ async fn load_amplitude(
         });
     }
 
-    let (fun_cur, fun_prev, hospitals, sources) = tokio::join!(
-        client.funnel(&FUNNEL_EVENTS, p.start, p.end),
-        client.funnel(&FUNNEL_EVENTS, p.prev_start, p.prev_end),
-        client.segmentation(
+    // 순서 퍼널은 데이터가 없는 단계부터 뒤는 모두 0 이므로, 데이터가 있는 앞 단계까지만 조회
+    let reach = FUNNEL_EVENTS
+        .iter()
+        .take_while(|ev| {
+            metrics
+                .iter()
+                .find(|m| m.key == **ev)
+                .is_some_and(|m| m.current > 0.0 || m.previous > 0.0)
+        })
+        .count();
+    let (mut fun_cur, mut fun_prev) = if reach == 0 {
+        (Vec::new(), Vec::new())
+    } else {
+        let steps = &FUNNEL_EVENTS[..reach];
+        (
+            client.funnel(steps, p.start, p.end).await?,
+            client.funnel(steps, p.prev_start, p.prev_end).await?,
+        )
+    };
+    fun_cur.resize(FUNNEL_EVENTS.len(), 0.0);
+    fun_prev.resize(FUNNEL_EVENTS.len(), 0.0);
+    let hospitals = client
+        .segmentation(
             "hospital_clicked",
             Metric::Totals,
             p.start,
             p.end,
-            Some("hospital_id")
-        ),
-        client.segmentation(
+            Some("hospital_id"),
+        )
+        .await;
+    let sources = client
+        .segmentation(
             "landing_viewed",
             Metric::Uniques,
             p.start,
             p.end,
-            Some("utm_source")
-        ),
-    );
-    let (fun_cur, fun_prev) = (fun_cur?, fun_prev?);
+            Some("utm_source"),
+        )
+        .await;
     let funnel = FUNNEL_EVENTS
         .iter()
         .enumerate()

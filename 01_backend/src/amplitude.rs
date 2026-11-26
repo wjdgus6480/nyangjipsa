@@ -68,14 +68,24 @@ impl AmplitudeClient {
     }
 
     async fn get(&self, path: &str, query: &[(&str, String)]) -> Result<Value, String> {
-        let res = self
-            .http
-            .get(format!("{}{path}", self.base_url))
-            .basic_auth(&self.api_key, Some(&self.secret_key))
-            .query(query)
-            .send()
-            .await
-            .map_err(|e| format!("Amplitude 요청 실패: {e}"))?;
+        // 429(동시 조회 비용 초과)는 앞 조회가 끝나면 풀리므로 잠깐 기다렸다 다시 시도 (최대 3번)
+        let mut attempt = 0u64;
+        let res = loop {
+            let res = self
+                .http
+                .get(format!("{}{path}", self.base_url))
+                .basic_auth(&self.api_key, Some(&self.secret_key))
+                .query(query)
+                .send()
+                .await
+                .map_err(|e| format!("Amplitude 요청 실패: {e}"))?;
+            if res.status() == reqwest::StatusCode::TOO_MANY_REQUESTS && attempt < 3 {
+                attempt += 1;
+                tokio::time::sleep(Duration::from_millis(1500 * attempt)).await;
+                continue;
+            }
+            break res;
+        };
         let status = res.status();
         if !status.is_success() {
             // 응답 본문에 키가 들어가지 않지만, 길 수 있어 앞부분만 로그용으로 남김
@@ -119,13 +129,41 @@ impl AmplitudeClient {
         }
     }
 
-    /// 순서 퍼널. 단계별 누적 사용자 수 (첫 값 = 1단계 사용자)
+    /// 순서 퍼널. 단계별 누적 사용자 수 (첫 값 = 1단계 사용자).
+    /// 아직 들어온 적 없는 이벤트가 있으면 앞 단계부터 들어온 데까지만 계산하고 나머지는 0
+    /// (예: 방문은 있고 AI 상담은 아직 없음 → [방문자, 0, 0, 0, 0])
     pub async fn funnel(
         &self,
         events: &[&str],
         start: NaiveDate,
         end: NaiveDate,
     ) -> Result<Vec<f64>, String> {
+        for n in (1..=events.len()).rev() {
+            match self.funnel_steps(&events[..n], start, end).await {
+                Ok(mut v) => {
+                    v.resize(events.len(), 0.0);
+                    return Ok(v);
+                }
+                Err(e) if is_event_not_found(&e) => continue,
+                Err(e) => return Err(e),
+            }
+        }
+        Ok(vec![0.0; events.len()])
+    }
+
+    async fn funnel_steps(
+        &self,
+        events: &[&str],
+        start: NaiveDate,
+        end: NaiveDate,
+    ) -> Result<Vec<f64>, String> {
+        // 한 단계짜리 퍼널은 Amplitude 가 받지 않을 수 있어 이벤트 세그먼트(고유 사용자)로 대신
+        if events.len() == 1 {
+            let s = self
+                .segmentation(events[0], Metric::Uniques, start, end, None)
+                .await?;
+            return Ok(vec![s.totals.first().copied().unwrap_or(0.0)]);
+        }
         let mut query: Vec<(&str, String)> = events
             .iter()
             .map(|ev| ("e", json!({ "event_type": ev }).to_string()))
@@ -136,12 +174,8 @@ impl AmplitudeClient {
             ("mode", "ordered".to_string()),
             ("n", "active".to_string()),
         ]);
-        match self.get("/api/2/funnels", &query).await {
-            Ok(v) => parse_funnel(&v, events.len()),
-            // 단계 중 아직 들어온 적 없는 이벤트가 있으면 순서 퍼널 전체가 0
-            Err(e) if is_event_not_found(&e) => Ok(vec![0.0; events.len()]),
-            Err(e) => Err(e),
-        }
+        let v = self.get("/api/2/funnels", &query).await?;
+        parse_funnel(&v, events.len())
     }
 }
 
