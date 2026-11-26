@@ -198,3 +198,59 @@
 .map-page .rp-tl__sub { font-size:12px; color:var(--muted); }
 .map-page .rp-tl__go { flex:none; align-self:center; color:#b8c6d4; font-size:18px; padding-right:2px; }
 .map-page .rp-tl__btn:hover .rp-tl__go { color:var(--accent); }
+
+/* 위쪽 탭: 길찾기 · 가격 조회 (브랜드 헤더 아래 같은 색 띠) */
+.map-page .map-tabs { display:flex; gap:6px; padding:0 16px 12px; background:var(--primary); }
+.map-page .map-tabs button { flex:1; font:inherit; font-size:15px; font-weight:700; padding:9px 0; border:0; border-radius:10px; background:transparent; color:var(--fg); opacity:.72; cursor:pointer; transition: background .15s, opacity .15s; }
+.map-page .map-tabs button:hover { opacity:1; background:rgba(255,255,255,.35); }
+.map-page .map-tabs button.is-on { opacity:1; background:var(--fg); color:#fff; }
+.map-page .map-tabs button:focus-visible { outline:2px solid #fff; outline-offset:2px; }
+
+/* 가격 조회: 선택 막대 */
+.map-page .price-bar { display:flex; align-items:center; gap:8px; padding:10px 16px; border-bottom:1px solid var(--line); background:var(--secondary); font-size:13px; }
+.map-page .price-bar--hint { color:var(--muted); font-size:12.5px; line-height:1.5; }
+.map-page .price-bar__count { flex:1; color:var(--muted); font-weight:600; }
+.map-page .price-bar__count b { color:var(--fg); font-size:15px; }
+.map-page .price-bar__btn { font:inherit; font-size:13px; font-weight:700; padding:7px 12px; border:1px solid var(--primary-strong); border-radius:999px; background:var(--bg); color:var(--fg); cursor:pointer; }
+.map-page .price-bar__btn--main { background:var(--fg); border-color:var(--fg); color:#fff; }
+.map-page .price-bar__btn:disabled { opacity:.45; cursor:not-allowed; }
+.map-page .price-bar__btn:focus-visible, .map-page .price-bar__clear:focus-visible { outline:2px solid var(--primary-strong); outline-offset:2px; }
+.map-page .price-bar__clear { width:26px; height:26px; border:0; border-radius:50%; background:transparent; color:var(--muted); font-size:18px; line-height:1; cursor:pointer; }
+.map-page .price-bar__clear:hover { background:var(--bg); color:var(--fg); }
+
+/* 가격 조회: 목록 체크 */
+.map-page li { position:relative; }
+.map-page li .pick { position:absolute; top:10px; right:10px; display:grid; place-items:center; width:26px; height:26px; cursor:pointer; }
+.map-page li .pick input { width:18px; height:18px; accent-color:var(--fg); cursor:pointer; }
+.map-page li .pick input:disabled { cursor:not-allowed; }
+.map-page li:has(.pick) .name, .map-page li:has(.pick) .meta { padding-right:30px; }
+.map-page li.is-picked { border-color:var(--primary-strong); }
+
+/* 가격 조회: 지도 가격표 (고른 병원 위) */
+.map-page .price-tag { display:flex; flex-direction:column; gap:1px; padding:6px 10px; border-radius:10px; background:var(--fg); color:#fff; font-size:11.5px; line-height:1.3; white-space:nowrap; box-shadow:0 3px 10px rgba(27,42,65,.25); transform:translateX(-50%); position:relative; }
+.map-page .price-tag::after { content:""; position:absolute; left:50%; bottom:-6px; margin-left:-6px; border:6px solid transparent; border-bottom:0; border-top-color:var(--fg); }
+.map-page .price-tag__name { max-width:150px; overflow:hidden; text-overflow:ellipsis; opacity:.8; }
+.map-page .price-tag b { font-size:13px; color:var(--primary); }
+
+/* 가격 조회: 비교표 (지도 위에 띄움) */
+.map-page .price-compare { position:absolute; top:16px; left:16px; right:16px; max-width:760px; max-height:calc(100% - 32px); display:flex; flex-direction:column; background:var(--bg); border:1px solid var(--line); border-radius:16px; box-shadow:0 12px 32px rgba(27,42,65,.18); z-index:20; }
+.map-page .price-compare__head { display:flex; align-items:center; justify-content:space-between; padding:14px 16px 10px; border-bottom:1px solid var(--line); }
+.map-page .price-compare__head h2 { margin:0; font-size:17px; }
+.map-page .price-compare__close { width:30px; height:30px; border:0; border-radius:50%; background:transparent; color:var(--muted); font-size:22px; line-height:1; cursor:pointer; }
+.map-page .price-compare__close:hover { background:var(--surface); color:var(--fg); }
+.map-page .price-compare__scroll { overflow:auto; }
+.map-page .price-compare table { width:100%; border-collapse:collapse; font-size:13px; }
+.map-page .price-compare th, .map-page .price-compare td { padding:9px 12px; border-bottom:1px solid var(--line); text-align:right; vertical-align:top; }
+.map-page .price-compare thead th { position:sticky; top:0; background:var(--surface); text-align:center; min-width:120px; }
+.map-page .price-compare thead th:first-child, .map-page .price-compare tbody th { text-align:left; min-width:110px; }
+.map-page .price-compare tbody th { font-weight:600; background:var(--bg); }
+.map-page .price-compare .pc-name { display:block; font-weight:700; }
+.map-page .price-compare .pc-dist { display:block; font-size:11.5px; color:var(--muted); font-weight:500; }
+.map-page .price-compare .pc-remove { margin-top:4px; font:inherit; font-size:11px; padding:2px 8px; border:1px solid var(--line); border-radius:999px; background:var(--bg); color:var(--muted); cursor:pointer; }
+.map-page .price-compare .pc-cond { display:block; font-size:11px; color:var(--muted); font-weight:400; }
+.map-page .price-compare td.is-min { font-weight:800; color:var(--accent); }
+.map-page .price-compare__note { margin:0; padding:10px 16px 14px; font-size:11.5px; color:var(--muted); }
+@media (max-width: 760px) {
+  .map-page .map-tabs { padding:0 14px 10px; }
+  .map-page .price-compare { top:8px; left:8px; right:8px; max-height:calc(100% - 16px); }
+}
