@@ -20,6 +20,11 @@ export const ROUTES = {
   socialDone: "/auth/social/done",
   me: "/me",
   withdraw: "/me/withdraw",
+  // 관리자 (role=admin 만, 서버가 매 요청 확인)
+  admin: "/admin",
+  adminGrowth: "/admin/growth",
+  adminHospitals: "/admin/hospitals",
+  adminSettings: "/admin/settings",
 } as const;
 
 export const SITE = {

@@ -14,6 +14,9 @@ import { ForgotPasswordPage } from "../features/auth/ForgotPasswordPage";
 import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
 import { SocialCompletePage, SocialDonePage } from "../features/auth/SocialPages";
 import { MyPage, WithdrawPage } from "../features/auth/AccountPages";
+import { AdminLayout } from "../features/admin/AdminLayout";
+import { DashboardPage } from "../features/admin/DashboardPage";
+import { GrowthPage, HospitalsAdminPage, SettingsAdminPage } from "../features/admin/AdminPlaceholderPages";
 import { LegacyRedirect } from "./routes/LegacyRedirect";
 import { NotFound } from "./routes/NotFound";
 
@@ -38,6 +41,14 @@ export function App() {
         <Route path={ROUTES.socialDone} element={<SocialDonePage />} />
         <Route path={ROUTES.me} element={<MyPage />} />
         <Route path={ROUTES.withdraw} element={<WithdrawPage />} />
+
+        {/* 관리자 (role=admin 만. 서버도 /api/admin/* 에서 매 요청 확인) */}
+        <Route path={ROUTES.admin} element={<AdminLayout />}>
+          <Route index element={<DashboardPage />} />
+          <Route path={ROUTES.adminGrowth} element={<GrowthPage />} />
+          <Route path={ROUTES.adminHospitals} element={<HospitalsAdminPage />} />
+          <Route path={ROUTES.adminSettings} element={<SettingsAdminPage />} />
+        </Route>
 
         {/* 기존 정적 화면 주소 호환 (북마크·공유 링크). 쿼리(?focus=…)는 그대로 넘김 */}
         <Route path="/home" element={<LegacyRedirect to={ROUTES.home} />} />

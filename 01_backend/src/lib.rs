@@ -11,10 +11,12 @@
 //! - `chat`: Gemini 챗봇
 //! - `share`: 병원 공유 링크·카카오톡 공유 카드
 //! - `cat_friendly`: 고양이 친화병원 인증 목록 적재·매칭
+//! - `amplitude`: 관리자 대시보드용 Amplitude 조회 (읽기 전용)
 //! - `auth`: 회원 인증 (이메일 가입·인증, 이메일/카카오 로그인, 세션, 비밀번호 재설정)
 //! - `src/bin/collect.rs`: 공공데이터 → DB 수집 실행 파일
 //! - `src/bin/create_admin.rs`: 관리자 지정 (서버 운영자 전용, 공개 API 없음)
 
+pub mod amplitude;
 pub mod animal_business;
 pub mod auth;
 pub mod cat_friendly;
@@ -52,6 +54,8 @@ pub struct AppState {
     pub share: Arc<share::ShareService>,
     /// 회원 인증 설정·메일러·카카오 로그인·요청 제한
     pub auth: Arc<auth::AuthService>,
+    /// None 이면 관리자 대시보드의 Amplitude 영역이 "연결 안 됨"
+    pub amplitude: Option<Arc<amplitude::AmplitudeClient>>,
 }
 
 impl AppState {
@@ -67,6 +71,7 @@ impl AppState {
                 auth::mailer::Mailer::Disabled,
                 Vec::new(),
             )),
+            amplitude: None,
         }
     }
 
@@ -82,6 +87,11 @@ impl AppState {
 
     pub fn with_share(mut self, share: share::ShareService) -> Self {
         self.share = Arc::new(share);
+        self
+    }
+
+    pub fn with_amplitude(mut self, client: amplitude::AmplitudeClient) -> Self {
+        self.amplitude = Some(Arc::new(client));
         self
     }
 
