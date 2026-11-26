@@ -1,16 +1,19 @@
-// 관리자 대시보드 (/admin) — "지금 서비스가 잘 되고 있나?" 를 한 화면에서.
-// 위에서 아래로: 기간 선택 → 핵심 지표 5개(퍼널 순서) → 퍼널·유입 → 추세 그래프 → 병원 순위·운영 현황 → 데이터 연결 상태
+// 관리자 대시보드 (/admin) — "지금 서비스가 잘 되고 있나?" 를 한 화면에서. 노스스타 = 진료비 조회 사용자
+// 위에서 아래로: 기간 선택 → 핵심 지표 5개(퍼널 순서) → 퍼널·병원 순위 → 추세 그래프 → 운영 현황 → 데이터 연결 상태
+// 유입 채널·진료비 조회 퍼널·병원 이용·유지율은 성장 분석(/admin/growth)에서 자세히 봅니다 (여기와 겹치지 않게).
 // 모든 숫자는 /api/admin/dashboard (Amplitude + PostgreSQL) 에서만 옵니다. 데이터가 없으면 빈 그래프와 안내를 보여 줍니다.
-import { useEffect, useMemo, useState, type ReactNode } from "react";
+import { useEffect, useMemo, useState } from "react";
+import { Link } from "react-router";
+import { ROUTES } from "../../services/config/site";
 import { getAdminDashboard } from "../../services/api/admin";
 import { isAbortError } from "../../services/api/client";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import type { AdminDashboard, DashboardMetric, DashboardPeriodKey } from "../../types/api";
+import { Card, Delta, Segmented } from "./adminUi";
 import { BarChart, EmptyChart, Legend, LineChart } from "./charts";
 import {
   allowedIntervals,
   biggestDrop,
-  changeRate,
   chartWindow,
   COLORS,
   EVENT_INFO,
@@ -22,7 +25,6 @@ import {
   longDate,
   NORTH_STAR,
   PERIODS,
-  sourceLabel,
   toBuckets,
   type Interval,
 } from "./dashboardModel";
@@ -103,16 +105,13 @@ export function DashboardPage() {
           <KpiRow d={data} compareLabel={periodInfo.compare} />
           <div className="adm-grid adm-grid--wide-left">
             <FunnelCard d={data} />
-            <SourcesCard d={data} />
+            <TopHospitalsCard d={data} />
           </div>
           <div className="adm-grid">
-            <ActiveUsersCard d={data} interval={iv} />
             <NorthStarCard d={data} interval={iv} compareLabel={periodInfo.compare} />
+            <ActiveUsersCard d={data} interval={iv} />
           </div>
-          <div className="adm-grid adm-grid--wide-left">
-            <TopHospitalsCard d={data} />
-            <OperationsCard d={data} compareLabel={periodInfo.compare} />
-          </div>
+          <OperationsCard d={data} compareLabel={periodInfo.compare} />
           <StatusStrip d={data} />
         </div>
       )}
@@ -124,68 +123,6 @@ export function DashboardPage() {
 function compareSentence(key: DashboardPeriodKey): string {
   const label = PERIODS.find((p) => p.key === key)?.compare ?? "";
   return `${label}${key === "today" ? "와" : "과"} 비교`;
-}
-
-// ---------- 공통 조각 ----------
-
-function Segmented<T extends string>({
-  label,
-  value,
-  options,
-  onChange,
-}: {
-  label: string;
-  value: T;
-  options: { value: T; label: string; disabled?: boolean }[];
-  onChange: (v: T) => void;
-}) {
-  return (
-    <div className="adm-seg" role="radiogroup" aria-label={label}>
-      {options.map((o) => (
-        <button
-          key={o.value}
-          type="button"
-          role="radio"
-          aria-checked={value === o.value}
-          disabled={o.disabled}
-          title={o.disabled ? "기간이 짧아 이 단위는 쓸 수 없어요" : undefined}
-          className={value === o.value ? "is-on" : undefined}
-          onClick={() => onChange(o.value)}
-        >
-          {o.label}
-        </button>
-      ))}
-    </div>
-  );
-}
-
-function Card({ title, desc, action, children, className }: { title: string; desc?: string; action?: ReactNode; children: ReactNode; className?: string }) {
-  return (
-    <section className={"adm-card" + (className ? ` ${className}` : "")} aria-label={title}>
-      <div className="adm-card__head">
-        <div>
-          <h2>{title}</h2>
-          {desc && <p>{desc}</p>}
-        </div>
-        {action}
-      </div>
-      {children}
-    </section>
-  );
-}
-
-/** 증감 배지: ▲ 초록 / ▼ 빨강 / – 회색. 색만으로 구분하지 않도록 화살표와 글자를 함께 */
-export function Delta({ current, previous, compareLabel }: { current: number; previous: number; compareLabel: string }) {
-  const r = changeRate(current, previous);
-  if (r == null) return <span className="adm-delta is-new" title={`${compareLabel} 0`}>새로 생김</span>;
-  if (Math.abs(r) < 0.0005) return <span className="adm-delta is-flat">– 변화 없음</span>;
-  const up = r > 0;
-  return (
-    <span className={"adm-delta " + (up ? "is-up" : "is-down")} title={`${compareLabel} ${fmtNum(previous)}`}>
-      <span aria-hidden="true">{up ? "▲" : "▼"}</span>
-      <span className="sr-only">{up ? "증가" : "감소"}</span> {fmtPct(Math.abs(r))}
-    </span>
-  );
 }
 
 const metric = (d: AdminDashboard, key: string): DashboardMetric | undefined => d.amplitude.data?.metrics.find((m) => m.key === key);
@@ -267,7 +204,7 @@ function FunnelCard({ d }: { d: AdminDashboard }) {
   const nsRow = rows.find((r) => r.key === NORTH_STAR);
   const worst = biggestDrop(rows);
   return (
-    <Card title="사용자 여정 퍼널" desc="방문부터 공유까지, 순서대로 진행한 사람 수와 단계별 전환율">
+    <Card title="사용자 여정 퍼널" desc="방문부터 병원 연결까지, 순서대로 진행한 사람 수와 단계별 전환율">
       {!d.amplitude.data ? (
         <EmptyChart>{notConnectedText(d)}</EmptyChart>
       ) : d.amplitude.data.funnel_error ? (
@@ -277,7 +214,7 @@ function FunnelCard({ d }: { d: AdminDashboard }) {
       ) : (
         <>
           <p className="adm-insight">
-            방문자 <b>100명 중 {fmtNum(Math.round((nsRow?.ofFirst ?? 0) * 1000) / 10)}명</b>이 병원까지 연결됐어요
+            방문자 <b>100명 중 {fmtNum(Math.round((nsRow?.ofFirst ?? 0) * 1000) / 10)}명</b>이 진료비까지 조회했어요
             {worst && worst.drop != null && worst.drop > 0 && (
               <>
                 {" "}· 가장 많이 빠지는 곳: <b>{rows[rows.indexOf(worst) - 1].label} → {worst.label}</b> ({fmtPct(worst.drop, 0)} 이탈)
@@ -310,40 +247,13 @@ function FunnelCard({ d }: { d: AdminDashboard }) {
               </li>
             ))}
           </ol>
-          {last && <p className="adm-foot">전체 전환율(방문 → 공유) {fmtPct(last.ofFirst)} · 순서대로 진행한 사람만 셉니다</p>}
+          {last && (
+            <p className="adm-foot">
+              전체 전환율(방문 → 병원 연결) {fmtPct(last.ofFirst)} · 순서대로 진행한 사람만 셉니다 ·{" "}
+              <Link to={ROUTES.adminGrowth}>진료비 조회 퍼널·유입 경로는 성장 분석에서</Link>
+            </p>
+          )}
         </>
-      )}
-    </Card>
-  );
-}
-
-function SourcesCard({ d }: { d: AdminDashboard }) {
-  const sources = d.amplitude.data?.sources ?? [];
-  const total = sources.reduce((s, x) => s + x.value, 0);
-  // 6개 넘으면 나머지는 "기타" 로 묶음
-  const shown = sources.length > 6 ? [...sources.slice(0, 5), { label: "__other", value: sources.slice(5).reduce((s, x) => s + x.value, 0) }] : sources;
-  return (
-    <Card title="어디서 왔나요?" desc="첫 화면 방문자의 유입 경로 (utm_source)">
-      {!d.amplitude.data ? (
-        <EmptyChart height={180}>{notConnectedText(d)}</EmptyChart>
-      ) : total === 0 ? (
-        <EmptyChart height={180}>이 기간에 방문 기록이 없어요</EmptyChart>
-      ) : (
-        <ul className="adm-hbars">
-          {shown.map((s) => (
-            <li key={s.label} title={`${fmtNum(s.value)}명`}>
-              <div className="adm-hbars__label">
-                <span>{s.label === "__other" ? "기타" : sourceLabel(s.label)}</span>
-                <span>
-                  <b>{fmtPct(s.value / total, 0)}</b> <span className="adm-muted">{fmtNum(s.value)}명</span>
-                </span>
-              </div>
-              <div className="adm-hbars__track">
-                <div className="adm-hbars__bar" style={{ width: `${(s.value / shown[0].value) * 100}%` }} />
-              </div>
-            </li>
-          ))}
-        </ul>
       )}
     </Card>
   );
@@ -382,16 +292,16 @@ function NorthStarCard({ d, interval, compareLabel }: { d: AdminDashboard; inter
   );
   return (
     <Card
-      title="병원 연결 추세 (노스스타)"
-      desc={`병원 상세·전화·길찾기를 누른 사람${interval === "day" ? "" : " (하루 평균)"}`}
+      title="진료비 조회 추세 (노스스타)"
+      desc={`지도 정보창·AI 비교표로 진료비를 확인한 사람${interval === "day" ? "" : " (하루 평균)"}`}
       action={series.length > 1 ? <Legend items={series} /> : undefined}
     >
       {!m ? (
         <EmptyChart>{notConnectedText(d)}</EmptyChart>
       ) : !hasAny(cur) && !hasAny(prev) ? (
-        <EmptyChart>이 기간에 병원 연결 기록이 없어요</EmptyChart>
+        <EmptyChart>이 기간에 진료비 조회 기록이 없어요</EmptyChart>
       ) : (
-        <LineChart series={series} unit="명" label="병원 연결 추세" />
+        <LineChart series={series} unit="명" label="진료비 조회 추세" />
       )}
     </Card>
   );

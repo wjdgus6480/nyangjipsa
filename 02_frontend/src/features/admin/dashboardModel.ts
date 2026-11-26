@@ -33,25 +33,18 @@ export const EVENT_INFO: Record<string, { label: string; help: string }> = {
   landing_viewed: { label: "방문자", help: "홈이나 랜딩 화면을 연 사람" },
   consult_started: { label: "AI 상담 시작", help: "AI 가 첫 질문에 답한 사람" },
   consult_completed: { label: "상담 완료", help: "병원·가격·답변 결과를 받은 사람" },
+  cost_viewed: { label: "진료비 조회", help: "지도 정보창이나 AI 비교표로 진료비를 확인한 사람" },
   hospital_clicked: { label: "병원 연결", help: "병원 상세·전화·길찾기를 누른 사람" },
   result_shared: { label: "카톡 공유", help: "병원 정보를 카카오톡으로 공유한 사람" },
+  // 진료비 조회 퍼널 (성장 분석)
+  session_start: { label: "서비스 방문", help: "냥집사를 연 사람 (방문 세션 시작)" },
+  fee_menu_viewed: { label: "진료비 메뉴 진입", help: "병원·진료비 지도 화면을 연 사람" },
+  fee_filter_selected: { label: "조회 조건 선택", help: "종류·반경·지역·내 위치를 고른 사람" },
 };
 
-export const NORTH_STAR = "hospital_clicked";
-export const KPI_KEYS = ["landing_viewed", "consult_started", "consult_completed", "hospital_clicked", "result_shared"] as const;
-
-const SOURCE_LABEL: Record<string, string> = {
-  direct: "직접 방문",
-  share: "카톡 공유 링크",
-  kakao: "카카오",
-  kakaotalk: "카카오톡",
-  naver: "네이버",
-  google: "구글",
-  instagram: "인스타그램",
-  facebook: "페이스북",
-  youtube: "유튜브",
-};
-export const sourceLabel = (s: string) => SOURCE_LABEL[s.toLowerCase()] ?? s;
+/** 노스스타: 진료비 조회 사용자 수 */
+export const NORTH_STAR = "cost_viewed";
+export const KPI_KEYS = ["landing_viewed", "consult_started", "consult_completed", "cost_viewed", "hospital_clicked"] as const;
 
 /**
  * 이전 기간 대비 증감률 (0.12 = +12%).

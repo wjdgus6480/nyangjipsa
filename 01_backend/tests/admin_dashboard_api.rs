@@ -52,3 +52,48 @@ async fn dashboard_is_admin_only_and_uses_real_db_counts(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
+
+#[sqlx::test]
+async fn growth_is_admin_only_validates_period_and_has_no_fake_data(pool: PgPool) {
+    let app = test_app(pool.clone());
+    register_verified(&app, "user@nyang.com").await;
+    register_verified(&app, "boss@nyang.com").await;
+
+    let r = send(&app, Req::new("GET", "/api/admin/growth")).await;
+    assert_eq!(r.status, StatusCode::UNAUTHORIZED);
+    let user = login(&app, "user@nyang.com", PW).await;
+    let r = send(&app, Req::new("GET", "/api/admin/growth").cookie(&user)).await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+
+    sqlx::query("UPDATE users SET role = 'admin' WHERE email = 'boss@nyang.com'")
+        .execute(&pool)
+        .await
+        .unwrap();
+    let boss = login(&app, "boss@nyang.com", PW).await;
+
+    let r = send(
+        &app,
+        Req::new("GET", "/api/admin/growth?period=1d").cookie(&boss),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["period"]["key"], "1d");
+    assert_eq!(r.body["period"]["unit"], "hour");
+    // Amplitude 키 없음 → 숫자 없이 안내만
+    assert_eq!(r.body["status"], "not_configured");
+    assert!(r.body["data"].is_null());
+
+    for bad in [
+        "period=90d",
+        "period=custom",
+        "period=custom&start=2020-01-01&end=2020-03-01",
+        "period=custom&start=2999-01-01&end=2999-01-02",
+    ] {
+        let r = send(
+            &app,
+            Req::new("GET", &format!("/api/admin/growth?{bad}")).cookie(&boss),
+        )
+        .await;
+        assert_eq!(r.status, StatusCode::BAD_REQUEST, "{bad}");
+    }
+}

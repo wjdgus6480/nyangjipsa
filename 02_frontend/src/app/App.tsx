@@ -21,7 +21,7 @@ const MapPage = lazy(() => import("../features/map/MapPage").then((m) => ({ defa
 const ChatPage = lazy(() => import("../features/chatbot/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AdminLayout = lazy(() => import("../features/admin/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const DashboardPage = lazy(() => import("../features/admin/DashboardPage").then((m) => ({ default: m.DashboardPage })));
-const GrowthPage = lazy(() => import("../features/admin/AdminPlaceholderPages").then((m) => ({ default: m.GrowthPage })));
+const GrowthPage = lazy(() => import("../features/admin/GrowthPage").then((m) => ({ default: m.GrowthPage })));
 const HospitalsAdminPage = lazy(() => import("../features/admin/AdminPlaceholderPages").then((m) => ({ default: m.HospitalsAdminPage })));
 const SettingsAdminPage = lazy(() => import("../features/admin/AdminPlaceholderPages").then((m) => ({ default: m.SettingsAdminPage })));
 

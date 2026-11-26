@@ -2,8 +2,10 @@
 // - consult_started: 한 대화에서 AI 가 첫 질문에 답했을 때 (한 번)
 // - consult_completed: 상담 결과가 나왔을 때 (한 번) = 병원·장소 목록이나 가격 비교가 나왔거나,
 //   AI 가 더 묻지 않고(추가 질문·선택지 없음) 답을 마쳤을 때
+// - cost_viewed: AI 답변에 진료비 비교표가 나왔을 때 (대화마다 한 번, surface = home/chatbot/map) — 진료비 조회 완료
 // 상담 문장(질문·답변 내용)은 보내지 않고, 결과 종류와 몇 번째 답인지만 보냅니다.
 import { analytics, type Analytics } from "./analytics";
+import { feeViewProps } from "./feeView";
 
 /** 답변 요약 (두 채팅 화면의 응답 형식을 맞춤) */
 export interface ReplySummary {
@@ -35,6 +37,7 @@ export function resultType(r: ReplySummary): "price" | "hospitals" | "places" | 
 export function createConsultTracker(surface: ConsultSurface, a: Analytics = analytics): ConsultTracker {
   let replies = 0;
   let completed = false;
+  let priceSeen = false;
   return {
     onReply(r) {
       replies += 1;
@@ -44,10 +47,15 @@ export function createConsultTracker(surface: ConsultSurface, a: Analytics = ana
         completed = true;
         a.track("consult_completed", { surface, result_type: type, reply_count: replies, fallback: r.fallback });
       }
+      if (r.comparison && !priceSeen) {
+        priceSeen = true;
+        a.track("cost_viewed", { surface, ...feeViewProps() });
+      }
     },
     reset() {
       replies = 0;
       completed = false;
+      priceSeen = false;
     },
   };
 }

@@ -1,5 +1,5 @@
 // 관리자 대시보드 그래프 (라이브러리 없이 SVG). 마우스·터치·키보드로 막대/점에 올리면 상세 수치를 보여 줍니다.
-// 색은 의미별로 고정: 현재 값 = 하늘(진한), 노스스타 = 네이비, 이전 기간 = 회색 점선.
+// 색은 의미별로 고정: 현재 값 = 하늘(진한), 노스스타(진료비 조회) = 네이비, 이전 기간·보조 값 = 점선.
 import { useEffect, useRef, useState, type ReactNode, type RefObject } from "react";
 import { COLORS, fmtNum, type Bucket } from "./dashboardModel";
 
@@ -261,6 +261,272 @@ export function LineChart({ series, unit, height = 220, label }: { series: LineS
           }}
         />
       )}
+    </div>
+  );
+}
+
+// ---------- 성장 분석용 (같은 축·툴팁·색 규칙) ----------
+
+export interface StackSeries {
+  name: string;
+  color: string;
+  values: number[];
+}
+
+/** 누적 막대 (예: 신규 + 재방문). 막대 위에 올리면 계열별 값과 합계 */
+export function StackedBarChart({ buckets, series, unit, height = 220, label }: { buckets: { label: string; range: string }[]; series: StackSeries[]; unit: string; height?: number; label: string }) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  const plotH = height - PAD.top - PAD.bottom;
+  const totals = buckets.map((_, i) => series.reduce((s, x) => s + (x.values[i] ?? 0), 0));
+  const ticks = niceTicks(Math.max(0, ...totals));
+  const top = ticks[ticks.length - 1];
+  const y = (v: number) => PAD.top + plotH - (v / top) * plotH;
+  const plotW = Math.max(0, width - PAD.left - PAD.right);
+  const band = buckets.length ? plotW / buckets.length : 0;
+  const barW = Math.max(2, Math.min(28, band * 0.62));
+  const every = labelEvery(buckets.length, plotW);
+
+  return (
+    <div ref={ref} className="adm-chart" onMouseLeave={() => setHover(null)}>
+      {width > 0 && (
+        <svg width={width} height={height} role="img" aria-label={label}>
+          <Axes ticks={ticks} y={y} width={width} plotH={plotH} />
+          {buckets.map((b, i) => {
+            const cx = PAD.left + band * i + band / 2;
+            let base = 0;
+            return (
+              <g key={b.range} opacity={hover == null || hover === i ? 1 : 0.45}>
+                {series.map((s) => {
+                  const v = s.values[i] ?? 0;
+                  const y0 = y(base + v);
+                  const h = y(base) - y0;
+                  base += v;
+                  return h > 0 ? <rect key={s.name} x={cx - barW / 2} y={y0} width={barW} height={Math.max(1, h)} fill={s.color} rx={1.5} /> : null;
+                })}
+                {i % every === 0 && (
+                  <text x={cx} y={height - 8} textAnchor="middle" className="adm-axis">
+                    {b.label}
+                  </text>
+                )}
+                <rect
+                  x={PAD.left + band * i}
+                  y={PAD.top}
+                  width={band}
+                  height={plotH}
+                  fill="transparent"
+                  tabIndex={0}
+                  aria-label={`${b.range} ${series.map((s) => `${s.name} ${fmtNum(s.values[i] ?? 0)}${unit}`).join(", ")}`}
+                  onMouseEnter={() => setHover(i)}
+                  onFocus={() => setHover(i)}
+                  onBlur={() => setHover(null)}
+                  onTouchStart={() => setHover(i)}
+                />
+              </g>
+            );
+          })}
+        </svg>
+      )}
+      {hover != null && buckets[hover] && (
+        <Tooltip
+          width={width}
+          tip={{
+            x: PAD.left + band * hover + band / 2,
+            y: y(totals[hover]) - 8,
+            title: buckets[hover].range,
+            rows: [
+              ...series.map((s) => ({ label: s.name, value: `${fmtNum(s.values[hover] ?? 0)}${unit}`, color: s.color })),
+              { label: "합계", value: `${fmtNum(totals[hover])}${unit}` },
+            ],
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+const pctTick = (r: number) => `${Math.round(r * 1000) / 10}%`;
+
+/**
+ * 선그래프 + 보조 축 선 (예: 진료비 조회 사용자 수(왼쪽, 명) + 조회 전환율(오른쪽, %, 점선)).
+ * 보조 값이 null 인 칸(방문자 0)은 선을 끊습니다.
+ */
+export function ComboLineChart({
+  buckets,
+  main,
+  side,
+  height = 240,
+  label,
+}: {
+  buckets: { label: string; range: string }[];
+  main: { name: string; color: string; values: number[]; unit: string };
+  side: { name: string; color: string; values: (number | null)[] };
+  height?: number;
+  label: string;
+}) {
+  const [ref, width] = useWidth<HTMLDivElement>();
+  const [hover, setHover] = useState<number | null>(null);
+  const pad = { ...PAD, right: 44 };
+  const n = buckets.length;
+  const plotH = height - pad.top - pad.bottom;
+  const ticks = niceTicks(Math.max(0, ...main.values));
+  const top = ticks[ticks.length - 1];
+  const y = (v: number) => pad.top + plotH - (v / top) * plotH;
+  const sideMax = Math.max(0, ...side.values.map((v) => v ?? 0));
+  const sTicks = niceTicks(Math.min(1, sideMax || 0.1) * 100).map((t) => t / 100);
+  const sTop = sTicks[sTicks.length - 1] || 1;
+  const ys = (v: number) => pad.top + plotH - (v / sTop) * plotH;
+  const plotW = Math.max(0, width - pad.left - pad.right);
+  const x = (i: number) => pad.left + (n <= 1 ? plotW / 2 : (plotW * i) / (n - 1));
+  const every = labelEvery(n, plotW);
+  const sidePath = side.values
+    .map((v, i) => (v == null ? null : { i, v }))
+    .reduce<string[]>((acc, p, idx, arr) => {
+      if (!p) return acc;
+      acc.push(`${idx > 0 && arr[idx - 1] ? "L" : "M"}${x(p.i)},${ys(p.v)}`);
+      return acc;
+    }, [])
+    .join(" ");
+  const pick = (clientX: number, el: SVGSVGElement) => {
+    const rel = clientX - el.getBoundingClientRect().left;
+    const i = n <= 1 ? 0 : Math.round(((rel - pad.left) / plotW) * (n - 1));
+    setHover(Math.min(n - 1, Math.max(0, i)));
+  };
+
+  return (
+    <div ref={ref} className="adm-chart" onMouseLeave={() => setHover(null)}>
+      {width > 0 && n > 0 && (
+        <svg
+          width={width}
+          height={height}
+          role="img"
+          aria-label={label}
+          tabIndex={0}
+          onMouseMove={(e) => pick(e.clientX, e.currentTarget)}
+          onTouchStart={(e) => pick(e.touches[0].clientX, e.currentTarget)}
+          onKeyDown={(e) => {
+            if (e.key === "ArrowRight") setHover((h) => Math.min(n - 1, (h ?? -1) + 1));
+            if (e.key === "ArrowLeft") setHover((h) => Math.max(0, (h ?? n) - 1));
+          }}
+          onBlur={() => setHover(null)}
+        >
+          <Axes ticks={ticks} y={y} width={width - (pad.right - PAD.right)} plotH={plotH} />
+          {sTicks.map((t) => (
+            <text key={t} x={width - pad.right + 8} y={ys(t)} dy="0.32em" className="adm-axis">
+              {pctTick(t)}
+            </text>
+          ))}
+          {buckets.map((b, i) =>
+            i % every === 0 ? (
+              <text key={b.range} x={x(i)} y={height - 8} textAnchor="middle" className="adm-axis">
+                {b.label}
+              </text>
+            ) : null,
+          )}
+          {hover != null && <line x1={x(hover)} x2={x(hover)} y1={pad.top} y2={pad.top + plotH} stroke={COLORS.axis} strokeOpacity={0.35} />}
+          <path d={sidePath} fill="none" stroke={side.color} strokeWidth={2} strokeDasharray="5 4" strokeLinejoin="round" strokeLinecap="round" />
+          <path
+            d={main.values.map((v, i) => `${i ? "L" : "M"}${x(i)},${y(v)}`).join(" ")}
+            fill="none"
+            stroke={main.color}
+            strokeWidth={2.5}
+            strokeLinejoin="round"
+            strokeLinecap="round"
+          />
+          {n === 1 && <circle cx={x(0)} cy={y(main.values[0] ?? 0)} r={4} fill={main.color} />}
+          {hover != null && (
+            <>
+              <circle cx={x(hover)} cy={y(main.values[hover] ?? 0)} r={4.5} fill={main.color} stroke="#fff" strokeWidth={2} />
+              {side.values[hover] != null && <circle cx={x(hover)} cy={ys(side.values[hover]!)} r={4.5} fill="#fff" stroke={side.color} strokeWidth={2} />}
+            </>
+          )}
+        </svg>
+      )}
+      {hover != null && buckets[hover] && (
+        <Tooltip
+          width={width}
+          tip={{
+            x: x(hover),
+            y: Math.min(y(main.values[hover] ?? 0), side.values[hover] != null ? ys(side.values[hover]!) : Infinity) - 8,
+            title: buckets[hover].range,
+            rows: [
+              { label: main.name, value: `${fmtNum(main.values[hover] ?? 0)}${main.unit}`, color: main.color },
+              { label: side.name, value: side.values[hover] == null ? "방문 없음" : pctTick(side.values[hover]!), color: side.color, dashed: true },
+            ],
+          }}
+        />
+      )}
+    </div>
+  );
+}
+
+/** 도넛 (비중). 가운데 합계, 옆에 범례(비율·수). 조각에 올리면 강조 */
+export function DonutChart({ items, unit, label, centerLabel }: { items: { key: string; name: string; value: number; color: string }[]; unit: string; label: string; centerLabel: string }) {
+  const [hover, setHover] = useState<string | null>(null);
+  const total = items.reduce((s, x) => s + x.value, 0);
+  const size = 168;
+  const r = 66;
+  const stroke = 24;
+  const c = 2 * Math.PI * r;
+  // 조각마다 길이와 시작 위치
+  const arcs = items.map((it, i) => {
+    const len = total ? (it.value / total) * c : 0;
+    const start = items.slice(0, i).reduce((s, x) => s + (total ? (x.value / total) * c : 0), 0);
+    return { it, len, start };
+  });
+  const shown = hover ? items.find((i) => i.key === hover) : null;
+  return (
+    <div className="adm-donut">
+      <svg width={size} height={size} viewBox={`0 0 ${size} ${size}`} role="img" aria-label={`${label}: ${items.map((i) => `${i.name} ${fmtNum(i.value)}${unit}`).join(", ")}`}>
+        <circle cx={size / 2} cy={size / 2} r={r} fill="none" stroke={COLORS.grid} strokeWidth={stroke} />
+        <g transform={`rotate(-90 ${size / 2} ${size / 2})`}>
+          {arcs.map(({ it, len, start }) => {
+            // 조각 사이 2px 틈 (조각이 하나면 틈 없음)
+            const gap = items.length > 1 ? Math.min(2, len / 2) : 0;
+            return (
+              <circle
+                key={it.key}
+                cx={size / 2}
+                cy={size / 2}
+                r={r}
+                fill="none"
+                stroke={it.color}
+                strokeWidth={hover === it.key ? stroke + 4 : stroke}
+                strokeDasharray={`${Math.max(0, len - gap)} ${c - Math.max(0, len - gap)}`}
+                strokeDashoffset={-start}
+                opacity={hover == null || hover === it.key ? 1 : 0.4}
+                onMouseEnter={() => setHover(it.key)}
+                onMouseLeave={() => setHover(null)}
+              />
+            );
+          })}
+        </g>
+        <text x="50%" y="46%" textAnchor="middle" className="adm-donut__total">
+          {fmtNum(shown ? shown.value : total)}
+          {unit}
+        </text>
+        <text x="50%" y="60%" textAnchor="middle" className="adm-axis">
+          {shown ? `${shown.name} ${Math.round((shown.value / total) * 1000) / 10}%` : centerLabel}
+        </text>
+      </svg>
+      <ul className="adm-donut__legend">
+        {items.map((it) => (
+          <li
+            key={it.key}
+            className={hover === it.key ? "is-on" : undefined}
+            onMouseEnter={() => setHover(it.key)}
+            onMouseLeave={() => setHover(null)}
+          >
+            <i style={{ background: it.color }} aria-hidden="true" />
+            <span>{it.name}</span>
+            <b>{total ? `${Math.round((it.value / total) * 1000) / 10}%` : "0%"}</b>
+            <span className="adm-muted">
+              {fmtNum(it.value)}
+              {unit}
+            </span>
+          </li>
+        ))}
+      </ul>
     </div>
   );
 }
