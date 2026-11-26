@@ -58,6 +58,7 @@ function onOpen() {
     .addItem('매주 월요일 자동 분석 + 리포트 켜기', 'createWeeklyTrigger')
     .addItem('자동 실행 끄기', 'deleteWeeklyTrigger')
     .addSeparator()
+    .addItem('설정 탭 정리 (값 유지)', 'rebuildSettings')
     .addItem('네이버 데이터랩 연결 테스트', 'testNaverDatalab')
     .addItem('NVIDIA API 연결 테스트', 'testNvidiaAPI')
     .addToUi();
@@ -65,16 +66,37 @@ function onOpen() {
 
 /* ---------------- 기본값 ---------------- */
 
-// 설정 탭에 없으면 추가하는 항목 [항목, 기본값, 설명]
-const DEFAULT_SETTINGS = [
-  ['받는 메일', '', '성과 리포트를 받을 메일 주소'],
-  ['데이터랩 기간(일)', 84, '2·4단계 검색 트렌드 조회 기간 (56 이상, 기본 84일 = 12주)'],
-  ['우선순위 상위 개수', 10, '2단계에서 "선정" 체크할 상위 키워드 수'],
-  ['콘텐츠 키워드 수', 1, '5단계에서 한 번에 콘텐츠를 만들 키워드 수 (NVIDIA 호출 = 키워드 수 × 형식 수)'],
-  ['콘텐츠 형식', 'FAQ,카드뉴스,릴스,SNS,커뮤니티', '5단계에서 만들 형식 (쉼표로 구분)'],
+// 설정 탭 구성. 문자열 하나짜리 배열 = 구역 제목, [항목, 기본값, 설명, 표시 형식] = 설정 항목
+// 숫자·비율은 탭에서 바꾸면 다음 실행부터 바로 적용됩니다 (비율은 30% 또는 0.3 어느 쪽으로 써도 됨)
+const SETTINGS_LAYOUT = [
+  ['■ 기본'],
+  ['받는 메일', '', '성과 리포트(6단계)를 받을 메일 주소'],
   ['냥집사 소개', '냥집사는 고양이 보호자가 주변 동물병원과 지역별 진료비를 비교해 볼 수 있는 서비스입니다.', '콘텐츠에 들어갈 서비스 설명 (사실만)'],
-  ['냥집사 주소', 'https://nyangjipsa.vercel.app', '콘텐츠 안내 링크'],
+  ['냥집사 주소', 'https://nyangjipsa.vercel.app', '콘텐츠에 넣을 안내 링크'],
+  ['■ 키워드 관심도 분석 (2·4단계, 네이버 데이터랩)'],
+  ['데이터랩 기간(일)', 84, '최근 며칠을 볼지 (63 이상, 84일 = 12주)'],
+  ['우선순위 상위 개수', 10, '"선정" 체크할 상위 키워드 수 → 3·4·5단계 대상'],
+  ['최소 데이터 충분도', 0.5, '값이 온 날 비율이 이보다 낮으면 "검색 적음" → 순위에서 뺌', '0%'],
+  ['급상승 기준 - 급상승 정도', 2, '최근 7일이 평소(직전 8주)보다 표준편차 몇 배 이상 높으면'],
+  ['급상승 기준 - 상승률', 0.3, '그리고 최근 4주 상대지수가 이전 4주보다 이만큼 이상 오르면 "급상승"', '0%'],
+  ['계절 지수 연도 수', 5, '계절 지수를 계산할 지난 연도 수'],
+  ['■ 우선순위 점수 비중 (합계 100%, 값이 없는 항목은 자동으로 빼고 다시 맞춤)'],
+  ['비중 - 월간 검색수', 0.3, '검색광고 월간 검색수 (키가 있을 때만)', '0%'],
+  ['비중 - 데이터 충분도', 0.2, '검색이 꾸준히 있는지', '0%'],
+  ['비중 - 상승률', 0.2, '최근 4주 상대지수 상승률', '0%'],
+  ['비중 - 급상승', 0.1, '최근 7일 급상승 정도', '0%'],
+  ['비중 - 서비스 연관성', 0.2, '냥집사 진료비·병원 찾기와 연결되는 정도 (1_키워드조사 탭)', '0%'],
+  ['■ 연관 키워드 (3단계)'],
+  ['연관 키워드 수', 15, '기준 키워드마다 보여 줄 연관 키워드 수'],
+  ['질문 제목 수', 10, '기준 키워드마다 모을 지식iN 질문 제목 수 (FAQ 참고용)'],
+  ['■ 콘텐츠 만들기 (5단계, NVIDIA)'],
+  ['콘텐츠 키워드 수', 1, '한 번에 콘텐츠를 만들 상위 키워드 수 (AI 호출 = 키워드 수 × 형식 수)'],
+  ['콘텐츠 형식', 'FAQ,카드뉴스,릴스,SNS,커뮤니티', '만들 형식 (쉼표로 구분)'],
+  ['콘텐츠 말투', '따뜻하고 차분한 존댓말, 보호자를 안심시키는 말투', 'AI 에게 알려 줄 말투'],
+  ['한 번 실행 최대 AI 호출', 10, '구글 6분 실행 제한 보호 (넘으면 다음 실행에서 이어서)'],
 ];
+// 설정 항목만 (구역 제목 제외)
+const DEFAULT_SETTINGS = SETTINGS_LAYOUT.filter(r => r.length > 1);
 
 // 1_키워드조사 머리글
 const KEYWORD_HEADER = ['사용', '분야', '키워드', '위험 등급', '서비스 연관성', '연결 진료 항목',
@@ -170,22 +192,73 @@ function step0_setup() {
   );
 }
 
-/** 설정 탭: 머리글이 없으면 맨 위에 넣고, 빠진 기본 항목만 아래에 추가 (기존 행은 그대로) */
+/**
+ * 설정 탭을 냥집사 구성(SETTINGS_LAYOUT)으로 다시 정리합니다.
+ * - 이미 입력된 냥집사 항목 값(받는 메일 등)은 그대로 옮기고, 없는 항목만 기본값
+ * - 옛 쇼핑 자동화 항목(검색어·수집 개수·정렬·우리 상품 특징 등)은 지웁니다
+ */
 function ensureSettings_(sh) {
-  if (sh.getLastRow() === 0 || String(sh.getRange('A1').getValue()).trim() !== '항목') {
-    if (sh.getLastRow() > 0) sh.insertRowBefore(1);
-    sh.getRange(1, 1, 1, 3).setValues([['항목', '값', '설명']]);
+  const keep = {};
+  if (sh.getLastRow() > 0) {
+    sh.getDataRange().getValues().forEach(r => {
+      const k = String(r[0]).trim();
+      if (k && String(r[1]).trim() !== '') keep[k] = r[1];
+    });
   }
-  styleHeader_(sh.getRange(1, 1, 1, 3));
-  const labels = sh.getDataRange().getValues().map(r => String(r[0]).trim());
-  DEFAULT_SETTINGS.forEach(item => {
-    if (labels.indexOf(item[0]) !== -1) return;
-    const v = item[0] === '받는 메일' ? (Session.getActiveUser().getEmail() || '') : item[1];
-    sh.getRange(sh.getLastRow() + 1, 1, 1, 3).setValues([[item[0], v, item[2]]]);
+  const rows = [['항목', '값', '설명']];
+  const formats = [];
+  const sections = [];
+  SETTINGS_LAYOUT.forEach(item => {
+    if (item.length === 1) {
+      sections.push(rows.length + 1);
+      rows.push([item[0], '', '']);
+      return;
+    }
+    let v = Object.prototype.hasOwnProperty.call(keep, item[0]) ? keep[item[0]] : item[1];
+    if (item[0] === '받는 메일' && v === '') v = Session.getActiveUser().getEmail() || '';
+    if (item[3]) formats.push([rows.length + 1, item[3]]);
+    rows.push([item[0], v, item[2]]);
   });
-  sh.setColumnWidth(1, 160);
-  sh.setColumnWidth(2, 360);
-  sh.setColumnWidth(3, 420);
+
+  sh.getDataRange().clearDataValidations();
+  sh.clear();
+  sh.getRange(1, 1, rows.length, 3).setValues(rows);
+  styleHeader_(sh.getRange(1, 1, 1, 3));
+  sections.forEach(r => {
+    sh.getRange(r, 1, 1, 3).merge().setFontWeight('bold').setBackground('#EEF7FC').setFontColor('#14365A');
+  });
+  formats.forEach(f => sh.getRange(f[0], 2).setNumberFormat(f[1]));
+  sh.getRange(2, 1, rows.length - 1, 1).setFontWeight('bold');
+  sh.getRange(2, 3, rows.length - 1, 1).setFontColor('#5B6B80');
+  sh.setFrozenRows(1);
+  sh.setColumnWidth(1, 220);
+  sh.setColumnWidth(2, 380);
+  sh.setColumnWidth(3, 520);
+}
+
+/** [설정 탭 정리] 메뉴: 값은 유지하고 냥집사 구성으로 다시 정리 */
+function rebuildSettings() {
+  const ss = SpreadsheetApp.getActive();
+  const sh = ss.getSheetByName(SHEET.SETTING) || ss.insertSheet(SHEET.SETTING, 0);
+  ensureSettings_(sh);
+  toast_('설정 탭을 냥집사 구성으로 정리했습니다 (입력한 값은 유지).');
+}
+
+/** 숫자 설정 (빈칸·문자면 기본값) */
+function settingNum_(name, fallback) {
+  const v = getSetting(name, fallback);
+  const n = typeof v === 'number' ? v : Number(String(v).replace(/[%,\s]/g, ''));
+  return isFinite(n) ? n : fallback;
+}
+
+/** 비율 설정: 0.3, 30%, 30 → 0.3 */
+function settingRate_(name, fallback) {
+  const v = getSetting(name, fallback);
+  if (typeof v === 'number') return v > 1 ? v / 100 : v;
+  const s = String(v).trim();
+  const n = Number(s.replace(/[%,\s]/g, ''));
+  if (!isFinite(n)) return fallback;
+  return s.indexOf('%') !== -1 || n > 1 ? n / 100 : n;
 }
 
 /** 탭이 없으면 만들고, 비어 있으면 머리글을 씀. 있는 탭의 내용은 건드리지 않음 */

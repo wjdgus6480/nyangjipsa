@@ -15,11 +15,14 @@ const STOPWORDS = [
   '고양이', '냥이', '냥', '우리', '저희', '혹시', '질문', '문의', '궁금', '궁금해요', '도와주세요', '있나요', '있을까요',
   '어떻게', '왜', '이유', '방법', '정말', '너무', '계속', '그리고', '근데', '같아요', '해요', '하나요', '인가요',
   '후기', '추천', '정보', '공유', '블로그', '오늘', '일상', '사진', '영상', '무료', '이벤트', '할인', '광고',
+  '궁금해', '궁금합니다', '없어', '없어요', '있어요', '맞나', '맞나요', '언제', '후에', '얼마', '어디', '해야', '하는',
+  '있는', '되나요', '될까요', '좋을까요', '알려주세요', '부탁드립니다', '안녕하세요',
 ];
-const RELATED_PER_KEYWORD = 15;
-const QUESTIONS_PER_KEYWORD = 10;
+// 개수는 설정 탭 '연관 키워드 수', '질문 제목 수'
 
 function step3_relatedKeywords() {
+  const RELATED_PER_KEYWORD = Math.max(1, settingNum_('연관 키워드 수', 15));
+  const QUESTIONS_PER_KEYWORD = Math.max(0, settingNum_('질문 제목 수', 10));
   const picked = selectedKeywords_();
   if (!picked.length) throw new Error('2_관심도분석에서 "선정" 체크된 키워드가 없습니다.');
   const useAd = hasSearchadKeys_();
@@ -46,6 +49,7 @@ function step3_relatedKeywords() {
       if (!useAd) {
         const blog = naverSearch_('blog', p.keyword, 50);
         topWords_(kin.concat(blog).map(it => it.title + ' ' + it.description), p.keyword)
+          .slice(0, RELATED_PER_KEYWORD)
           .forEach(w => rows.push([p.keyword, w[0], '검색 결과 제목·요약 단어 (연관 검색어 아님)', '', '', '', '', w[1] + '건']));
       }
     } catch (e) {
@@ -91,23 +95,28 @@ function naverSearch_(kind, query, display) {
   }));
 }
 
-/** 제목·요약에서 많이 나온 단어 (기준 키워드의 단어·불용어·숫자 제외) */
+/** 제목·요약에서 많이 나온 단어 (기준 키워드와 그 일부·불용어·숫자 제외) */
 function topWords_(texts, keyword) {
-  const own = keyword.toLowerCase().split(/\s+/);
+  const own = keyword.toLowerCase().split(/\s+/).filter(Boolean);
+  const joined = own.join('');
+  // 기준 키워드 자체(붙여 쓴 것 포함)나 그 일부(예: 고양이 → 고양)는 연관 단어가 아님
+  const isOwn = w => w === joined || own.some(o => o === w || o.indexOf(w) === 0 || w.indexOf(o) === 0 && w.length <= o.length + 1);
+  // 조사는 3글자 이상 단어에서만 뗌 (고양이 → 고양 처럼 잘린 말은 위 isOwn 으로 걸러짐)
+  const stripJosa = w => (w.length >= 3 ? w.replace(/(은|는|이|가|을|를|에|의|도|로|으로|와|과|랑|에서|까지|부터|이요|요)$/, '') : w);
   const freq = {};
   texts.forEach(t => {
     const words = new Set(
       String(t).toLowerCase()
         .split(/[\s,.\/()\[\]{}+·|_~!@#$%^&*=:;"'<>?…\-]+/)
-        .map(w => w.replace(/(은|는|이|가|을|를|에|의|도|로|으로|와|과|랑|에서|까지|부터|이요|요)$/, ''))
-        .filter(w => w.length >= 2 && !/^\d/.test(w) && STOPWORDS.indexOf(w) === -1 && own.indexOf(w) === -1)
+        .map(stripJosa)
+        .filter(w => w.length >= 2 && !/^\d/.test(w) && STOPWORDS.indexOf(w) === -1 && !isOwn(w))
     );
     words.forEach(w => { freq[w] = (freq[w] || 0) + 1; });
   });
   return Object.keys(freq)
     .map(w => [w, freq[w]])
     .sort((a, b) => b[1] - a[1])
-    .slice(0, RELATED_PER_KEYWORD);
+    .slice(0, 50);
 }
 
 /** 태그 · 특수문자 코드 정리 (기존 함수 유지) */

@@ -10,17 +10,27 @@
  * ============================================================
  */
 
-// 점수 가중치 (값이 없는 항목은 빼고 나머지로 다시 100% 맞춤)
+// 점수 비중·기준은 설정 탭에서 읽음 (값이 없는 항목은 빼고 나머지로 다시 100% 맞춤)
 // presence = 데이터 충분도(값이 온 날 비율). 데이터랩은 검색이 적은 날 값을 주지 않으므로 "검색이 꾸준히 있는지"의 실제 지표
-const INTEREST_WEIGHTS = { volume: 0.30, presence: 0.20, growth: 0.20, spike: 0.10, fit: 0.20 };
-// 데이터 충분도가 이보다 낮으면 "데이터 부족(검색이 적음)" → 점수 없음, 순위 맨 아래, 선정 안 함
-const MIN_PRESENCE = 0.5;
+function interestWeights_() {
+  return {
+    volume: settingRate_('비중 - 월간 검색수', 0.3),
+    presence: settingRate_('비중 - 데이터 충분도', 0.2),
+    growth: settingRate_('비중 - 상승률', 0.2),
+    spike: settingRate_('비중 - 급상승', 0.1),
+    fit: settingRate_('비중 - 서비스 연관성', 0.2),
+  };
+}
 
 function step2_rankInterest() {
   const kws = activeKeywords_();
   if (!kws.length) throw new Error('1_키워드조사에서 "사용" 체크된 키워드가 없습니다.');
-  const days = Math.max(63, Number(getSetting('데이터랩 기간(일)', 84)) || 84);
-  const topN = Math.max(1, Number(getSetting('우선순위 상위 개수', 10)) || 10);
+  const days = Math.max(63, settingNum_('데이터랩 기간(일)', 84));
+  const topN = Math.max(1, settingNum_('우선순위 상위 개수', 10));
+  const MIN_PRESENCE = settingRate_('최소 데이터 충분도', 0.5);
+  const RISE_S = settingNum_('급상승 기준 - 급상승 정도', 2);
+  const RISE_G = settingRate_('급상승 기준 - 상승률', 0.3);
+  const INTEREST_WEIGHTS = interestWeights_();
 
   const d = lastDays_(days);
   const series = datalabSeries_(kws.map(k => k.keyword), d.startStr, d.endStr, 'date');
@@ -47,7 +57,7 @@ function step2_rankInterest() {
   const pS = pct('s');
 
   rows.forEach(r => {
-    r.rising = r.s !== null && r.s >= 2 && r.g !== null && r.g >= 0.3 && r.q >= 0.8 && (r.vol === null || r.vol >= 100);
+    r.rising = r.s !== null && r.s >= RISE_S && r.g !== null && r.g >= RISE_G && r.q >= 0.8 && (r.vol === null || r.vol >= 100);
     if (r.q < MIN_PRESENCE) {
       r.score = null;
       r.trend = '데이터 부족(검색 적음)';
@@ -81,7 +91,7 @@ function step2_rankInterest() {
   // 쓰기
   const sh = resetSheet(SHEET.INTEREST);
   sh.getRange(1, 1).setValue('■ 키워드 관심도 · 우선순위 (' + d.startStr + ' ~ ' + d.endStr + ')').setFontWeight('bold').setFontSize(12);
-  sh.getRange(2, 1).setValue('상승률·급상승은 네이버 데이터랩 상대지수 기준(같은 키워드의 기간 비교)이며 실제 검색 건수가 아닙니다. 데이터 충분도 50% 미만은 검색이 적어 순위에서 뺍니다. 월간 검색수는 검색광고 값이 있을 때만 표시합니다.')
+  sh.getRange(2, 1).setValue('상승률·급상승은 네이버 데이터랩 상대지수 기준(같은 키워드의 기간 비교)이며 실제 검색 건수가 아닙니다. 데이터 충분도 ' + Math.round(MIN_PRESENCE * 100) + '% 미만은 검색이 적어 순위에서 뺍니다. 월간 검색수는 검색광고 값이 있을 때만 표시합니다.')
     .setFontColor('#5B6B80');
   const header = ['순위', '키워드', '분야', '위험 등급', '월간 검색수(검색광고)', '상대지수 상승률(4주)', '추세',
     '급상승 정도', '급상승', '데이터 충분도', '서비스 연관성', '우선순위 점수', '선정'];
