@@ -103,3 +103,53 @@
 .map-page .rp-steps { margin:0; padding-left:20px; font-size:13px; line-height:1.55; color:var(--fg); }
 .map-page .rp-note { margin:8px 0 0; font-size:11px; color:var(--muted); }
 .map-page .rp-kakao { display:inline-block; margin-top:10px; font-size:12px; font-weight:700; color:var(--accent); }
+
+/* 길찾기 선 모양 범례 (지도 선과 같은 모양: 도보 점선, 버스·지하철 테두리 + 가운데 흰 점선) */
+.map-page .route-panel ul.rp-legend { list-style:none; display:flex; flex-wrap:wrap; gap:12px; margin:10px 0 0; padding:0; overflow:visible; flex:none; background:none; font-size:12px; color:var(--muted); }
+.map-page .route-panel ul.rp-legend li { display:flex; align-items:center; gap:6px; padding:0; margin:0; border:0; background:none; cursor:default; }
+.map-page .rp-swatch { display:inline-block; width:28px; height:8px; border-radius:4px; position:relative; }
+.map-page .rp-swatch--walking { height:0; border-top:3px dotted currentColor; border-radius:0; }
+.map-page .rp-swatch--bus { background:currentColor; box-shadow:0 0 0 2px #0f5a30; }
+.map-page .rp-swatch--subway { background:currentColor; box-shadow:0 0 0 2px #173a66; height:10px; }
+.map-page .rp-swatch--bus::after, .map-page .rp-swatch--subway::after { content:""; position:absolute; left:3px; right:3px; top:50%; border-top:1.5px dashed #fff; transform:translateY(-50%); }
+
+/* 길찾기 출발·도착 입력 상자 — RouteEndpoints.tsx (파란 점 출발, 빨간 점 도착, 사이 점선) */
+.map-page .rp-ends { display:flex; align-items:stretch; gap:8px; }
+.map-page .rp-ends__rail { display:flex; flex-direction:column; align-items:center; padding:16px 0; width:14px; flex:none; }
+.map-page .rp-dot { width:10px; height:10px; border-radius:50%; border:2.5px solid; background:var(--bg); flex:none; }
+.map-page .rp-dot--from { border-color:#2f80ed; }
+.map-page .rp-dot--to { border-color:#e5484d; }
+.map-page .rp-rail-line { flex:1; width:0; border-left:2px dashed var(--line); margin:3px 0; min-height:14px; }
+.map-page .rp-ends__fields { flex:1; min-width:0; border:1px solid var(--line); border-radius:12px; background:var(--bg); overflow:visible; }
+.map-page .rp-field { position:relative; display:flex; align-items:center; gap:8px; width:100%; min-height:44px; padding:0 12px; border:0; background:none; font:inherit; font-size:14px; color:var(--fg); text-align:left; cursor:pointer; }
+.map-page .rp-field + .rp-field { border-top:1px solid var(--line); }
+.map-page button.rp-field:hover { background:var(--surface); }
+.map-page button.rp-field:focus-visible { outline:2px solid var(--primary-strong); outline-offset:-2px; border-radius:12px; }
+.map-page .rp-field__tag { flex:none; font-size:11px; font-weight:700; color:var(--muted); }
+.map-page .rp-field--from .rp-field__tag { color:#2f80ed; }
+.map-page .rp-field--to .rp-field__tag { color:#e5484d; }
+.map-page .rp-field__text { flex:1; min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; font-weight:600; }
+.map-page .rp-field.is-editing { flex-wrap:wrap; padding:6px 12px; cursor:default; background:var(--surface); }
+.map-page .rp-field__input { flex:1; min-width:0; font:inherit; font-size:14px; padding:6px 8px; border:1px solid var(--primary-strong); border-radius:8px; background:var(--bg); color:var(--fg); }
+.map-page .rp-field__input:focus { outline:2px solid var(--primary); outline-offset:0; }
+.map-page .rp-field__cancel { flex:none; border:0; background:none; font:inherit; font-size:12px; color:var(--muted); cursor:pointer; padding:4px; }
+.map-page .route-panel ul.rp-search { list-style:none; flex-basis:100%; margin:6px 0 2px; padding:4px; overflow:auto; max-height:240px; flex:none; width:100%; background:var(--bg); border:1px solid var(--line); border-radius:10px; box-shadow:0 6px 18px rgba(27,42,65,.12); }
+.map-page .route-panel ul.rp-search li { padding:0; margin:0; border:0; background:none; cursor:default; }
+.map-page .rp-search button { display:flex; flex-direction:column; align-items:flex-start; gap:2px; width:100%; text-align:left; border:0; border-radius:8px; background:none; padding:8px 10px; font:inherit; cursor:pointer; }
+.map-page .rp-search button:hover, .map-page .rp-search button:focus-visible { background:var(--secondary); outline:none; }
+.map-page .rp-search__name { font-size:13px; font-weight:700; color:var(--fg); }
+.map-page .rp-search__sub { font-size:11px; color:var(--muted); }
+.map-page .rp-search__msg { padding:8px 10px !important; font-size:12px; color:var(--muted); }
+.map-page .rp-ends__actions { display:flex; flex-direction:column; justify-content:space-around; flex:none; }
+.map-page .rp-icon-btn { width:32px; height:32px; border:0; border-radius:8px; background:none; font-size:20px; line-height:1; color:var(--fg); cursor:pointer; }
+.map-page .rp-icon-btn:hover { background:var(--surface); }
+.map-page .rp-icon-btn:focus-visible { outline:2px solid var(--primary-strong); }
+
+/* 지도 위 출발·도착 표시 */
+.route-end { display:flex; flex-direction:column; align-items:center; }
+.route-end span { display:block; padding:3px 8px; border-radius:999px; color:#fff; font-size:11px; font-weight:800; white-space:nowrap; box-shadow:0 2px 6px rgba(0,0,0,.25); border:2px solid #fff; }
+.route-end::after { content:""; width:2px; height:8px; background:currentColor; }
+.route-end--from { color:#2f80ed; }
+.route-end--from span { background:#2f80ed; }
+.route-end--to { color:#e5484d; }
+.route-end--to span { background:#e5484d; }

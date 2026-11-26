@@ -8,6 +8,7 @@ import type {
   NearbyPlacesQuery,
   NearbyPlacesResponse,
   PlacePointsResponse,
+  PlaceSearchResponse,
   RouteQuery,
   RouteResponse,
   ServiceStats,
@@ -46,3 +47,7 @@ export const getStats = (signal?: AbortSignal) => request<ServiceStats>("/api/st
 
 /** GET /api/route — 길찾기(도보·대중교통). 출발지 좌표는 길찾기 계산에만 쓰고 저장·분석에 쓰지 않습니다 */
 export const getRoute = (q: RouteQuery, signal?: AbortSignal) => request<RouteResponse>("/api/route", { query: { ...q }, signal });
+
+/** GET /api/search/places — 길찾기 출발·도착지 검색 (카카오 로컬). near 를 주면 그 근처를 먼저 보여 줌 */
+export const searchPlaces = (q: string, near?: { lat: number; lon: number } | null, signal?: AbortSignal) =>
+  request<PlaceSearchResponse>("/api/search/places", { query: { q, lat: near?.lat, lon: near?.lon }, signal });

@@ -41,6 +41,14 @@ fn walk_body() -> Value {
     }})
 }
 
+fn search_body() -> Value {
+    json!({ "documents": [
+        { "place_name": "서면역 부산1호선", "address_name": "부산 부산진구 부전동 573-1", "road_address_name": "부산 부산진구 중앙대로 지하 730",
+          "category_name": "교통,수송 > 지하철,전철 > 부산1호선", "x": "129.059173", "y": "35.157773" },
+        { "place_name": "좌표없는곳", "address_name": "어딘가", "road_address_name": "", "category_name": "기타" }
+    ]})
+}
+
 fn transit_body() -> Value {
     json!({ "status": "OK", "properties": { "total": 1, "landingURL": "https://map.kakao.com/t" },
         "routes": [{ "properties": { "type": "BUS", "totalDistance": 1803, "totalTime": 960, "transfers": 0, "fare": { "value": 1500 } },
@@ -104,6 +112,16 @@ async fn start_mock_with(fail_status: u16, quota: bool, walk_fail: bool) -> (Str
                         return (StatusCode::INTERNAL_SERVER_ERROR, Json(json!({})));
                     }
                     handler(m, h, q, walk_body()).await
+                },
+            ),
+        )
+        .route(
+            "/v2/local/search/keyword.json",
+            get(
+                |State(m): State<Arc<Mock>>,
+                 h: HeaderMap,
+                 Query(q): Query<HashMap<String, String>>| async move {
+                    handler(m, h, q, search_body()).await
                 },
             ),
         )
@@ -300,4 +318,45 @@ async fn rejects_bad_input_and_limits_clients(pool: PgPool) {
     // 키가 없으면 503
     let (s, _) = get_json(&app(AppState::new(pool), false), &format!("/api/route?{Q}")).await;
     assert_eq!(s, StatusCode::SERVICE_UNAVAILABLE);
+}
+
+#[sqlx::test(migrations = "./migrations")]
+async fn search_places_returns_kakao_keyword_results(pool: PgPool) {
+    let (base, mock) = start_mock(0, false).await;
+    let r = router(pool, &base, 30);
+    let (status, v) = get_json(
+        &r,
+        "/api/search/places?q=%EC%84%9C%EB%A9%B4%EC%97%AD&lat=35.155&lon=129.06",
+    )
+    .await;
+    assert_eq!(status, StatusCode::OK, "{v}");
+    let places = v["places"].as_array().unwrap();
+    assert_eq!(places.len(), 1, "좌표 없는 항목은 뺌");
+    assert_eq!(places[0]["name"], "서면역 부산1호선");
+    assert_eq!(places[0]["address"], "부산 부산진구 중앙대로 지하 730");
+    assert_eq!(places[0]["category"], "부산1호선");
+    assert!((places[0]["lat"].as_f64().unwrap() - 35.157773).abs() < 1e-9);
+    let q = mock.last_query.lock().unwrap().clone();
+    assert_eq!(q.get("query").map(String::as_str), Some("서면역"));
+    assert_eq!(q.get("x").map(String::as_str), Some("129.060000"));
+    assert_eq!(
+        mock.last_auth.lock().unwrap().as_str(),
+        "KakaoAK test-kakao-key"
+    );
+
+    // 같은 검색은 캐시 (카카오 호출 수 그대로)
+    let before = mock.calls.load(Ordering::SeqCst);
+    get_json(
+        &r,
+        "/api/search/places?q=%EC%84%9C%EB%A9%B4%EC%97%AD&lat=35.155&lon=129.06",
+    )
+    .await;
+    assert_eq!(mock.calls.load(Ordering::SeqCst), before);
+
+    // 빈 검색어·너무 긴 검색어는 400
+    let (status, _) = get_json(&r, "/api/search/places?q=%20").await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
+    let long = "a".repeat(51);
+    let (status, _) = get_json(&r, &format!("/api/search/places?q={long}")).await;
+    assert_eq!(status, StatusCode::BAD_REQUEST);
 }

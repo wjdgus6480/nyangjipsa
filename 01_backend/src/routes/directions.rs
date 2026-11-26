@@ -6,14 +6,14 @@ use axum::{
     Json,
     extract::{Query, State},
 };
-use serde::Deserialize;
+use serde::{Deserialize, Serialize};
 
 use crate::{
     AppState,
     coordinate::Coordinate,
     error::AppError,
     routes::chat::ClientIp,
-    routing::{Mode, RouteResponse, RoutingError},
+    routing::{Mode, PlaceHit, RouteResponse, RoutingError},
 };
 
 #[derive(Debug, Deserialize)]
@@ -55,6 +55,55 @@ pub async fn route(
             Err(AppError::Unavailable(
                 "지금은 길찾기를 할 수 없어요. 잠시 후 다시 시도하거나 카카오맵에서 확인해 주세요"
                     .into(),
+            ))
+        }
+    }
+}
+
+#[derive(Debug, Deserialize)]
+pub struct SearchQuery {
+    /// 검색어 (장소·역·건물 이름, 1~50자)
+    pub q: String,
+    /// 이 근처를 먼저 보여 줌 (예: 도착지 병원 좌표). 생략 가능
+    pub lat: Option<f64>,
+    pub lon: Option<f64>,
+}
+
+#[derive(Debug, Serialize)]
+pub struct SearchResponse {
+    pub places: Vec<PlaceHit>,
+}
+
+/// `GET /api/search/places?q=서면역&lat=…&lon=…` — 길찾기 출발·도착지 검색 (카카오 로컬)
+pub async fn search_places(
+    State(state): State<AppState>,
+    ClientIp(ip): ClientIp,
+    Query(q): Query<SearchQuery>,
+) -> Result<Json<SearchResponse>, AppError> {
+    let service = state.routing.as_ref().ok_or_else(|| {
+        AppError::Unavailable("장소 검색이 설정되지 않았습니다 (KAKAO_REST_API_KEY 없음)".into())
+    })?;
+    let query = q.q.trim();
+    let len = query.chars().count();
+    if len == 0 || len > 50 {
+        return Err(AppError::BadRequest("검색어는 1~50자여야 합니다".into()));
+    }
+    let near = match (q.lat, q.lon) {
+        (Some(lat), Some(lon)) => {
+            Some(Coordinate::new(lon, lat).map_err(|e| AppError::BadRequest(e.to_string()))?)
+        }
+        _ => None,
+    };
+    if !service.allow_search(&ip) {
+        return Err(AppError::TooManyRequests);
+    }
+    match service.search_places(query, near).await {
+        Ok(places) => Ok(Json(SearchResponse { places })),
+        Err(e @ RoutingError::QuotaExceeded) => Err(AppError::Unavailable(e.to_string())),
+        Err(e) => {
+            tracing::warn!("장소 검색 실패: {e}");
+            Err(AppError::Unavailable(
+                "지금은 장소를 검색할 수 없어요. 잠시 후 다시 시도해 주세요".into(),
             ))
         }
     }

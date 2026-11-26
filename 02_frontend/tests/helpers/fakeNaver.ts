@@ -60,7 +60,7 @@ export function installFakeNaver() {
   const polylines: FakePolyline[] = [];
   class FakePolyline {
     setMap = vi.fn();
-    constructor(public opts: { path: LatLng[]; strokeColor?: string; strokeStyle?: string }) { polylines.push(this); }
+    constructor(public opts: { path: LatLng[]; strokeColor?: string; strokeStyle?: string; zIndex?: number }) { polylines.push(this); }
   }
   const Event = {
     addListener: vi.fn(() => { const l = {}; live.add(l); return l; }),

@@ -4,6 +4,7 @@
 //! - 카카오 REST API 키는 서버에만 둡니다 (`.env` 의 `KAKAO_REST_API_KEY`).
 //! - 무료 쿼터(도보·대중교통 각 하루 1,000건)를 아끼려고 같은 요청은 잠시 캐시합니다.
 //! - 대중교통 응답은 정류장·역 사이 구간만 들어 있고, 출발지→첫 정류장, 마지막 정류장→도착지 도보는 없습니다.
+//! - 길찾기 출발·도착지 검색: 카카오 로컬 키워드 검색 (`search_places`). 검색어는 장소 이름만 보내고 저장하지 않습니다.
 
 use std::{
     collections::HashMap,
@@ -177,12 +178,30 @@ pub enum RoutingError {
     Upstream(String),
 }
 
+/// 장소 검색 결과 한 건 (길찾기 출발·도착지 후보)
+#[derive(Debug, Clone, Serialize)]
+pub struct PlaceHit {
+    pub name: String,
+    /// 도로명 주소 (없으면 지번)
+    pub address: String,
+    /// 카카오 분류 마지막 단계 (예: 지하철역, 동물병원)
+    pub category: String,
+    pub lat: f64,
+    pub lon: f64,
+}
+
+/// 장소 검색 결과 최대 개수
+pub const SEARCH_LIMIT: usize = 8;
+
 pub struct RouteService {
     http: reqwest::Client,
     base_url: String,
     api_key: String,
     per_client: RateLimiter,
+    /// 장소 검색은 입력 중에 자주 불리므로 길찾기와 따로, 더 넉넉하게 제한
+    search_per_client: RateLimiter,
     cache: Mutex<HashMap<String, (Instant, RouteResponse)>>,
+    search_cache: Mutex<HashMap<String, (Instant, Vec<PlaceHit>)>>,
 }
 
 impl RouteService {
@@ -203,12 +222,74 @@ impl RouteService {
             base_url: base_url.into(),
             api_key: api_key.into(),
             per_client: RateLimiter::new(client_rpm),
+            search_per_client: RateLimiter::new(client_rpm.saturating_mul(3)),
             cache: Mutex::new(HashMap::new()),
+            search_cache: Mutex::new(HashMap::new()),
         })
     }
 
     pub fn allow_client(&self, client: &str) -> bool {
         self.per_client.allow(client)
+    }
+
+    pub fn allow_search(&self, client: &str) -> bool {
+        self.search_per_client.allow(client)
+    }
+
+    /// 장소 검색 (카카오 로컬 키워드 검색). `near` 가 있으면 그 근처를 먼저 보여 줍니다(정확도순 유지, 거리 가중).
+    /// 같은 검색은 10분간 캐시합니다.
+    pub async fn search_places(
+        &self,
+        query: &str,
+        near: Option<Coordinate>,
+    ) -> Result<Vec<PlaceHit>, RoutingError> {
+        let key = match near {
+            Some(c) => format!("{query}|{:.3},{:.3}", c.lon, c.lat),
+            None => query.to_owned(),
+        };
+        {
+            let map = self.search_cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((at, hits)) = map.get(&key)
+                && at.elapsed() < CACHE_TTL
+            {
+                return Ok(hits.clone());
+            }
+        }
+        let mut params: Vec<(&str, String)> = vec![
+            ("query", query.to_owned()),
+            ("size", SEARCH_LIMIT.to_string()),
+        ];
+        if let Some(c) = near {
+            params.push(("x", format!("{:.6}", c.lon)));
+            params.push(("y", format!("{:.6}", c.lat)));
+            params.push(("radius", "20000".into()));
+        }
+        let res = self
+            .http
+            .get(format!("{}/v2/local/search/keyword.json", self.base_url))
+            .header("Authorization", format!("KakaoAK {}", self.api_key))
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| RoutingError::Upstream(e.without_url().to_string()))?;
+        let status = res.status();
+        let body: Value = res.json().await.unwrap_or(Value::Null);
+        if status.as_u16() == 429 {
+            return Err(RoutingError::QuotaExceeded);
+        }
+        if !status.is_success() {
+            return Err(RoutingError::Upstream(format!("HTTP {status}")));
+        }
+        let hits = parse_places(&body);
+        let mut map = self.search_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if map.len() >= CACHE_MAX {
+            map.retain(|_, (at, _)| at.elapsed() < CACHE_TTL);
+            if map.len() >= CACHE_MAX {
+                map.clear();
+            }
+        }
+        map.insert(key, (Instant::now(), hits.clone()));
+        Ok(hits)
     }
 
     /// 길찾기. 대중교통은 정류장(역) 앞뒤 도보 시간을 붙입니다:
@@ -501,6 +582,36 @@ pub fn parse_transit(body: &Value) -> RouteResponse {
         response.message = Some(status_message("NO_RESULTS"));
     }
     response
+}
+
+/// 카카오 키워드 검색 응답 → 장소 목록 (좌표가 없는 항목은 뺌)
+pub fn parse_places(body: &Value) -> Vec<PlaceHit> {
+    body["documents"]
+        .as_array()
+        .map(|docs| {
+            docs.iter()
+                .filter_map(|d| {
+                    let lon = d["x"].as_str()?.parse::<f64>().ok()?;
+                    let lat = d["y"].as_str()?.parse::<f64>().ok()?;
+                    let road = d["road_address_name"].as_str().unwrap_or("");
+                    let lot = d["address_name"].as_str().unwrap_or("");
+                    Some(PlaceHit {
+                        name: d["place_name"].as_str()?.to_owned(),
+                        address: if road.is_empty() { lot } else { road }.to_owned(),
+                        category: d["category_name"]
+                            .as_str()
+                            .and_then(|c| c.rsplit('>').next())
+                            .unwrap_or("")
+                            .trim()
+                            .to_owned(),
+                        lat,
+                        lon,
+                    })
+                })
+                .take(SEARCH_LIMIT)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]

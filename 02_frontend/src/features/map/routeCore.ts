@@ -9,11 +9,47 @@ export const KIND_LABEL: Record<string, string> = {
   BUS_AND_SUBWAY: "버스+지하철",
 };
 
-/** 지도 선 색 (도보: 회색 점선, 버스: 초록, 지하철: 파랑) */
-export const LINE_STYLE: Record<string, { color: string; dashed: boolean }> = {
-  WALKING: { color: "#5b6b80", dashed: true },
-  BUS: { color: "#1f9d55", dashed: false },
-  SUBWAY: { color: "#2f6fb8", dashed: false },
+/** 선 한 겹 (네이버 Polyline 옵션) */
+export interface LineLayer {
+  color: string;
+  weight: number;
+  style: "solid" | "shortdash" | "shortdot" | "dash";
+  opacity: number;
+}
+
+/**
+ * 경로 종류별 선 모양. 색이 비슷해도 모양으로 구분되게 여러 겹으로 그립니다 (아래 겹부터).
+ * - 도보: 흰 테두리 + 회색 짧은 점선
+ * - 버스: 진한 테두리 + 초록 + 가운데 흰 점선
+ * - 지하철: 진한 테두리 + 파랑 + 가운데 흰 점선 (버스보다 굵게)
+ */
+export const LINE_STYLE: Record<RouteLine["kind"], { label: string; swatch: string; layers: LineLayer[] }> = {
+  WALKING: {
+    label: "도보",
+    swatch: "#5b6b80",
+    layers: [
+      { color: "#ffffff", weight: 8, style: "solid", opacity: 0.9 },
+      { color: "#5b6b80", weight: 4, style: "shortdot", opacity: 1 },
+    ],
+  },
+  BUS: {
+    label: "버스",
+    swatch: "#1f9d55",
+    layers: [
+      { color: "#0f5a30", weight: 11, style: "solid", opacity: 0.95 },
+      { color: "#1f9d55", weight: 7, style: "solid", opacity: 1 },
+      { color: "#ffffff", weight: 2, style: "dash", opacity: 0.95 },
+    ],
+  },
+  SUBWAY: {
+    label: "지하철",
+    swatch: "#2f6fb8",
+    layers: [
+      { color: "#173a66", weight: 13, style: "solid", opacity: 0.95 },
+      { color: "#2f6fb8", weight: 9, style: "solid", opacity: 1 },
+      { color: "#ffffff", weight: 2, style: "dash", opacity: 0.95 },
+    ],
+  },
 };
 
 /** 초 → "1시간 5분" / "12분" / "1분 미만" */
@@ -39,12 +75,15 @@ export interface RouteLine {
 
 const lineKind = (k: string): RouteLine["kind"] => (k === "BUS" ? "BUS" : k === "SUBWAY" ? "SUBWAY" : "WALKING");
 
-/** 지도에 그릴 선: 앞 도보 → 단계별 → 뒤 도보 (점이 2개 미만인 선은 뺌) */
+/**
+ * 지도에 그릴 선: 앞 도보 → 단계별 → 뒤 도보 (점이 2개 미만인 선은 뺌).
+ * 정류장 앞뒤 도보가 추정치(estimated: 직선)면 건물을 뚫고 지나가 보이므로 그리지 않습니다 (안내 문구에는 "추정"으로 표시).
+ */
 export function routeLines(r: RouteOption): RouteLine[] {
   const lines: RouteLine[] = [];
-  if (r.access_walk) lines.push({ kind: "WALKING", path: r.access_walk.path });
+  if (r.access_walk && !r.access_walk.estimated) lines.push({ kind: "WALKING", path: r.access_walk.path });
   for (const s of r.steps) lines.push({ kind: lineKind(s.kind), path: s.path });
-  if (r.egress_walk) lines.push({ kind: "WALKING", path: r.egress_walk.path });
+  if (r.egress_walk && !r.egress_walk.estimated) lines.push({ kind: "WALKING", path: r.egress_walk.path });
   return lines.filter((l) => l.path.length >= 2);
 }
 
@@ -64,4 +103,27 @@ export function stepText(s: RouteOption["steps"][number]): string {
     return `${KIND_LABEL[s.kind]} ${line} · ${stops} (${fmtDuration(s.time_s)})`;
   }
   return `${s.guidance || "걷기"} (${fmtDistance(s.distance_m)})`;
+}
+
+/** 길찾기 출발·도착지: 내 위치 / 고른 병원 / 검색한 장소 */
+export type Endpoint =
+  | { kind: "me" }
+  | { kind: "hospital" }
+  | { kind: "place"; name: string; address?: string; lat: number; lon: number };
+
+/** 입력 상자에 보이는 이름 */
+export function endpointLabel(e: Endpoint, hospitalName: string): string {
+  if (e.kind === "me") return "내 위치";
+  if (e.kind === "hospital") return hospitalName;
+  return e.name;
+}
+
+/** 좌표로 바꿈. 내 위치를 아직 모르면 null */
+export function resolveEndpoint(
+  e: Endpoint,
+  ctx: { me: { lat: number; lon: number } | null; hospital: { lat: number; lon: number } },
+): { lat: number; lon: number } | null {
+  if (e.kind === "me") return ctx.me;
+  if (e.kind === "hospital") return { lat: ctx.hospital.lat, lon: ctx.hospital.lon };
+  return { lat: e.lat, lon: e.lon };
 }

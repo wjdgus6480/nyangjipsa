@@ -25,7 +25,7 @@ import { HospitalMap, type RadiusOption, type RegionBarState } from "./hospitalM
 import { NAVER_AUTH_FAILED_MESSAGE, loadNaverMaps, onNaverAuthFailure } from "./naverLoader";
 import { RegionBar } from "./RegionBar";
 import { REGION_CONFIG } from "./regions/regionConfig";
-import { RoutePanel } from "./RoutePanel";
+import { RoutePanel, type RouteEnds } from "./RoutePanel";
 import type { RouteLine } from "./routeCore";
 import { requestMyLocation } from "../chatbot/geolocation";
 import type { LatLon } from "../chatbot/chatCore";
@@ -110,7 +110,7 @@ export function MapPage() {
     return true;
   }, []);
 
-  const drawRoute = useCallback((lines: RouteLine[]) => hmRef.current?.drawRoute(lines), []);
+  const drawRoute = useCallback((lines: RouteLine[], ends?: RouteEnds) => hmRef.current?.drawRoute(lines, ends), []);
 
   // 지도 생성/정리 (StrictMode 이중 실행·화면 재진입에도 인스턴스 하나만 유지)
   useEffect(() => {

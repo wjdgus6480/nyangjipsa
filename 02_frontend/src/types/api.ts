@@ -362,3 +362,17 @@ export interface RouteResponse {
   notices: string[];
   detail_index?: number;
 }
+
+/** GET /api/search/places 결과 한 건 (routing.rs PlaceHit) — 길찾기 출발·도착지 검색 */
+export interface PlaceHit {
+  name: string;
+  address: string;
+  category: string;
+  lat: number;
+  lon: number;
+}
+
+/** GET /api/search/places 응답 */
+export interface PlaceSearchResponse {
+  places: PlaceHit[];
+}
