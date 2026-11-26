@@ -598,6 +598,22 @@ async fn unknown_compare_item_from_ai_is_ignored(pool: PgPool) {
     assert!(j.get("price_comparison").is_none());
 }
 
+#[sqlx::test]
+async fn nearby_search_without_comparison_has_no_fees(pool: PgPool) {
+    seed_priced_hospitals(&pool).await;
+    let (url, _) = start_mock(200, &llm_json(true)).await;
+    let (_, j) = post_chat(
+        &chat_app(pool, &url, 10, 10),
+        json!({ "message": "내 주변 동물병원을 찾아줘", "lat": 37.5665, "lon": 126.9780 }),
+    )
+    .await;
+    let hospitals = j["hospitals"].as_array().unwrap();
+    assert!(!hospitals.is_empty());
+    // 가격 비교를 묻지 않았으면 진료비를 붙이지 않음
+    assert!(hospitals.iter().all(|h| h.get("fees").is_none()));
+    assert!(j.get("price_comparison").is_none());
+}
+
 // ---------- 건강 자료 검색(RAG)·질문 분류·응급 안전 규칙·호출 기록 ----------
 
 async fn seed_health(pool: &PgPool) {

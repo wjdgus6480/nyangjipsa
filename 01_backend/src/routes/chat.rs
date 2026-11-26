@@ -241,7 +241,10 @@ pub async fn chat(
                 } else {
                     CHAT_COMPARE_LIMIT
                 };
-                let found = find_nearby(&state.pool, center, CHAT_RADIUS_M, limit, true).await?;
+                // 진료비는 가격 비교를 물었을 때만 붙임 (그냥 근처 병원 찾기에는 가격을 보여 주지 않음)
+                let with_fees = !reply.compare_fee.is_empty();
+                let found =
+                    find_nearby(&state.pool, center, CHAT_RADIUS_M, limit, with_fees).await?;
                 if !reply.compare_fee.is_empty() {
                     price_comparison = Some(build_price_comparison(&reply.compare_fee, &found));
                 }

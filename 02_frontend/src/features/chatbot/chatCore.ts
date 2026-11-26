@@ -156,7 +156,7 @@ const num = (v: unknown): v is number => typeof v === "number" && Number.isFinit
 
 /**
  * 서버 응답의 병원·장소를 카드 한 가지 형태로 맞춥니다.
- * - hospitals: 병원 테이블 결과. fees 가 붙을 수 있음
+ * - hospitals: 병원 테이블 결과. 카드에는 가격을 넣지 않음 (가격은 가격 비교표에서만)
  * - places: 업종 테이블 결과. address_masked 면 좌표·전화가 없음(자택 영업 보호)
  */
 export function toCards(resp: { hospitals?: HospitalOut[] | null; places?: (ChatPlace | NearbyPlace)[] | null }): PlaceCard[] {
@@ -172,7 +172,7 @@ export function toCards(resp: { hospitals?: HospitalOut[] | null; places?: (Chat
       distance_m: h.distance_m,
       lat: h.lat,
       lon: h.lon,
-      fees: Array.isArray(h.fees) ? h.fees : [],
+      fees: [],
     });
   }
   for (const p of resp.places || []) cards.push(placeToCard(p));
