@@ -258,16 +258,32 @@ pub fn parse_segmentation(v: &Value) -> Result<Segmentation, String> {
     })
 }
 
+/// JSON 안에서 이름이 `key` 인 첫 값 (깊이 우선)
+fn find_key<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
+    match v {
+        Value::Object(m) => m
+            .get(key)
+            .or_else(|| m.values().find_map(|x| find_key(x, key))),
+        Value::Array(a) => a.iter().find_map(|x| find_key(x, key)),
+        _ => None,
+    }
+}
+
+/// 퍼널 응답에서 단계별 누적 사용자 수(`cumulativeRaw`)를 꺼냄.
+/// 응답 모양(`data` 가 배열/객체, 그룹별 2차원 배열)에 덜 민감하게 어디에 있든 찾습니다.
 pub fn parse_funnel(v: &Value, steps: usize) -> Result<Vec<f64>, String> {
-    let first = v
-        .get("data")
+    let raw = find_key(v, "cumulativeRaw")
         .and_then(Value::as_array)
-        .and_then(|a| a.first())
-        .ok_or("Amplitude 퍼널 응답에 data 가 없습니다")?;
-    let raw = first
-        .get("cumulativeRaw")
-        .and_then(Value::as_array)
-        .ok_or("Amplitude 퍼널 응답에 cumulativeRaw 가 없습니다")?;
+        .ok_or_else(|| {
+            // 다음에 원인을 바로 알 수 있게 응답 앞부분을 남김 (키·개인정보 없음)
+            let snippet: String = v.to_string().chars().take(300).collect();
+            format!("Amplitude 퍼널 응답에서 cumulativeRaw 를 찾지 못했습니다: {snippet}")
+        })?;
+    // 그룹별 [[...]] 이면 첫 그룹(전체)
+    let raw = match raw.first() {
+        Some(Value::Array(inner)) => inner,
+        _ => raw,
+    };
     let mut out: Vec<f64> = raw.iter().map(num).collect();
     out.resize(steps, 0.0);
     Ok(out)
@@ -320,5 +336,10 @@ mod tests {
         let v = json!({"data": [{"cumulativeRaw": [100, 40, 10]}]});
         assert_eq!(parse_funnel(&v, 4).unwrap(), vec![100.0, 40.0, 10.0, 0.0]);
         assert!(parse_funnel(&json!({}), 2).is_err());
+        // data 가 객체이거나 그룹별 2차원 배열이어도 읽음
+        let obj = json!({"data": {"cumulativeRaw": [5, 2]}});
+        assert_eq!(parse_funnel(&obj, 2).unwrap(), vec![5.0, 2.0]);
+        let nested = json!({"data": [{"meta": {}, "cumulativeRaw": [[7, 3]]}]});
+        assert_eq!(parse_funnel(&nested, 3).unwrap(), vec![7.0, 3.0, 0.0]);
     }
 }

@@ -426,6 +426,8 @@ export interface AdminDashboard {
     data: {
       metrics: DashboardMetric[];
       funnel: DashboardFunnelStep[];
+      /** 퍼널만 조회 실패 (나머지는 정상 표시) */
+      funnel_error?: string | null;
       /** utm_source 별 첫 화면 고유 사용자. direct = utm 없음 */
       sources: { label: string; value: number }[];
       top_hospitals: DashboardTopHospital[];
