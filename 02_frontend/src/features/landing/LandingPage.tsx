@@ -32,7 +32,7 @@ export function LandingPage() {
     <div className="lp">
       <header className="lp-top">
         <Link to={ROUTES.landing} className="lp-logo" aria-label={`${SITE.brandName} 소개`}>
-          <img src={SITE.logo} alt="" />
+          <img src={SITE.appIcon} alt="" />
           <span>{SITE.brandName}</span>
         </Link>
         <Link className="lp-start" to={ROUTES.map}>시작하기 ›</Link>
