@@ -35,6 +35,8 @@ export interface NearbyPlace {
   lon: number;
   lat: number;
   distance_m: number;
+  /** 고양이 친화병원 인증(ISFM 등) 병원이면 true (병원이 아닌 업소는 false) */
+  cat_friendly?: boolean;
   /** include_fees=true 이고 진료비가 있는 병원에만 */
   fees?: Fee[];
 }

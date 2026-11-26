@@ -13,6 +13,7 @@ import * as RegionCore from "./regions/regionCore";
 import { createRegionLayer, type RegionLayer, type RegionSelection } from "./regions/regionLayer";
 import { LINE_STYLE, type RouteLine } from "./routeCore";
 import { naverReady } from "./naverLoader";
+import { CAT_HEAD_PATH, CAT_HEAD_VIEWBOX } from "./catShape";
 
 export const START: LatLon = { lon: 127.049, lat: 37.5233 }; // 청담동 (API 예시 좌표)
 export const MAX_RADIUS = 20000;
@@ -46,15 +47,17 @@ export interface HospitalMapCallbacks {
 // 좌표 변환은 이 함수 한 곳에서만: API {lon,lat} → 네이버 LatLng(위도, 경도)
 const toLatLng = (p: { lat: number; lon: number }) => new naver.maps.LatLng(p.lat, p.lon);
 
-// 고양이 얼굴 모양 핀 (선택 전: 하늘색, 선택한 핀: 진한 파란색). 색·크기는 map.css 의 .pin
-const CAT_HEAD_PATH =
-  "M16 2 L41 15 Q50 13 59 15 L84 2 L93 33 C99 46 99 60 96 72 C89 94 70 101 50 101 C30 101 11 94 4 72 C1 60 1 46 7 33 Z";
+// 고양이 얼굴 모양 핀 (선택 전: 하늘색, 선택한 핀: 진한 파란색, 고양이 친화병원: 황금색). 색·크기는 map.css 의 .pin
 const catPin = (cls: string) =>
-  `<div class="${cls}"><svg viewBox="0 0 100 104" aria-hidden="true"><path d="${CAT_HEAD_PATH}"/></svg></div>`;
-const pinIcon = (sel: boolean): naver.maps.HtmlIcon =>
-  sel
-    ? { content: catPin("pin is-sel"), anchor: new naver.maps.Point(13, 27) }
-    : { content: catPin("pin"), anchor: new naver.maps.Point(9, 19) };
+  `<div class="${cls}"><svg viewBox="${CAT_HEAD_VIEWBOX}" aria-hidden="true"><path d="${CAT_HEAD_PATH}"/></svg></div>`;
+const pinIcon = (sel: boolean, cat = false): naver.maps.HtmlIcon => {
+  const cls = `pin${sel ? " is-sel" : ""}${cat ? " is-cat" : ""}`;
+  return sel
+    ? { content: catPin(cls), anchor: new naver.maps.Point(13, 27) }
+    : { content: catPin(cls), anchor: new naver.maps.Point(9, 19) };
+};
+// 친화병원 핀은 다른 핀 위로 (선택한 핀·내 위치보다는 아래)
+const PIN_Z = { base: 10, cat: 20 };
 
 const fmtKm = (m: number) => (m / 1000).toFixed(1);
 
@@ -62,6 +65,7 @@ export class HospitalMap implements MapBridge {
   readonly map: naver.maps.Map;
   private readonly infoWindow: naver.maps.InfoWindow;
   private readonly markers = new Map<number, naver.maps.Marker>(); // id → marker
+  private readonly catIds = new Set<number>(); // 고양이 친화병원 업소 id (황금색 핀)
   private readonly listeners: naver.maps.MapEventListener[] = [];
   private places: NearbyPlace[] = [];
   private selectedId: number | null = null;
@@ -249,7 +253,15 @@ export class HospitalMap implements MapBridge {
     const show = pins ? items : [];
     for (const p of sel && !show.some((x) => x.id === sel.id) ? [...show, sel] : show) {
       if (this.markers.has(p.id)) continue;
-      const m = new naver.maps.Marker({ position: toLatLng(p), map: this.map, title: p.name, icon: pinIcon(p.id === this.selectedId) });
+      const cat = !!p.cat_friendly;
+      if (cat) this.catIds.add(p.id);
+      const m = new naver.maps.Marker({
+        position: toLatLng(p),
+        map: this.map,
+        title: cat ? `${p.name} (고양이 친화병원)` : p.name,
+        zIndex: cat ? PIN_Z.cat : PIN_Z.base,
+        icon: pinIcon(p.id === this.selectedId, cat),
+      });
       this.listeners.push(naver.maps.Event.addListener(m, "click", () => this.select(p.id, false)));
       this.markers.set(p.id, m);
     }
@@ -269,8 +281,8 @@ export class HospitalMap implements MapBridge {
       this.map.morph(toLatLng(p), 16);
       return;
     }
-    if (this.selectedId != null) this.markers.get(this.selectedId)?.setIcon(pinIcon(false));
-    m.setIcon(pinIcon(true));
+    if (this.selectedId != null) this.markers.get(this.selectedId)?.setIcon(pinIcon(false, this.catIds.has(this.selectedId)));
+    m.setIcon(pinIcon(true, this.catIds.has(id)));
     this.selectedId = id;
     this.cb.onSelected(id);
     const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`, () => this.infoWindow.close());

@@ -6,16 +6,13 @@
 import * as C from "./regionCore";
 import { REGION_CONFIG as CFG, type RegionLevel } from "./regionConfig";
 import type { BBox, Crumb, RegionCollection, RegionFeature, RegionProps } from "./regionCore";
+import { CAT_HEAD_PATH, CAT_HEAD_VIEWBOX } from "../catShape";
 
 const LEVELS = ["sido", "sigungu", "emd"] as const;
 type Level = (typeof LEVELS)[number];
 
-// 고양이 얼굴 모양 (100×100): 동그란 얼굴 + 귀 두 개. 얼굴 안에 개수
-const CAT_SVG =
-  '<svg class="rg-cat" viewBox="0 0 100 100" aria-hidden="true">' +
-  '<path d="M16 50 L20 6 Q22 2 26 5 L50 24 L74 5 Q78 2 80 6 L84 50 Z"/>' +
-  '<circle cx="50" cy="58" r="38"/>' +
-  "</svg>";
+// 고양이 얼굴 모양: 확대 화면의 병원 핀과 같은 모양(catShape.ts). 얼굴 안에 개수
+const CAT_SVG = `<svg class="rg-cat" viewBox="${CAT_HEAD_VIEWBOX}" aria-hidden="true"><path d="${CAT_HEAD_PATH}"/></svg>`;
 
 export interface RegionSelection {
   level: RegionLevel;
