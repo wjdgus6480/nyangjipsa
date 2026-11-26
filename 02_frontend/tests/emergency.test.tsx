@@ -38,15 +38,17 @@ function Where() {
 }
 
 describe("응급 호출", () => {
-  test("헤더에서 '홈' 바로 오른쪽에 있다", () => {
+  test("헤더 메뉴 맨 오른쪽(로그인·로그아웃 옆)에 있다", () => {
     render(
       <MemoryRouter initialEntries={["/"]}>
         <App />
       </MemoryRouter>,
     );
     const nav = screen.getByRole("navigation", { name: "주요 메뉴" });
-    const labels = [...nav.querySelectorAll(".nav__link, .nav__emergency")].map((el) => el.textContent?.trim());
-    expect(labels.slice(0, 3)).toEqual(["홈", "🚨 응급 호출", "AI 건강 상담"]);
+    // 메뉴 맨 오른쪽, 로그인·로그아웃 버튼 바로 옆
+    const items = [...nav.children].map((el) => el.textContent?.trim());
+    expect(items.at(-1)).toBe("🚨 응급 호출");
+    expect(items.at(-2)).toMatch(/로그인|로그아웃|가입/);
   });
 
   test("누르면 내 위치 주변의 가장 가까운 24시·응급 병원과 연락처를 보여 주고, 길찾기는 위치를 주소에 넣지 않고 지도로 넘김", async () => {

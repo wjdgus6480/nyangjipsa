@@ -65,17 +65,13 @@ export function Header() {
             <span /><span /><span />
           </button>
           <nav className={"nav" + (open ? " open" : "")} aria-label="주요 메뉴">
-            {MENU.map((m, i) => (
-              <span key={m.label} className="nav__item">
-                {"to" in m ? (
-                  <Link className="nav__link" to={m.to}>{m.label}</Link>
-                ) : (
-                  <a className="nav__link" href={`#${m.target}`} onClick={(e) => goSection(e, m.target)}>{m.label}</a>
-                )}
-                {/* 응급 호출: "홈" 바로 오른쪽 */}
-                {i === 0 && <EmergencyCall onOpen={() => setOpen(false)} />}
-              </span>
-            ))}
+            {MENU.map((m) =>
+              "to" in m ? (
+                <Link key={m.label} className="nav__link" to={m.to}>{m.label}</Link>
+              ) : (
+                <a key={m.label} className="nav__link" href={`#${m.target}`} onClick={(e) => goSection(e, m.target)}>{m.label}</a>
+              ),
+            )}
             {user?.status === "active" ? (
               <>
                 {user.role === "admin" && (
@@ -93,6 +89,8 @@ export function Header() {
             ) : (
               <Link className="btn btn--outline btn--sm" to={ROUTES.login} onClick={() => setOpen(false)}>로그인 / 회원가입</Link>
             )}
+            {/* 응급 호출: 메뉴 맨 오른쪽 (로그아웃·로그인 옆) */}
+            <EmergencyCall onOpen={() => setOpen(false)} />
           </nav>
         </div>
       </header>

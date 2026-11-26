@@ -261,8 +261,7 @@ html { scroll-behavior: smooth; }
 .site .reply__sources a { color: inherit; text-decoration: underline; }
 
 /* 응급 호출 (헤더 "홈" 오른쪽) — features/emergency/EmergencyCall.tsx */
-.site .nav__item { display: contents; }
-.site .nav__emergency { display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border: 0; border-radius: 999px; background: #e5484d; color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(229, 72, 77, .28); transition: background .2s, transform .1s; }
+.site .nav__emergency { margin-left: 4px; display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border: 0; border-radius: 999px; background: #e5484d; color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(229, 72, 77, .28); transition: background .2s, transform .1s; }
 .site .nav__emergency:hover { background: #cf3238; }
 .site .nav__emergency:active { transform: scale(.97); }
 .site .nav__emergency:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
