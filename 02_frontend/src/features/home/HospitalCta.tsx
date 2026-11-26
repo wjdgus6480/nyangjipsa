@@ -1,5 +1,5 @@
 import { Link } from "react-router";
-import { ROUTES } from "../../services/config/site";
+import { ROUTES, SITE } from "../../services/config/site";
 import { ICONS } from "./icons";
 
 export function HospitalCta() {
@@ -23,6 +23,7 @@ export function HospitalCta() {
             <span className="map-art__pin map-art__pin--b">{ICONS.pin}</span>
             <span className="map-art__pin map-art__pin--c">{ICONS.hospital}</span>
           </div>
+          <img className="cta__mascot" src={SITE.characters.pointing} alt="" />
         </div>
       </div>
     </section>
