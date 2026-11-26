@@ -80,7 +80,7 @@ impl AmplitudeClient {
         if !status.is_success() {
             // 응답 본문에 키가 들어가지 않지만, 길 수 있어 앞부분만 로그용으로 남김
             let body = res.text().await.unwrap_or_default();
-            let short: String = body.chars().take(200).collect();
+            let short: String = body.chars().take(400).collect();
             return Err(format!("Amplitude 응답 {status}: {short}"));
         }
         res.json()
@@ -111,8 +111,12 @@ impl AmplitudeClient {
         if group_by.is_some() {
             query.push(("limit", "50".to_string()));
         }
-        let v = self.get("/api/2/events/segmentation", &query).await?;
-        parse_segmentation(&v)
+        match self.get("/api/2/events/segmentation", &query).await {
+            Ok(v) => parse_segmentation(&v),
+            // 아직 한 번도 들어오지 않은 이벤트 = 값 0 (새 프로젝트·새 이벤트)
+            Err(e) if is_event_not_found(&e) => Ok(Segmentation::default()),
+            Err(e) => Err(e),
+        }
     }
 
     /// 순서 퍼널. 단계별 누적 사용자 수 (첫 값 = 1단계 사용자)
@@ -132,9 +136,19 @@ impl AmplitudeClient {
             ("mode", "ordered".to_string()),
             ("n", "active".to_string()),
         ]);
-        let v = self.get("/api/2/funnels", &query).await?;
-        parse_funnel(&v, events.len())
+        match self.get("/api/2/funnels", &query).await {
+            Ok(v) => parse_funnel(&v, events.len()),
+            // 단계 중 아직 들어온 적 없는 이벤트가 있으면 순서 퍼널 전체가 0
+            Err(e) if is_event_not_found(&e) => Ok(vec![0.0; events.len()]),
+            Err(e) => Err(e),
+        }
     }
+}
+
+/// Amplitude 가 "그런 이벤트 없음"(event_type_not_found, 400)으로 답했는지.
+/// 트래킹 플랜에만 있고 아직 수집되지 않은 이벤트를 조회하면 이렇게 옵니다.
+fn is_event_not_found(err: &str) -> bool {
+    err.contains("event_type_not_found")
 }
 
 fn ymd(d: NaiveDate) -> String {
@@ -251,6 +265,16 @@ mod tests {
         assert_eq!(s.dates, vec!["2026-11-20"]);
         assert_eq!(s.labels, vec!["12", "(none)"]);
         assert_eq!(s.totals, vec![4.0, 1.0]);
+    }
+
+    #[test]
+    fn missing_event_error_is_recognized() {
+        assert!(is_event_not_found(
+            r#"Amplitude 응답 400 Bad Request: {"error": {"metadata": {"reason": "event_type_not_found"}}}"#
+        ));
+        assert!(!is_event_not_found(
+            "Amplitude 응답 401 Unauthorized: invalid api key"
+        ));
     }
 
     #[test]
