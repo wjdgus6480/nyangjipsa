@@ -24,6 +24,8 @@ export interface MapFilters {
   /** 선택한 업종 (화면 순서대로) */
   types: string[];
   radius: RadiusOption;
+  /** 진료비를 함께 받아 목록·정보창에 보여 줄지 (가격 조회 탭만 true, 길찾기 탭은 false). 생략하면 true */
+  withFees?: boolean;
 }
 
 export interface RegionBarState {
@@ -75,6 +77,8 @@ export class HospitalMap implements MapBridge {
   private routeLines: naver.maps.Polyline[] = [];
   /** 길찾기 출발(파랑)·도착(빨강) 표시 */
   private routeEnds: naver.maps.Marker[] = [];
+  /** 가격 조회: 고른 병원 위에 띄운 가격표 */
+  private priceTags: naver.maps.Marker[] = [];
   private destroyed = false;
 
   constructor(
@@ -93,9 +97,21 @@ export class HospitalMap implements MapBridge {
   setFilters(next: MapFilters) {
     const typesChanged = next.types.join() !== this.filters.types.join();
     const radiusChanged = next.radius !== this.filters.radius;
+    const feesChanged = this.withFees() !== (next.withFees !== false);
     this.filters = next;
     if (typesChanged) void this.loadRegionPoints();
-    if (typesChanged || radiusChanged) this.scheduleLoad();
+    if (feesChanged) {
+      // 가격을 보여 주지 않는 탭으로 바뀌면 가격표·가격이 든 정보창을 닫음
+      if (!this.withFees()) {
+        this.clearPriceTags();
+        this.infoWindow.close();
+      }
+    }
+    if (typesChanged || radiusChanged || feesChanged) this.scheduleLoad();
+  }
+
+  private withFees() {
+    return this.filters.withFees !== false;
   }
 
   private typesLabel() {
@@ -193,7 +209,7 @@ export class HospitalMap implements MapBridge {
     this.cb.onStatus("검색 중…");
     try {
       const body = await getNearbyPlaces(
-        { lon: Number(c.lng().toFixed(6)), lat: Number(c.lat().toFixed(6)), radius_m: radius, type: types, limit: LIMIT, include_fees: true },
+        { lon: Number(c.lng().toFixed(6)), lat: Number(c.lat().toFixed(6)), radius_m: radius, type: types, limit: LIMIT, include_fees: this.withFees() },
         ctrl.signal,
       );
       if (this.destroyed) return;
@@ -256,7 +272,7 @@ export class HospitalMap implements MapBridge {
     this.selectedId = id;
     this.cb.onSelected(id);
     const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`, () => this.infoWindow.close());
-    const iwFees = pickFees(p.fees, INFO_FEES);
+    const iwFees = this.withFees() ? pickFees(p.fees, INFO_FEES) : [];
     if (iwFees.length) {
       const ul = document.createElement("ul");
       ul.className = "iw-fees";
@@ -375,6 +391,40 @@ export class HospitalMap implements MapBridge {
     this.map.panTo(toLatLng(p));
   }
 
+  // ---------- 가격 조회 ----------
+  /** 고른 병원 위에 가격표(초진 진찰료)를 띄움. fit 이면 모두 보이게 화면을 맞춤 */
+  showPriceTags(places: NearbyPlace[], { fit = false }: { fit?: boolean } = {}) {
+    this.clearPriceTags();
+    if (this.destroyed || !naverReady() || places.length === 0) return;
+    let minLat = 90, minLon = 180, maxLat = -90, maxLon = -180;
+    for (const p of places) {
+      const fee = pickFees(p.fees, PRICE_TAG_FEES)[0];
+      const tag = new naver.maps.Marker({
+        position: toLatLng(p),
+        map: this.map,
+        title: p.name,
+        zIndex: 1080,
+        icon: { content: priceTagHtml(p.name, fee ? `${shortFee(fee.item_name)} ${fmtPrice(fee.price)}` : "가격 정보 없음"), anchor: new naver.maps.Point(0, 66) },
+      });
+      this.listeners.push(naver.maps.Event.addListener(tag, "click", () => this.select(p.id, false)));
+      this.priceTags.push(tag);
+      minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+      minLon = Math.min(minLon, p.lon); maxLon = Math.max(maxLon, p.lon);
+    }
+    if (!fit) return;
+    if (places.length === 1) {
+      this.map.setZoom(Math.max(this.map.getZoom(), 16), false);
+      this.map.panTo(toLatLng(places[0]));
+    } else {
+      this.map.fitBounds(new naver.maps.LatLngBounds(new naver.maps.LatLng(minLat, minLon), new naver.maps.LatLng(maxLat, maxLon)), { top: 90, right: 90, bottom: 60, left: 60 });
+    }
+  }
+
+  clearPriceTags() {
+    for (const m of this.priceTags) m.setMap(null);
+    this.priceTags = [];
+  }
+
   clearRoute() {
     for (const l of this.routeLines) l.setMap(null);
     this.routeLines = [];
@@ -400,6 +450,7 @@ export class HospitalMap implements MapBridge {
       this.markers.clear();
       this.routeLines = [];
       this.routeEnds = [];
+      this.priceTags = [];
       return;
     }
     naver.maps.Event.removeListener(this.listeners);
@@ -411,8 +462,19 @@ export class HospitalMap implements MapBridge {
     this.focusMarker?.setMap(null);
     this.myMarker?.setMap(null);
     this.clearRoute();
+    this.clearPriceTags();
     this.map.destroy();
   }
+}
+
+/** 지도 가격표에 쓰는 진료비 (있는 첫 항목) */
+export const PRICE_TAG_FEES = ["초진 진찰료", "재진 진찰료", "종합백신 접종비"];
+
+const escapeHtml = (t: string) => t.replace(/[&<>"']/g, (c) => ({ "&": "&amp;", "<": "&lt;", ">": "&gt;", '"': "&quot;", "'": "&#39;" })[c]!);
+
+/** 가격표 HTML (병원 이름·가격은 escape) */
+function priceTagHtml(name: string, price: string): string {
+  return `<div class="price-tag"><span class="price-tag__name">${escapeHtml(name)}</span><b>${escapeHtml(price)}</b></div>`;
 }
 
 /** 정보창 내용 (데이터는 textContent 로만 넣음) */

@@ -6,6 +6,7 @@
 // - 분석: 병원 선택(hospital_clicked detail), 진료비 표시(cost_viewed) — 병원 id 만 보냄
 // - 내 위치: 버튼을 누르면 위치 권한을 묻고 파란 점 + 그 주변 검색. 길찾기 출발지로도 씀 (좌표는 저장·분석에 쓰지 않음)
 // - 길찾기: 고른 병원의 "길찾기" → RoutePanel (백엔드 /api/route, 도보·대중교통) → 지도에 경로 선
+// - 위쪽 탭: [길찾기] 가격 없이 병원·길찾기만 / [가격 조회] 가격을 보여 주고, 병원을 골라 지도에 가격표(조회하기)·비교표(비교하기)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import "../../styles/map.css";
@@ -26,6 +27,8 @@ import { NAVER_AUTH_FAILED_MESSAGE, loadNaverMaps, onNaverAuthFailure } from "./
 import { RegionBar } from "./RegionBar";
 import { REGION_CONFIG } from "./regions/regionConfig";
 import { RoutePanel, type RouteEnds } from "./RoutePanel";
+import { PriceBar, PriceCompare } from "./PriceCompare";
+import { MAX_COMPARE } from "./priceCompareCore";
 import type { RouteLine } from "./routeCore";
 import { requestMyLocation } from "../chatbot/geolocation";
 import type { LatLon } from "../chatbot/chatCore";
@@ -35,6 +38,12 @@ const RADIUS_OPTIONS: { value: RadiusOption; label: string }[] = [
   { value: 1000, label: "1km" },
   { value: 3000, label: "3km" },
   { value: 5000, label: "5km" },
+];
+
+type MapTab = "route" | "price";
+const TABS: { value: MapTab; label: string }[] = [
+  { value: "route", label: "길찾기" },
+  { value: "price", label: "가격 조회" },
 ];
 
 const MISSING_KEY =
@@ -60,11 +69,19 @@ export function MapPage() {
   /** 길찾기 패널이 열린 병원 (actionKey). 다른 병원을 고르면 자동으로 닫힘 */
   const [routeFor, setRouteFor] = useState<string | null>(null);
   const [authFailed, setAuthFailed] = useState(false);
-  const filters = useRef({ types, radius });
+  /** 위쪽 탭. 가격은 가격 조회 탭에서만 받고 보여 줌 */
+  const [tab, setTab] = useState<MapTab>("route");
+  /** 가격 조회: 비교할 병원 (고른 순서). 목록이 다시 검색돼도 유지 */
+  const [picked, setPicked] = useState<NearbyPlace[]>([]);
+  /** 지도에 가격표를 띄웠는지 (조회하기) */
+  const [tagsShown, setTagsShown] = useState(false);
+  const [compareOpen, setCompareOpen] = useState(false);
+  const withFees = tab === "price";
+  const filters = useRef({ types, radius, withFees });
   const paramsRef = useRef(params);
   const itemsRef = useRef(items);
   useLayoutEffect(() => {
-    filters.current = { types, radius };
+    filters.current = { types, radius, withFees };
     paramsRef.current = params;
     itemsRef.current = items;
   });
@@ -161,10 +178,38 @@ export function MapPage() {
     };
   }, [selectPlace]);
 
-  // 필터 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도)
+  // 필터·탭 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도, 탭이 바뀌면 가격 포함 여부도)
   useEffect(() => {
-    hmRef.current?.setFilters({ types, radius });
-  }, [types, radius]);
+    hmRef.current?.setFilters({ types, radius, withFees });
+  }, [types, radius, withFees]);
+
+  // 지도 가격표: 가격 조회 탭에서 조회하기를 눌렀을 때만, 고른 병원이 바뀌면 다시 그림
+  useEffect(() => {
+    const hm = hmRef.current;
+    if (!hm) return;
+    if (withFees && tagsShown && picked.length) hm.showPriceTags(picked);
+    else hm.clearPriceTags();
+  }, [withFees, tagsShown, picked]);
+
+  const switchTab = (next: MapTab) => {
+    setTab(next);
+    if (next === "route") {
+      setTagsShown(false);
+      setCompareOpen(false);
+    } else {
+      setRouteFor(null);
+      hmRef.current?.clearRoute();
+    }
+  };
+
+  /** 고른 병원 바꾸기. 두 곳 미만이 되면 비교표를 닫음 (비교는 두 곳 이상일 때만) */
+  const updatePicked = (next: NearbyPlace[]) => {
+    setPicked(next);
+    if (next.length < 2) setCompareOpen(false);
+  };
+  const togglePick = (p: NearbyPlace) =>
+    updatePicked(picked.some((x) => x.id === p.id) ? picked.filter((x) => x.id !== p.id) : picked.length >= MAX_COMPARE ? picked : [...picked, p]);
+  const removePick = (id: number) => updatePicked(picked.filter((x) => x.id !== id));
 
   // 이미 지도 화면에 있는 상태에서 ?focus= 가 바뀐 경우
   const focusKey = params.get("focus");
@@ -204,6 +249,13 @@ export function MapPage() {
             <Link className="brand-link" to={ROUTES.home}>홈</Link>
             <a className="brand-link" href={ROUTES.chat} target="_blank" rel="noopener">AI 도우미</a>
           </header>
+          <nav className="map-tabs" role="tablist" aria-label="지도 기능">
+            {TABS.map((t) => (
+              <button key={t.value} type="button" role="tab" aria-selected={tab === t.value} className={tab === t.value ? "is-on" : undefined} onClick={() => switchTab(t.value)}>
+                {t.label}
+              </button>
+            ))}
+          </nav>
           <div className="filters">
             <div className="row" id="types">
               {PLACE_TYPES.map((t) => (
@@ -223,8 +275,28 @@ export function MapPage() {
             </div>
             <div className="status" id="status" role="status">{status}</div>
           </div>
-          {actionHospital && <HospitalActions key={actionKey} hospital={actionHospital} onOpenRoute={() => setRouteFor(actionKey)} />}
-          {actionHospital && routeOpen && (
+          {withFees && (
+            <PriceBar
+              count={picked.length}
+              onShow={() => {
+                setTagsShown(true);
+                hmRef.current?.showPriceTags(picked, { fit: true });
+              }}
+              onCompare={() => setCompareOpen(true)}
+              onClear={() => updatePicked([])}
+            />
+          )}
+          {actionHospital && (
+            <HospitalActions
+              key={actionKey}
+              hospital={actionHospital}
+              onOpenRoute={() => {
+                if (tab !== "route") switchTab("route");
+                setRouteFor(actionKey);
+              }}
+            />
+          )}
+          {actionHospital && routeOpen && !withFees && (
             <RoutePanel
               hospital={actionHospital}
               myLocation={myLocation}
@@ -234,7 +306,13 @@ export function MapPage() {
               onClose={() => setRouteFor(null)}
             />
           )}
-          <PlaceList items={items} selectedId={selectedId} onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : selectPlace(id))} />
+          <PlaceList
+            items={items}
+            selectedId={selectedId}
+            onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : selectPlace(id))}
+            showFees={withFees}
+            pick={withFees ? { ids: picked.map((p) => p.id), full: picked.length >= MAX_COMPARE, onToggle: togglePick } : undefined}
+          />
         </aside>
         <div className="map-wrap">
           {/* 지도 SDK 가 이 div 안을 직접 그리므로 React 자식은 키가 없을 때의 안내뿐 */}
@@ -254,6 +332,7 @@ export function MapPage() {
               onClear={(fitNation) => hmRef.current?.clearRegion({ fitNation })}
             />
           )}
+          {withFees && compareOpen && picked.length >= 2 && <PriceCompare hospitals={picked} onRemove={removePick} onClose={() => setCompareOpen(false)} />}
           <div className="rg-attr" id="rg-attr">{loaded ? REGION_CONFIG.attribution : ""}</div>
         </div>
       </div>

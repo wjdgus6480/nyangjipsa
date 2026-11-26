@@ -4,6 +4,7 @@ import { act, fireEvent, render, screen, waitFor, within } from "@testing-librar
 import { MemoryRouter, Route, Routes, useNavigate } from "react-router";
 import { installFakeNaver, PLACES, REGION_EMPTY } from "./helpers/fakeNaver";
 import { mockFetch } from "./helpers/fetch";
+import type { NearbyPlace } from "../src/types/api";
 
 vi.mock("../src/services/config/env", () => ({
   API_BASE: "",
@@ -149,7 +150,9 @@ describe("MapPage (React 화면)", () => {
     const list = await screen.findByRole("list", { hidden: true }).catch(() => document.getElementById("list")!);
     await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
     const first = document.querySelector("#list li")!;
-    expect(first).toHaveTextContent("청담냥병원동물병원 · 120m · 서울 강남구 청담동 1초진 진찰료 12,000원 · 종합백신 35,000원 (참고)");
+    // 기본 탭(길찾기)에서는 가격을 받지도 보여 주지도 않음
+    expect(first).toHaveTextContent(/^청담냥병원동물병원 · 120m · 서울 강남구 청담동 1$/);
+    expect(calls.find((c) => c.url.startsWith("/api/places/nearby"))!.url).toContain("include_fees=false");
     expect(within(list as HTMLElement).getByText("청담약국").closest("li")).toHaveTextContent("동물약국 · 1.3km · 서울 강남구 2");
     expect(screen.getByRole("status")).toHaveTextContent("반경 1.5km · 2곳");
 
@@ -216,5 +219,82 @@ describe("MapPage (React 화면)", () => {
     expect(fake.maps[1].destroy).not.toHaveBeenCalled();
     // 네이버 스크립트를 다시 붙이지 않음 (이미 로드됨)
     expect(document.querySelectorAll("script[data-naver-maps]")).toHaveLength(0);
+  });
+});
+
+describe("지도 탭: 길찾기 · 가격 조회", () => {
+  beforeEach(() => {
+    installFakeNaver();
+  });
+
+  test("가격 조회 탭에서만 가격을 받고, 병원을 골라 지도 가격표(조회하기)를 띄운다", async () => {
+    const fake = installFakeNaver();
+    const { calls } = api();
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    expect(screen.getByRole("tab", { name: "길찾기" })).toHaveAttribute("aria-selected", "true");
+    expect(document.querySelector("#list .fee")).toBeNull();
+    expect(document.querySelector("#list .pick")).toBeNull();
+
+    const n = calls.filter((c) => c.url.startsWith("/api/places/nearby")).length;
+    fireEvent.click(screen.getByRole("tab", { name: "가격 조회" }));
+    await waitFor(() => expect(calls.filter((c) => c.url.startsWith("/api/places/nearby")).length).toBe(n + 1));
+    expect(calls.at(-1)!.url).toContain("include_fees=true");
+    await waitFor(() => expect(document.querySelector("#list .fee")).toHaveTextContent("초진 진찰료 12,000원"));
+    // 진료비가 있는 병원만 고를 수 있음 (약국은 체크 없음)
+    expect(document.querySelectorAll("#list .pick")).toHaveLength(1);
+    expect(screen.getByText(/최대 4곳까지/)).toBeInTheDocument();
+
+    fireEvent.click(screen.getByLabelText("청담냥병원 비교에 추가"));
+    expect(screen.getByText("선택", { exact: false })).toHaveTextContent("1/4곳 선택");
+    // 한 곳만 고르면 비교하기는 못 누름
+    expect(screen.getByRole("button", { name: "비교하기" })).toBeDisabled();
+
+    fireEvent.click(screen.getByRole("button", { name: "조회하기" }));
+    const tag = fake.markers.find((m) => m.opts.icon?.content.includes("price-tag"))!;
+    expect(tag.opts.icon!.content).toContain("청담냥병원");
+    expect(tag.opts.icon!.content).toContain("초진 진찰료 12,000원");
+
+    // 길찾기 탭으로 돌아가면 가격표·가격이 사라짐
+    fireEvent.click(screen.getByRole("tab", { name: "길찾기" }));
+    expect(tag.setMap).toHaveBeenCalledWith(null);
+    await waitFor(() => expect(calls.at(-1)!.url).toContain("include_fees=false"));
+    expect(screen.queryByRole("button", { name: "조회하기" })).toBeNull();
+  });
+});
+
+describe("가격 비교표", () => {
+  const h = (id: number, name: string, fees: [string, number][]) =>
+    ({
+      id, type: "hospital", name, road_address: null, lot_address: null, phone: null, address_masked: false, lon: 127, lat: 37.5, distance_m: id * 100,
+      fees: fees.map(([item_name, price]) => ({ category: "", item_name, condition: "", price, is_dummy: true })),
+    }) as NearbyPlace;
+
+  test("항목별로 병원 가격을 나란히 놓고 가장 낮은 가격을 강조, 빼기·닫기", async () => {
+    const { PriceCompare } = await import("../src/features/map/PriceCompare");
+    const { compareRows } = await import("../src/features/map/priceCompareCore");
+    const a = h(1, "가병원", [["초진 진찰료", 12000], ["엑스선 촬영비와 판독료", 40000]]);
+    const b = h(2, "나병원", [["초진 진찰료", 10000], ["종합백신 접종비", 35000]]);
+    const rows = compareRows([a, b]);
+    expect(rows.map((r) => r.item)).toEqual(["초진 진찰료", "종합백신 접종비", "엑스선 촬영비와 판독료"]);
+    expect(rows[0].min).toBe(10000);
+    // 한 곳만 가격이 있으면 강조하지 않음
+    expect(rows[1].min).toBe(null);
+
+    const onRemove = vi.fn(), onClose = vi.fn();
+    render(<PriceCompare hospitals={[a, b]} onRemove={onRemove} onClose={onClose} />);
+    const dialog = screen.getByRole("dialog", { name: "진료 가격 비교" });
+    const first = within(dialog).getAllByRole("row")[1];
+    expect(first).toHaveTextContent("초진 진찰료12,000원10,000원");
+    expect(within(first).getByText("10,000원")).toHaveClass("is-min");
+    expect(within(dialog).getByText("추정치", { exact: false })).toBeInTheDocument();
+    fireEvent.click(within(dialog).getByRole("button", { name: "가병원 비교에서 빼기" }));
+    expect(onRemove).toHaveBeenCalledWith(1);
+    fireEvent.click(within(dialog).getByRole("button", { name: "가격 비교 닫기" }));
+    expect(onClose).toHaveBeenCalled();
   });
 });
