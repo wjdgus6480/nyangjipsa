@@ -68,7 +68,7 @@ export function DashboardPage() {
               <>
                 {data.period.key === "today" ? longDate(data.period.end) : `${longDate(data.period.start)} ~ ${longDate(data.period.end)}`}
                 <span aria-hidden="true"> · </span>
-                {periodInfo.compare}과 비교
+                {compareSentence(data.period.key)}
               </>
             ) : (
               "서비스 핵심 지표와 전체 운영 현황"
@@ -118,6 +118,12 @@ export function DashboardPage() {
       )}
     </div>
   );
+}
+
+/** "어제와 비교" / "이전 7일과 비교" (받침에 맞는 조사) */
+function compareSentence(key: DashboardPeriodKey): string {
+  const label = PERIODS.find((p) => p.key === key)?.compare ?? "";
+  return `${label}${key === "today" ? "와" : "과"} 비교`;
 }
 
 // ---------- 공통 조각 ----------
