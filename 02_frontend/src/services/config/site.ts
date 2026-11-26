@@ -42,6 +42,8 @@ export const SITE = {
   appIcon: asset("assets/app-icon.png"),
   /** 홈 히어로 배경 (하늘·구름 위 아기 고양이, 오른쪽 배치) */
   heroImage: asset("assets/hero-cat.webp"),
+  /** 홈 히어로: 얼굴이 이불 밑에 숨은 사진 (앞발만). 고양이 모션이 준비되는 동안 보임 */
+  heroImageEmpty: asset("assets/hero-cat-empty.webp"),
   /** 지도·챗봇 로고 (기존 map-poc/assets/logo.png) */
   mapLogo: asset("assets/logo-map.png"),
   /** 고양이 간호사 캐릭터 (배경 투명 webp) */

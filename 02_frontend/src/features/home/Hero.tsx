@@ -5,7 +5,7 @@ import { ROUTES, SITE } from "../../services/config/site";
 
 export function Hero({ onStartChat }: { onStartChat(): void }) {
   return (
-    <section id="hero" className="hero" style={{ "--hero-img": `url(${SITE.heroImage})` } as CSSProperties}>
+    <section id="hero" className="hero" style={{ "--hero-img": `url(${SITE.heroImageEmpty})` } as CSSProperties}>
       <HeroCat />
       <div className="container hero__inner">
         <div className="hero__copy reveal">
