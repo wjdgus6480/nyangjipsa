@@ -26,6 +26,8 @@ export type AnalyticsEvent =
   | "password_reset_completed"
   // 서비스 퍼널 (첫 화면 → AI 상담 → 지도 → 병원 연결 → 공유)
   | "landing_viewed"
+  // 랜딩(/intro) 참여: action = worry_selected(worry, from) | mascot_pet | stamps_completed
+  | "landing_interaction"
   | "consult_started"
   | "consult_completed"
   // 진료비 조회 퍼널 (진료비 메뉴 진입 → 조회 조건 선택 → 진료비 조회 완료 = cost_viewed)
