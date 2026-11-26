@@ -26,6 +26,8 @@ export interface MapFilters {
   radius: RadiusOption;
   /** 진료비를 함께 받아 목록·정보창에 보여 줄지 (가격 조회 탭만 true, 길찾기 탭은 false). 생략하면 true */
   withFees?: boolean;
+  /** 받은 진료비를 정보창에 바로 보여 줄지. 생략하면 withFees 와 같음 (가격 조회 탭은 받기만 하고 조회하기·비교하기에서 보여 줌) */
+  feesInInfo?: boolean;
 }
 
 export interface RegionBarState {
@@ -272,7 +274,7 @@ export class HospitalMap implements MapBridge {
     this.selectedId = id;
     this.cb.onSelected(id);
     const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`, () => this.infoWindow.close());
-    const iwFees = this.withFees() ? pickFees(p.fees, INFO_FEES) : [];
+    const iwFees = this.withFees() && this.filters.feesInInfo !== false ? pickFees(p.fees, INFO_FEES) : [];
     if (iwFees.length) {
       const ul = document.createElement("ul");
       ul.className = "iw-fees";

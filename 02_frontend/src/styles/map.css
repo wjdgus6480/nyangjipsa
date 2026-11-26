@@ -220,9 +220,9 @@
 
 /* 가격 조회: 목록 체크 */
 .map-page li { position:relative; }
-.map-page li .pick { position:absolute; top:10px; right:10px; display:grid; place-items:center; width:26px; height:26px; cursor:pointer; }
-.map-page li .pick input { width:18px; height:18px; accent-color:var(--fg); cursor:pointer; }
-.map-page li .pick input:disabled { cursor:not-allowed; }
+.map-page li .pick { position:absolute; top:12px; right:12px; display:grid; place-items:center; width:22px; height:22px; border:2px solid var(--line); border-radius:6px; background:var(--bg); color:#fff; font-size:14px; font-weight:800; line-height:1; pointer-events:none; }
+.map-page li .pick.is-on { background:var(--fg); border-color:var(--fg); }
+.map-page li.is-pickable:hover .pick:not(.is-on) { border-color:var(--primary-strong); }
 .map-page li:has(.pick) .name, .map-page li:has(.pick) .meta { padding-right:30px; }
 .map-page li.is-picked { border-color:var(--primary-strong); }
 
