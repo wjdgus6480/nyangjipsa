@@ -4,6 +4,8 @@
 
 공공데이터 기반으로 주변 동물병원 위치와 진료비 정보를 지도에서 보여주는 서비스입니다.
 
+🌐 **서비스 주소: https://nyangjipsa.vercel.app** — `main` 에 합치면 자동 배포됩니다. 배포 구성·DB 변경 절차·주의사항은 **[04_docs/10_배포_운영_가이드.md](04_docs/10_배포_운영_가이드.md)** 를 먼저 읽어 주세요.
+
 ## 👉 처음이라면
 
 **[03_tech-stack/TECH_STACK_AND_SETUP.md](03_tech-stack/TECH_STACK_AND_SETUP.md)** 문서 하나를 순서대로 따라 하면 개발환경 구축부터 서버 실행까지 끝납니다.
