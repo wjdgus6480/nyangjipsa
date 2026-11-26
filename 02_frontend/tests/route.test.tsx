@@ -234,6 +234,27 @@ describe("지도: 내 위치·경로 선", () => {
   });
 });
 
+describe("지도 정보창 닫기", () => {
+  beforeEach(() => {
+    vi.useFakeTimers();
+    installFakeNaver();
+    mockFetch(() => ({ json: { count: 0, items: [], points: [], center: { lon: 0, lat: 0 }, radius_m: 1000 } }));
+  });
+  afterEach(() => vi.useRealTimers());
+
+  test("정보창 오른쪽 위 × 를 누르면 닫힘", async () => {
+    const { HospitalMap } = await import("../src/features/map/hospitalMap");
+    const hm = new HospitalMap(document.createElement("div"), { types: ["hospital"], radius: "auto" }, { onItems: vi.fn(), onStatus: vi.fn(), onSelected: vi.fn(), onRegion: vi.fn() });
+    hm.focus({ lat: 37.5, lon: 127, name: "누리봄동물병원", address: "서울", phone: null, typeLabel: "동물병원" });
+    const iw = (hm as unknown as { infoWindow: { content: HTMLElement; close: ReturnType<typeof vi.fn> } }).infoWindow;
+    const btn = iw.content.querySelector<HTMLButtonElement>(".iw-close")!;
+    expect(btn).toHaveAttribute("aria-label", "정보창 닫기");
+    btn.click();
+    expect(iw.close).toHaveBeenCalled();
+    hm.destroy();
+  });
+});
+
 describe("네이버 지도 인증 실패", () => {
   beforeEach(() => {
     vi.useFakeTimers();

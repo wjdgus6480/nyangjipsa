@@ -247,7 +247,7 @@ export class HospitalMap implements MapBridge {
     m.setIcon(pinIcon(true));
     this.selectedId = id;
     this.cb.onSelected(id);
-    const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`);
+    const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`, () => this.infoWindow.close());
     const iwFees = pickFees(p.fees, INFO_FEES);
     if (iwFees.length) {
       const ul = document.createElement("ul");
@@ -282,7 +282,7 @@ export class HospitalMap implements MapBridge {
     const pos = toLatLng({ lat: card.lat, lon: card.lon });
     this.focusMarker?.setMap(null);
     this.focusMarker = new naver.maps.Marker({ position: pos, map: this.map, title: card.name, zIndex: 1000, icon: pinIcon(true) });
-    const div = infoContent(card.name, card.address || "주소 없음", `${card.typeLabel || "동물병원"} · ${card.phone || "전화번호 없음"}`);
+    const div = infoContent(card.name, card.address || "주소 없음", `${card.typeLabel || "동물병원"} · ${card.phone || "전화번호 없음"}`, () => this.infoWindow.close());
     this.infoWindow.setContent(div);
     this.map.setZoom(Math.max(this.map.getZoom(), 16), false);
     this.map.setCenter(pos);
@@ -399,12 +399,16 @@ export class HospitalMap implements MapBridge {
 }
 
 /** 정보창 내용 (데이터는 textContent 로만 넣음) */
-function infoContent(name: string, address: string, line: string): HTMLDivElement {
+function infoContent(name: string, address: string, line: string, onClose: () => void): HTMLDivElement {
   const div = document.createElement("div");
   div.className = "iw";
-  div.innerHTML = `<b></b><br><span class="a"></span><br><span class="t"></span>`;
+  div.innerHTML = `<button type="button" class="iw-close" aria-label="정보창 닫기" title="닫기">×</button><b></b><br><span class="a"></span><br><span class="t"></span>`;
   div.querySelector("b")!.textContent = name;
   div.querySelector(".a")!.textContent = address;
   div.querySelector(".t")!.textContent = line;
+  div.querySelector<HTMLButtonElement>(".iw-close")!.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
+  });
   return div;
 }
