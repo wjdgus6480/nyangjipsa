@@ -1,5 +1,5 @@
 /* ===== 냥집사 ADMIN (src/features/admin) =====
-   색 의미 고정: 하늘(진한) = 현재 값, 네이비 = 노스스타(병원 연결), 회색 점선 = 이전 기간,
+   색 의미 고정: 하늘(진한) = 현재 값, 네이비 = 노스스타(진료비 조회), 회색 점선 = 이전 기간,
    초록 ▲ / 빨강 ▼ = 증감 (항상 화살표·글자와 함께) */
 .adm-root {
   --adm-bg: #F4F7FA;
@@ -190,9 +190,59 @@
 @keyframes adm-shimmer { to { background-position: -200% 0; } }
 .sr-only { position: absolute; width: 1px; height: 1px; padding: 0; margin: -1px; overflow: hidden; clip: rect(0 0 0 0); white-space: nowrap; border: 0; }
 
+/* ---------- 성장 분석 (GrowthPage) — 위의 카드·색·간격을 그대로 쓰고 필요한 것만 더함 ---------- */
+.adm-kpis--4 { grid-template-columns: repeat(4, minmax(0, 1fr)); }
+.adm-kpi--growth { min-height: 172px; }
+.adm-kpi__delta { margin: 2px 0 0; font-size: 20px; font-weight: 800; letter-spacing: -.01em; font-variant-numeric: tabular-nums; }
+.adm-kpi__delta.is-up { color: var(--adm-up); }
+.adm-kpi__delta.is-down { color: var(--adm-down); }
+.adm-kpi__delta.is-flat, .adm-kpi__delta.is-none { color: var(--adm-muted); font-size: 16px; font-weight: 700; }
+.adm-kpi__diff { margin: 0; font-size: 12px; color: var(--adm-muted); font-variant-numeric: tabular-nums; }
+.adm-kpi.is-star .adm-kpi__delta.is-up { color: #7EE2B0; }
+.adm-kpi.is-star .adm-kpi__delta.is-down { color: #FFB4AE; }
+.adm-kpi.is-star .adm-kpi__delta.is-flat, .adm-kpi.is-star .adm-kpi__delta.is-none, .adm-kpi.is-star .adm-kpi__diff { color: rgba(255,255,255,.75); }
+
+.adm-funnel--wide li { grid-template-columns: 190px minmax(0, 1fr) 170px; }
+.adm-funnel__label span { min-width: 0; }
+.adm-funnel__label b { white-space: nowrap; }
+.adm-tag { display: inline-block; padding: 1px 7px; border-radius: 999px; background: var(--gray-50); border: 1px dashed #C2CBD4; color: var(--adm-sub); font-size: 11px; font-weight: 600; white-space: nowrap; }
+.adm-warn { color: var(--adm-down); }
+
+.adm-range { width: 100%; display: flex; flex-wrap: wrap; align-items: center; justify-content: flex-end; gap: 8px; font-size: 13px; color: var(--adm-sub); }
+.adm-range label { display: inline-flex; align-items: center; gap: 6px; }
+.adm-range input { padding: 6px 8px; border: 1px solid var(--adm-line); border-radius: 10px; font: inherit; color: var(--adm-ink); background: #fff; }
+.adm-range input:focus-visible { outline: 2px solid var(--adm-primary); outline-offset: 1px; }
+.adm-range .adm-btn { margin-left: 0; }
+.adm-range small { width: 100%; text-align: right; }
+.adm-range small.is-error { color: var(--adm-down); }
+
+.adm-legend__swatch { display: inline-block; width: 10px; height: 10px; border-radius: 3px; }
+
+.adm-donut { display: flex; flex-wrap: wrap; align-items: center; justify-content: center; gap: 16px 28px; }
+.adm-donut svg { flex: none; overflow: visible; }
+.adm-donut circle { transition: stroke-width .15s, opacity .15s; cursor: default; }
+.adm-donut__total { font-size: 22px; font-weight: 800; fill: var(--adm-ink); font-variant-numeric: tabular-nums; }
+.adm-donut__legend { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; min-width: 200px; flex: 1; max-width: 320px; }
+.adm-donut__legend li { display: grid; grid-template-columns: 12px minmax(0, 1fr) auto auto; align-items: center; gap: 8px; padding: 4px 6px; border-radius: 8px; font-size: 13px; font-variant-numeric: tabular-nums; }
+.adm-donut__legend li.is-on { background: var(--gray-50); }
+.adm-donut__legend i { width: 12px; height: 12px; border-radius: 3px; }
+.adm-donut__legend .adm-muted { font-size: 12px; }
+
+.adm-heat__wrap { overflow-x: auto; }
+.adm-heat { width: 100%; border-collapse: separate; border-spacing: 3px; font-size: 12px; font-variant-numeric: tabular-nums; text-align: center; min-width: 560px; }
+.adm-heat th { font-weight: 600; color: var(--adm-sub); padding: 4px 6px; white-space: nowrap; }
+.adm-heat thead th[colspan] { color: var(--adm-ink); border-bottom: 2px solid var(--adm-line); }
+.adm-heat tbody th { text-align: left; color: var(--adm-ink); }
+.adm-heat__cell { padding: 7px 6px; border-radius: 6px; font-weight: 700; color: var(--adm-ink); min-width: 48px; }
+.adm-heat__cell.is-none { background: var(--gray-50); color: #C2CBD4; font-weight: 400; }
+.adm-heat__size { color: var(--adm-sub); padding: 7px 6px; }
+.adm-heat__avg th, .adm-heat__avg .adm-heat__size { font-weight: 700; color: var(--adm-ink); }
+.adm-heat__avg td, .adm-heat__avg th { border-bottom: 1px solid var(--adm-line); }
+
 /* ---------- 반응형 ---------- */
 @media (max-width: 1180px) {
   .adm-kpis { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .adm-kpis--4 { grid-template-columns: repeat(2, minmax(0, 1fr)); }
   .adm-grid, .adm-grid--wide-left { grid-template-columns: minmax(0, 1fr); }
 }
 @media (max-width: 860px) {
@@ -215,7 +265,18 @@
   .adm-ops { grid-template-columns: minmax(0, 1fr); }
   .adm-kpi__value { font-size: 26px; }
 }
+@media (max-width: 860px) {
+  /* 노스스타 카드가 맨 위 한 줄, 나머지 3개가 한 줄 */
+  .adm-kpis--4 { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+  .adm-funnel--wide li { grid-template-columns: minmax(0, 1fr) auto; }
+  .adm-range { justify-content: flex-start; }
+  .adm-range small { text-align: left; }
+}
+@media (max-width: 600px) {
+  .adm-kpis--4 { grid-template-columns: minmax(0, 1fr); }
+}
 @media (prefers-reduced-motion: reduce) {
   .adm-skel { animation: none; }
+  .adm-donut circle { transition: none; }
   .adm-funnel__bar, .adm-body { transition: none; }
 }

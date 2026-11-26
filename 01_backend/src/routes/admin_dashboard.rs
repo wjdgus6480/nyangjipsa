@@ -2,45 +2,50 @@
 //!
 //! 90일 보기는 뺐습니다: Amplitude 무료 플랜의 동시 조회 비용 한도에 자주 걸리고(429), 서비스 초기라 데이터도 없음
 //!
-//! - Amplitude: 핵심 이벤트 5개(+ 활성 사용자)의 고유 사용자 수·일별 추이·퍼널·유입 경로·병원 순위
+//! - Amplitude: 핵심 이벤트 5개(+ 활성 사용자)의 고유 사용자 수·일별 추이·퍼널·병원 순위
+//!   노스스타 = 진료비 조회(`cost_viewed`) 고유 사용자.
+//!   유입 경로·진료비 조회 퍼널·병원 이용·유지율은 성장 분석(`admin_growth.rs`)에서 자세히 봅니다.
 //!   (`AMPLITUDE_API_KEY`·`AMPLITUDE_SECRET_KEY` 가 없으면 `status = not_configured` 로 비워서 보냄)
 //! - PostgreSQL: 회원·가입·공유 링크·병원 수 (항상)
 //! - 이전 기간 = 바로 앞의 같은 길이 기간 (오늘이면 어제). 날짜는 한국 시간(Asia/Seoul)
 //! - 가짜 값은 만들지 않습니다. 데이터가 없으면 0 또는 빈 배열이고, 화면이 "데이터 없음" 으로 보여 줍니다.
-//! - Amplitude 요청 비용 때문에 기간별 결과를 5분간 메모리에 캐시합니다.
+//! - 기간별 결과를 캐시합니다 (`admin_cache`: 5분 안은 그대로, 1시간 안은 먼저 보여 주고 뒤에서 새로 집계).
+//!   Amplitude 조회는 동시에 3개까지 보내고, 지난 날짜 조회 결과는 6시간 재사용합니다 (`amplitude.rs`).
 
-use std::{
-    collections::HashMap,
-    sync::Mutex,
-    time::{Duration, Instant},
-};
+use std::{collections::HashMap, sync::Arc};
 
 use axum::{
     Json,
     extract::{Query, State},
 };
-use chrono::{DateTime, Days, FixedOffset, NaiveDate, Utc};
+use chrono::{DateTime, Days, NaiveDate, Utc};
+use futures_util::future::join_all;
 use serde::{Deserialize, Serialize};
 use sqlx::PgPool;
 
+pub use crate::amplitude::today_kst;
 use crate::{
     AppState,
     amplitude::{AmplitudeClient, Metric, Segmentation},
     auth::extract::AdminUser,
     error::AppError,
-    routes::stats,
+    routes::{
+        admin_cache::{Hit, SwrCache},
+        stats,
+    },
 };
 
-const CACHE_TTL: Duration = Duration::from_secs(300);
-
-/// 퍼널 순서 (04_docs/08_분석_이벤트_Amplitude.md 의 핵심 이벤트 5개)
+/// 퍼널 순서 (04_docs/08_분석_이벤트_Amplitude.md 의 핵심 이벤트 5개).
+/// 첫 화면 → AI 상담 → 상담 완료 → 진료비 조회(노스스타) → 병원 연결
 pub const FUNNEL_EVENTS: [&str; 5] = [
     "landing_viewed",
     "consult_started",
     "consult_completed",
+    "cost_viewed",
     "hospital_clicked",
-    "result_shared",
 ];
+/// 노스스타 이벤트: 진료비 조회
+pub const NORTH_STAR: &str = "cost_viewed";
 /// Amplitude 기본 이벤트: 그날 어떤 이벤트든 보낸 사용자 (일일 활성 사용자)
 const ACTIVE_EVENT: &str = "_active";
 
@@ -115,12 +120,6 @@ pub struct MetricSeries {
 }
 
 #[derive(Debug, Clone, Serialize)]
-pub struct LabeledValue {
-    pub label: String,
-    pub value: f64,
-}
-
-#[derive(Debug, Clone, Serialize)]
 pub struct TopHospital {
     pub hospital_id: i64,
     /// DB 에서 삭제(폐업)된 병원이면 None
@@ -136,8 +135,6 @@ pub struct AmplitudeData {
     pub funnel: Vec<FunnelStep>,
     /// 퍼널 조회 실패 (나머지 대시보드는 그대로 보여 줌)
     pub funnel_error: Option<String>,
-    /// 첫 화면(landing_viewed) 사용자의 utm_source 별 고유 사용자 (현재 기간). `(none)` → `direct`
-    pub sources: Vec<LabeledValue>,
     /// 병원 연결(hospital_clicked) 횟수 상위 병원 (현재 기간)
     pub top_hospitals: Vec<TopHospital>,
 }
@@ -184,12 +181,7 @@ pub struct DashboardResponse {
     pub db: DbSection,
 }
 
-static CACHE: Mutex<Option<HashMap<&'static str, (Instant, DashboardResponse)>>> = Mutex::new(None);
-
-pub fn today_kst() -> NaiveDate {
-    let kst = FixedOffset::east_opt(9 * 3600).expect("KST");
-    Utc::now().with_timezone(&kst).date_naive()
-}
+static CACHE: SwrCache<DashboardResponse> = SwrCache::new();
 
 pub async fn dashboard(
     State(state): State<AppState>,
@@ -197,17 +189,31 @@ pub async fn dashboard(
     Query(q): Query<DashboardQuery>,
 ) -> Result<Json<DashboardResponse>, AppError> {
     let period = PeriodInfo::new(q.period.as_deref().unwrap_or("7d"), today_kst())?;
-    if let Some((at, r)) = CACHE
-        .lock()
-        .unwrap_or_else(|e| e.into_inner())
-        .as_ref()
-        .and_then(|m| m.get(period.key))
-        && at.elapsed() < CACHE_TTL
-        && r.period.end == period.end
-    {
-        return Ok(Json(r.clone()));
+    // 날짜가 바뀌면 다른 키 (어제 집계를 오늘 것으로 보여 주지 않음)
+    let key = format!("{}:{}", period.key, period.end);
+    match CACHE.lookup(&key) {
+        Hit::Fresh(r) => return Ok(Json(r)),
+        Hit::Stale(r) => {
+            // 지난 집계를 바로 돌려주고, 새 집계는 뒤에서
+            tokio::spawn(async move {
+                match build(&state, period).await {
+                    Ok(fresh) if fresh.amplitude.status != "error" => CACHE.put(&key, fresh),
+                    _ => CACHE.release(&key),
+                }
+            });
+            return Ok(Json(r));
+        }
+        Hit::Miss => {}
     }
+    let res = build(&state, period).await?;
+    // 실패 응답은 캐시하지 않음 (다음 새로고침에서 다시 시도)
+    if res.amplitude.status != "error" {
+        CACHE.put(&key, res.clone());
+    }
+    Ok(Json(res))
+}
 
+async fn build(state: &AppState, period: PeriodInfo) -> Result<DashboardResponse, AppError> {
     let dates = period.chart_dates();
     let db = load_db(&state.pool, &period, &dates).await?;
     let amplitude = match &state.amplitude {
@@ -218,7 +224,8 @@ pub async fn dashboard(
             ),
             data: None,
         },
-        Some(client) => match load_amplitude(client, &state.pool, &period, &dates).await {
+        Some(client) => match load_amplitude(client.clone(), &state.pool, &period, &dates).await
+        {
             Ok(data) => AmplitudeSection {
                 status: "connected",
                 message: None,
@@ -236,23 +243,13 @@ pub async fn dashboard(
             }
         },
     };
-
-    let res = DashboardResponse {
+    Ok(DashboardResponse {
         period,
         dates,
         generated_at: Utc::now(),
         amplitude,
         db,
-    };
-    // 실패 응답은 캐시하지 않음 (다음 새로고침에서 다시 시도)
-    if res.amplitude.status != "error" {
-        CACHE
-            .lock()
-            .unwrap_or_else(|e| e.into_inner())
-            .get_or_insert_with(HashMap::new)
-            .insert(res.period.key, (Instant::now(), res.clone()));
-    }
-    Ok(Json(res))
+    })
 }
 
 async fn load_db(
@@ -340,46 +337,58 @@ fn daily_on(dates: &[NaiveDate], parts: &[&Segmentation]) -> Vec<f64> {
 }
 
 async fn load_amplitude(
-    client: &AmplitudeClient,
+    client: Arc<AmplitudeClient>,
     pool: &PgPool,
     p: &PeriodInfo,
     dates: &[NaiveDate],
 ) -> Result<AmplitudeData, String> {
-    let empty = Segmentation::default();
-    let mut metrics = Vec::new();
-    // 이벤트마다 현재·이전 기간(+ 오늘 보기일 때 그래프용 앞 기간)을 차례로 요청.
-    // 무료 플랜은 동시 조회 "비용" 상한이 낮아(기간이 긴 조회 하나가 수백) 동시에 보내면 429 가 남
-    for event in std::iter::once(ACTIVE_EVENT).chain(FUNNEL_EVENTS) {
-        let cur = client
-            .segmentation(event, Metric::Uniques, p.start, p.end, None)
-            .await?;
-        let prev = client
-            .segmentation(event, Metric::Uniques, p.prev_start, p.prev_end, None)
-            .await?;
-        let extra = if p.chart_start < p.prev_start {
-            client
-                .segmentation(
-                    event,
-                    Metric::Uniques,
-                    p.chart_start,
-                    p.prev_start - Days::new(1),
-                    None,
-                )
-                .await?
-        } else {
-            empty.clone()
-        };
-        metrics.push(MetricSeries {
+    let c = &*client;
+    // 이벤트마다 현재·이전 기간(+ 오늘 보기일 때 그래프용 앞 기간).
+    // 한꺼번에 요청해도 AmplitudeClient 가 동시에 3개까지만 보내고, 지난 기간 결과는 재사용합니다.
+    // (예전에는 20여 개를 하나씩 차례로 보내 첫 화면이 수십 초 걸렸음)
+    let events: Vec<&str> = std::iter::once(ACTIVE_EVENT).chain(FUNNEL_EVENTS).collect();
+    let per_event = events.iter().map(|&event| async move {
+        let (cur, prev, extra) = tokio::join!(
+            c.segmentation(event, Metric::Uniques, p.start, p.end, None),
+            c.segmentation(event, Metric::Uniques, p.prev_start, p.prev_end, None),
+            async {
+                if p.chart_start < p.prev_start {
+                    c.segmentation(
+                        event,
+                        Metric::Uniques,
+                        p.chart_start,
+                        p.prev_start - Days::new(1),
+                        None,
+                    )
+                    .await
+                } else {
+                    Ok(Segmentation::default())
+                }
+            },
+        );
+        let (cur, prev, extra) = (cur?, prev?, extra?);
+        Ok::<_, String>(MetricSeries {
             key: if event == ACTIVE_EVENT {
                 "active_users".into()
             } else {
                 event.into()
             },
-            current: cur.totals.first().copied().unwrap_or(0.0),
-            previous: prev.totals.first().copied().unwrap_or(0.0),
+            current: cur.total(),
+            previous: prev.total(),
             daily: daily_on(dates, &[&extra, &prev, &cur]),
-        });
-    }
+        })
+    });
+    let (metrics, hospitals) = tokio::join!(
+        join_all(per_event),
+        c.segmentation(
+            "hospital_clicked",
+            Metric::Totals,
+            p.start,
+            p.end,
+            Some("hospital_id"),
+        )
+    );
+    let metrics = metrics.into_iter().collect::<Result<Vec<_>, _>>()?;
 
     // 순서 퍼널은 데이터가 없는 단계부터 뒤는 모두 0 이므로, 데이터가 있는 앞 단계까지만 조회
     let reach = FUNNEL_EVENTS
@@ -396,13 +405,11 @@ async fn load_amplitude(
         Ok((Vec::new(), Vec::new()))
     } else {
         let steps = &FUNNEL_EVENTS[..reach];
-        async {
-            Ok::<_, String>((
-                client.funnel(steps, p.start, p.end).await?,
-                client.funnel(steps, p.prev_start, p.prev_end).await?,
-            ))
-        }
-        .await
+        let (cur, prev) = tokio::join!(
+            c.funnel(steps, p.start, p.end),
+            c.funnel(steps, p.prev_start, p.prev_end)
+        );
+        cur.and_then(|cur| prev.map(|prev| (cur, prev)))
     };
     let (funnel_ok, funnel_error) = match funnels {
         Ok(f) => (Some(f), None),
@@ -414,24 +421,6 @@ async fn load_amplitude(
             )
         }
     };
-    let hospitals = client
-        .segmentation(
-            "hospital_clicked",
-            Metric::Totals,
-            p.start,
-            p.end,
-            Some("hospital_id"),
-        )
-        .await;
-    let sources = client
-        .segmentation(
-            "landing_viewed",
-            Metric::Uniques,
-            p.start,
-            p.end,
-            Some("utm_source"),
-        )
-        .await;
     let funnel = match funnel_ok {
         None => Vec::new(),
         Some((mut fun_cur, mut fun_prev)) => {
@@ -448,18 +437,6 @@ async fn load_amplitude(
                 .collect()
         }
     };
-
-    let sources = group_values(&sources?)
-        .into_iter()
-        .map(|(label, value)| LabeledValue {
-            label: if label.is_empty() || label == "(none)" {
-                "direct".into()
-            } else {
-                label
-            },
-            value,
-        })
-        .collect();
 
     let mut clicks: Vec<(i64, f64)> = group_values(&hospitals?)
         .into_iter()
@@ -500,13 +477,12 @@ async fn load_amplitude(
         metrics,
         funnel,
         funnel_error,
-        sources,
         top_hospitals,
     })
 }
 
 /// 그룹별 기간 합계, 큰 순서. 0 은 버림
-fn group_values(seg: &Segmentation) -> Vec<(String, f64)> {
+pub fn group_values(seg: &Segmentation) -> Vec<(String, f64)> {
     let mut out: Vec<(String, f64)> = seg
         .labels
         .iter()
@@ -553,12 +529,19 @@ mod tests {
     }
 
     #[test]
+    fn north_star_is_fee_lookup_inside_the_funnel() {
+        assert_eq!(NORTH_STAR, "cost_viewed");
+        assert!(FUNNEL_EVENTS.contains(&NORTH_STAR));
+    }
+
+    #[test]
     fn daily_values_fill_missing_days_with_zero() {
         let seg = Segmentation {
             dates: vec!["2026-11-25".into()],
             labels: vec![String::new()],
             series: vec![vec![4.0]],
             totals: vec![4.0],
+            ..Default::default()
         };
         let dates = [d("2026-11-24"), d("2026-11-25")];
         assert_eq!(daily_on(&dates, &[&seg]), vec![0.0, 4.0]);
@@ -567,10 +550,10 @@ mod tests {
     #[test]
     fn group_values_sorted_without_zero() {
         let seg = Segmentation {
-            dates: vec![],
             labels: vec!["a".into(), "b".into(), "c".into()],
             series: vec![vec![], vec![], vec![]],
             totals: vec![1.0, 0.0, 5.0],
+            ..Default::default()
         };
         assert_eq!(
             group_values(&seg),

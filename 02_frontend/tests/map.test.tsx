@@ -178,6 +178,32 @@ describe("MapPage (React 화면)", () => {
     expect(calls.some((c) => c.url === "/api/places/points?type=hospital%2Cgrooming")).toBe(true);
   });
 
+  test("진료비 조회 퍼널: 화면 진입 → 조회 조건 선택 → 진료비 조회 (값·위치는 보내지 않음)", async () => {
+    const { analytics } = await import("../src/services/analytics/analytics");
+    const track = vi.spyOn(analytics, "track");
+    api();
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    expect(track).toHaveBeenCalledWith("fee_menu_viewed", { surface: "map" });
+    fireEvent.click(screen.getByLabelText("미용"));
+    fireEvent.change(document.getElementById("radius")!, { target: { value: "3000" } });
+    expect(track).toHaveBeenCalledWith("fee_filter_selected", { filter_type: "place_type" });
+    expect(track).toHaveBeenCalledWith("fee_filter_selected", { filter_type: "radius" });
+    // 진료비는 가격 조회 탭에서 병원을 고르고 조회하기를 눌렀을 때 봄 (목록을 누르기만 해서는 cost_viewed 아님)
+    fireEvent.click(document.querySelector("#list li")!);
+    expect(track).not.toHaveBeenCalledWith("cost_viewed", expect.anything());
+    fireEvent.click(screen.getByRole("tab", { name: "가격 조회" }));
+    await waitFor(() => expect(document.querySelectorAll("#list .pick")).toHaveLength(1));
+    fireEvent.click(document.querySelector("#list li.is-pickable")!);
+    fireEvent.click(screen.getByRole("button", { name: "조회하기" }));
+    expect(track).toHaveBeenCalledWith("cost_viewed", expect.objectContaining({ hospital_id: 3, surface: "map", repeat_view: expect.any(Boolean) }));
+    track.mockRestore();
+  });
+
   test("지도를 움직여 목록이 다시 검색돼 고른 병원이 빠져도 버튼·길찾기가 사라지지 않는다", async () => {
     let moved = false;
     const { calls } = mockFetch((url) => {

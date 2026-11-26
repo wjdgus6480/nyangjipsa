@@ -1,4 +1,4 @@
-// 성장 분석·병원 관리·설정 — 추후 확장. 가짜 숫자 없이 "무엇이 들어올지" 만 안내합니다.
+// 병원 관리·설정 — 추후 확장. 가짜 숫자 없이 "무엇이 들어올지" 만 안내합니다. (성장 분석은 GrowthPage.tsx)
 import type { ReactNode } from "react";
 import { Link } from "react-router";
 import { ROUTES } from "../../services/config/site";
@@ -26,21 +26,6 @@ function Placeholder({ title, desc, plans, note }: { title: string; desc: string
         {note && <p className="adm-foot">{note}</p>}
       </section>
     </div>
-  );
-}
-
-export function GrowthPage() {
-  return (
-    <Placeholder
-      title="성장 분석"
-      desc="사용자 행동과 서비스 성장 분석"
-      plans={["사용자 유입 및 이용 현황 (신규·재방문)", "행동 퍼널 및 단계별 전환율", "검색 및 병원 이용 통계", "도넛·선·막대·퍼널 그래프"]}
-      note={
-        <>
-          지금은 <Link to={ROUTES.admin}>대시보드</Link>의 퍼널·유입 경로·병원 순위를 참고하세요.
-        </>
-      }
-    />
   );
 }
 

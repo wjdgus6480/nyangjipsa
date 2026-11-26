@@ -5,6 +5,7 @@ import { MemoryRouter } from "react-router";
 import { createSdkAnalytics, analytics, type AmplitudeClient } from "../src/services/analytics/analytics";
 import { captureUtm, parseUtm, resetUtmForTest } from "../src/services/analytics/attribution";
 import { createConsultTracker } from "../src/services/analytics/consult";
+import { feeViewProps, kstDay } from "../src/services/analytics/feeView";
 import { HospitalActions } from "../src/features/hospital/HospitalActions";
 import { routeUrl } from "../src/features/hospital/hospitalLinks";
 import { mockFetch } from "./helpers/fetch";
@@ -109,16 +110,41 @@ describe("상담 퍼널", () => {
     t.onReply(reply());
     t.onReply(reply({ hospitals: 3 }));
     t.onReply(reply({ comparison: true }));
+    t.onReply(reply({ comparison: true }));
     expect(track.mock.calls).toEqual([
       ["consult_started", { surface: "home", fallback: false }],
       ["consult_completed", { surface: "home", result_type: "hospitals", reply_count: 3, fallback: false }],
+      // 진료비 비교표 = 진료비 조회 완료 (대화마다 한 번)
+      ["cost_viewed", { surface: "home", repeat_view: expect.any(Boolean) }],
     ]);
     t.reset();
     t.onReply(reply({ followUp: false }));
-    expect(track.mock.calls.slice(2)).toEqual([
+    expect(track.mock.calls.slice(3)).toEqual([
       ["consult_started", { surface: "home", fallback: false }],
       ["consult_completed", { surface: "home", result_type: "answer", reply_count: 1, fallback: false }],
     ]);
+  });
+});
+
+describe("진료비 재조회 (repeat_view)", () => {
+  const mem = () => {
+    const m = new Map<string, string>();
+    return { getItem: (k: string) => m.get(k) ?? null, setItem: (k: string, v: string) => void m.set(k, v) };
+  };
+  const day = (d: string) => Date.parse(`${d}T03:00:00Z`); // 한국 낮 12시
+
+  test("처음·같은 날 다시 = false, 다른 날 다시 = true", () => {
+    const s = mem();
+    expect(feeViewProps(s, day("2026-11-26"))).toEqual({ repeat_view: false });
+    expect(feeViewProps(s, day("2026-11-26"))).toEqual({ repeat_view: false });
+    expect(feeViewProps(s, day("2026-11-27"))).toEqual({ repeat_view: true });
+  });
+
+  test("날짜는 한국 시간 기준, 저장소를 못 쓰면 false", () => {
+    expect(kstDay(Date.parse("2026-11-26T16:00:00Z"))).toBe("2026-11-27");
+    const broken = { getItem: () => { throw new Error("blocked"); }, setItem: () => {} };
+    expect(feeViewProps(broken)).toEqual({ repeat_view: false });
+    expect(feeViewProps(null)).toEqual({ repeat_view: false });
   });
 });
 

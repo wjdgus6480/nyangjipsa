@@ -443,8 +443,6 @@ export interface AdminDashboard {
       funnel: DashboardFunnelStep[];
       /** 퍼널만 조회 실패 (나머지는 정상 표시) */
       funnel_error?: string | null;
-      /** utm_source 별 첫 화면 고유 사용자. direct = utm 없음 */
-      sources: { label: string; value: number }[];
       top_hospitals: DashboardTopHospital[];
     } | null;
   };
@@ -458,4 +456,68 @@ export interface AdminDashboard {
     cat_friendly: number;
     data_updated_at: string | null;
   };
+}
+
+// ---------- 성장 분석 (GET /api/admin/growth, 01_backend/src/routes/admin_growth.rs) ----------
+
+export type GrowthPeriodKey = "1d" | "7d" | "30d" | "custom";
+
+/** 비율 비교 (0~1). 방문자가 0 이면 null */
+export interface RateCompare {
+  current: number | null;
+  previous: number | null;
+}
+
+export interface GrowthStep {
+  key: string;
+  users: number;
+  /** false = 이벤트가 아직 수집되지 않아 계산할 수 없음 (0 과 다름) */
+  collected: boolean;
+}
+
+export interface CohortCells {
+  size: number;
+  /** N일째 다시 온 사용자. null = 아직 그날이 지나지 않음 */
+  d1: number | null;
+  d7: number | null;
+  d30: number | null;
+}
+
+export interface AdminGrowth {
+  period: {
+    key: GrowthPeriodKey;
+    days: number;
+    start: string;
+    end: string;
+    prev_start: string;
+    prev_end: string;
+    /** 그래프 단위 (1일 = 시간별) */
+    unit: "hour" | "day";
+  };
+  generated_at: string;
+  status: "connected" | "not_configured" | "error";
+  message: string | null;
+  data: {
+    kpis: {
+      lookup_users: DashboardCompare;
+      conversion: RateCompare;
+      lookups: DashboardCompare;
+      repeat_users: DashboardCompare;
+      repeat_collected: boolean;
+      visitors: DashboardCompare;
+    };
+    trend: { buckets: string[]; lookup_users: number[]; visitors: number[] };
+    acquisition: {
+      /** search | direct | sns | share | referral | campaign (사용자가 있는 채널만) */
+      channels: { key: string; users: number }[];
+      channels_error: string | null;
+      new_users: DashboardCompare;
+      returning_users: DashboardCompare;
+      new_daily: number[];
+      returning_daily: number[];
+    };
+    funnel: { steps: GrowthStep[]; error: string | null };
+    hospital: { steps: GrowthStep[]; after_lookup: number | null; error: string | null };
+    retention: { cohorts: { date: string; new: CohortCells; returning: CohortCells }[]; error: string | null };
+  } | null;
 }

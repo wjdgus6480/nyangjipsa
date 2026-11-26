@@ -38,19 +38,15 @@ function dashboard(connected: boolean): AdminDashboard {
               { key: "landing_viewed", current: 100, previous: 80, daily: series(8) },
               { key: "consult_started", current: 40, previous: 40, daily: series(3) },
               { key: "consult_completed", current: 30, previous: 0, daily: series(2) },
-              { key: "hospital_clicked", current: 12, previous: 15, daily: series(1) },
-              { key: "result_shared", current: 3, previous: 2, daily: series(0) },
+              { key: "cost_viewed", current: 12, previous: 15, daily: series(1) },
+              { key: "hospital_clicked", current: 3, previous: 2, daily: series(0) },
             ],
             funnel: [
               { key: "landing_viewed", current: 100, previous: 80 },
               { key: "consult_started", current: 40, previous: 30 },
               { key: "consult_completed", current: 30, previous: 20 },
-              { key: "hospital_clicked", current: 12, previous: 10 },
-              { key: "result_shared", current: 3, previous: 2 },
-            ],
-            sources: [
-              { label: "direct", value: 60 },
-              { label: "share", value: 40 },
+              { key: "cost_viewed", current: 12, previous: 10 },
+              { key: "hospital_clicked", current: 3, previous: 2 },
             ],
             top_hospitals: [{ hospital_id: 7, name: "냥냥동물병원", region: "서울특별시 중구", clicks: 9 }],
           },
@@ -107,10 +103,14 @@ describe("관리자 접근", () => {
     expect(await screen.findByText("냥냥동물병원")).toBeInTheDocument();
     expect(calls.find((c) => c.url.startsWith("/api/admin/dashboard"))?.url).toBe("/api/admin/dashboard?period=7d");
 
-    // 핵심 지표 5개 (퍼널 순서), 노스스타 강조, 증감
+    // 핵심 지표 5개 (퍼널 순서), 노스스타 = 진료비 조회 강조, 증감
     const kpis = screen.getByRole("region", { name: "핵심 지표" });
     expect(within(kpis).getAllByRole("article")).toHaveLength(5);
-    expect(within(kpis).getByText("노스스타")).toBeInTheDocument();
+    const star = within(kpis).getByText("노스스타").closest("article")!;
+    expect(within(star).getByRole("heading", { name: "진료비 조회" })).toBeInTheDocument();
+    expect(screen.getByRole("region", { name: "진료비 조회 추세 (노스스타)" })).toBeInTheDocument();
+    // 유입 경로는 성장 분석으로 옮김 (대시보드와 겹치지 않게)
+    expect(screen.queryByRole("region", { name: "어디서 왔나요?" })).toBeNull();
     expect(within(kpis).getByText("새로 생김")).toBeInTheDocument(); // 이전 0 → 비율 대신 안내
     // 퍼널 인사이트: 100명 중 12명
     expect(screen.getByText(/100명 중 12명/)).toBeInTheDocument();
@@ -171,6 +171,6 @@ describe("대시보드 계산", () => {
     const rows = funnelRows(dashboard(true).amplitude.data!.funnel);
     expect(rows[1].conversion).toBeCloseTo(0.4);
     expect(rows[3].ofFirst).toBeCloseTo(0.12);
-    expect(biggestDrop(rows)?.key).toBe("result_shared");
+    expect(biggestDrop(rows)?.key).toBe("hospital_clicked");
   });
 });
