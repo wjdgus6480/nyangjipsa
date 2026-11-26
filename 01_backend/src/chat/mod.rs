@@ -187,6 +187,9 @@ pub struct ChatRequest {
     pub lon: Option<f64>,
     /// 선택지를 눌렀을 때 그 키워드
     pub choice_keyword: Option<String>,
+    /// 로그인한 회원이 고른 본인 고양이 (`user_cats.id`). 본인 고양이가 아니면 서버가 무시
+    #[serde(default)]
+    pub cat_id: Option<uuid::Uuid>,
 }
 
 /// 서버가 Gemini 호출 전에 준비한 것: 질문 유형·응급 신호(자체 규칙)와 DB 에서 찾은 참고 자료
@@ -198,6 +201,8 @@ pub struct ChatContext {
     pub references: Option<String>,
     pub sources: Vec<SourceRef>,
     pub docs_used: usize,
+    /// 회원 본인 고양이 요약 (이름 제외, `cats::chat_profile`). 있으면 캐시하지 않음
+    pub cat_profile: Option<String>,
 }
 
 impl Default for ChatContext {
@@ -208,6 +213,7 @@ impl Default for ChatContext {
             references: None,
             sources: Vec::new(),
             docs_used: 0,
+            cat_profile: None,
         }
     }
 }
@@ -301,7 +307,9 @@ impl ChatService {
             usage,
             error,
         };
-        let cacheable = req.history.is_empty() && req.choice_keyword.is_none();
+        // 회원 고양이 정보가 붙은 답은 그 회원 전용이라 캐시하지 않음 (다른 사람에게 섞이지 않게)
+        let cacheable =
+            req.history.is_empty() && req.choice_keyword.is_none() && ctx.cat_profile.is_none();
         // 위치 공유 여부에 따라 답변이 달라지므로(안내 문구) 캐시 키에 포함.
         // 질문 유형·참고 자료는 같은 메시지면 같게 나오므로 키에 넣지 않음
         let key = format!("{}|{}", has_location(req), normalize(&req.message));
@@ -426,6 +434,10 @@ fn build_turns(req: &ChatRequest, ctx: &ChatContext) -> Vec<Turn> {
             "\n[응급 신호 감지: {}]",
             ctx.emergency_signs.join(", ")
         ));
+    }
+    if let Some(cat) = &ctx.cat_profile {
+        last.push_str("\n[내 고양이 정보]\n");
+        last.push_str(cat);
     }
     if let Some(refs) = &ctx.references {
         last.push_str("\n[참고 자료]\n");
@@ -582,7 +594,23 @@ mod tests {
             lat: None,
             lon: None,
             choice_keyword: None,
+            cat_id: None,
         }
+    }
+
+    #[test]
+    fn cat_profile_goes_into_turn_and_disables_cache_key_use() {
+        let ctx = ChatContext {
+            cat_profile: Some("나이: 3살\n앓고 있는 질환: 신장 질환".into()),
+            ..ChatContext::default()
+        };
+        let last = build_turns(&req("밥을 안 먹어요"), &ctx)
+            .pop()
+            .unwrap()
+            .text;
+        assert!(last.contains("[내 고양이 정보]\n나이: 3살\n앓고 있는 질환: 신장 질환"));
+        let none = build_turns(&req("밥을 안 먹어요"), &ChatContext::default());
+        assert!(!none[0].text.contains("내 고양이 정보"));
     }
 
     #[test]
@@ -623,6 +651,7 @@ mod tests {
             references: Some("1) [실제 임상 사례] 요도 폐쇄".into()),
             sources: vec![],
             docs_used: 1,
+            cat_profile: None,
         };
         let t = build_turns(&req("소변이 안 나와요"), &ctx);
         let last = &t.last().unwrap().text;

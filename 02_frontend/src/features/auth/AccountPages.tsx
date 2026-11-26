@@ -6,6 +6,7 @@ import { ApiError } from "../../services/api/client";
 import { ROUTES } from "../../services/config/site";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import type { AuthUser, SocialProvider } from "../../types/api";
+import { MyCats } from "../cats/MyCats";
 import { useAuth } from "./authContext";
 import { errorMessage, SOCIAL_LABEL, socialNotice, validateNickname, validatePassword, type Notice } from "./authForm";
 import { AuthLayout, Field, FormNotice, PasswordField, SubmitButton } from "./AuthUi";
@@ -120,6 +121,9 @@ function MyPageBody({ user }: { user: AuthUser }) {
         <dd>{new Date(user.created_at).toLocaleDateString("ko-KR")}</dd>
       </dl>
 
+      <h2>우리 고양이</h2>
+      <MyCats />
+
       <h2>닉네임 수정</h2>
       <form className="auth-form" onSubmit={saveNickname} noValidate>
         <FormNotice notice={nickNotice} />
@@ -218,7 +222,7 @@ function WithdrawBody({ user, onDone }: { user: AuthUser; onDone(): void }) {
   return (
     <AuthLayout title="회원 탈퇴" lead="탈퇴하기 전에 아래 내용을 확인해 주세요.">
       <ul className="warn-list">
-        <li>이메일·닉네임·비밀번호 등 개인정보가 삭제되고 되돌릴 수 없어요.</li>
+        <li>이메일·닉네임·비밀번호 등 개인정보와 등록한 반려묘 건강 정보가 삭제되고 되돌릴 수 없어요.</li>
         <li>연결된 카카오·구글 로그인도 함께 해제돼요.</li>
         <li>모든 기기에서 로그아웃돼요. 같은 이메일로 다시 가입할 수 있어요.</li>
       </ul>

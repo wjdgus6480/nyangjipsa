@@ -1,6 +1,8 @@
 // 회원 인증 API. 세션은 HttpOnly 쿠키라 자바스크립트에서 토큰을 다루지 않습니다.
 import { buildUrl, request } from "./client";
 import type {
+  Cat,
+  CatInput,
   ChangePasswordRequest,
   LoginRequest,
   MessageResponse,
@@ -45,6 +47,18 @@ export const changePassword = (body: ChangePasswordRequest) =>
 
 export const withdraw = (body: { password?: string; confirm: boolean }) =>
   request<MessageResponse>("/api/users/me", { method: "DELETE", body });
+
+// 반려묘 건강 프로필 (정상 회원만. 건강 정보는 분석 이벤트로 보내지 않음)
+export const getMyCats = (signal?: AbortSignal) => request<{ cats: Cat[] }>("/api/users/me/cats", { signal });
+
+export const createCat = (body: CatInput) => request<{ cat: Cat }>("/api/users/me/cats", { method: "POST", body });
+
+/** 전체 교체: 보내지 않은 칸은 미입력으로 저장 */
+export const updateCat = (id: string, body: CatInput) =>
+  request<{ cat: Cat }>(`/api/users/me/cats/${encodeURIComponent(id)}`, { method: "PUT", body });
+
+export const deleteCat = (id: string) =>
+  request<{ ok: true }>(`/api/users/me/cats/${encodeURIComponent(id)}`, { method: "DELETE" });
 
 /**
  * 소셜 로그인 시작 주소. fetch 가 아니라 브라우저 이동(<a href>)으로 엽니다.

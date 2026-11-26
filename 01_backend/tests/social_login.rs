@@ -535,3 +535,132 @@ async fn email_signup_user_cannot_use_social_complete(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);
 }
+
+// ---------- 반려묘 정보 (이메일 가입과 같은 저장 흐름) ----------
+
+async fn cat_rows(pool: &PgPool) -> Vec<(String, Option<String>)> {
+    sqlx::query_as("SELECT name, allergy FROM user_cats ORDER BY created_at")
+        .fetch_all(pool)
+        .await
+        .unwrap()
+}
+
+#[sqlx::test]
+async fn social_signup_saves_cat_once_even_when_resubmitted(pool: PgPool) {
+    let (app, mock) = social_app(pool.clone()).await;
+    *mock.me.lock().unwrap() = kakao_me(7007, None, false);
+    let r = full_flow(&app, "kakao", None).await;
+    let session = r.session().unwrap();
+    let complete = |body: Value| {
+        let app = &app;
+        let session = session.clone();
+        async move {
+            send(
+                app,
+                Req::new("POST", "/api/auth/social/complete")
+                    .cookie(&session)
+                    .json(body),
+            )
+            .await
+        }
+    };
+
+    // 이메일 인증 대기로 끝나도 고양이는 저장
+    let r = complete(
+        json!({"email":"first@nyang.com","agree_terms":true,"agree_privacy":true,
+        "cat":{"name":"나비","allergy":"unknown"}}),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["status"], "pending_verification");
+    assert_eq!(
+        cat_rows(&pool).await,
+        [("나비".to_string(), Some("unknown".to_string()))]
+    );
+
+    // 1분 안에 다시 제출 → 메일 제한(429)으로 거부되고 저장한 고양이는 그대로
+    let resubmit = json!({"email":"second@nyang.com","agree_terms":true,"agree_privacy":true,
+        "cat":{"name":"나비2","allergy":"none"}});
+    let r = complete(resubmit.clone()).await;
+    assert_eq!(r.status, StatusCode::TOO_MANY_REQUESTS, "{:?}", r.body);
+    assert_eq!(cat_rows(&pool).await[0].0, "나비");
+
+    // 메일 제한이 풀린 뒤 다시 제출 → 중복 저장 없이 교체
+    let age_mails = || async {
+        sqlx::query("UPDATE email_verifications SET created_at = created_at - interval '2 hours'")
+            .execute(&pool)
+            .await
+            .unwrap();
+    };
+    age_mails().await;
+    let r = complete(resubmit).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(
+        cat_rows(&pool).await,
+        [("나비2".to_string(), Some("none".to_string()))]
+    );
+
+    // 고양이 없이 다시 제출 → 이미 저장한 고양이는 그대로
+    age_mails().await;
+    let r =
+        complete(json!({"email":"second@nyang.com","agree_terms":true,"agree_privacy":true})).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(cat_rows(&pool).await.len(), 1);
+
+    // 잘못된 고양이 정보면 가입 마무리 전체를 거부 (아무것도 바뀌지 않음)
+    let r = complete(
+        json!({"email":"second@nyang.com","agree_terms":true,"agree_privacy":true,
+        "cat":{"name":"x","conditions":["none","skin"]}}),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::BAD_REQUEST);
+    assert_eq!(cat_rows(&pool).await[0].0, "나비2");
+
+    // 인증 메일(마지막 것)로 활성화 → 내 정보에서 조회
+    let mails = sent(&app);
+    let token = token_in(mails.last().unwrap());
+    assert_eq!(
+        post(&app, "/api/auth/email/verify", json!({"token": token}))
+            .await
+            .status,
+        StatusCode::OK
+    );
+    let r = send(&app, Req::new("GET", "/api/users/me/cats").cookie(&session)).await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["cats"][0]["name"], "나비2");
+    assert_eq!(r.body["cats"][0]["allergy"], "none");
+}
+
+#[sqlx::test]
+async fn social_signup_with_verified_email_saves_cat_and_activates(pool: PgPool) {
+    let (app, mock) = social_app(pool.clone()).await;
+    *mock.me.lock().unwrap() = kakao_me(8008, Some("cat@kakao.com"), true);
+    let session = full_flow(&app, "kakao", None).await.session().unwrap();
+
+    // 가입 마무리 전(pending)에는 고양이 API 를 쓸 수 없음 → 가입 화면에서만 저장
+    let r = send(
+        &app,
+        Req::new("POST", "/api/users/me/cats")
+            .cookie(&session)
+            .json(json!({"name":"몰래"})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::FORBIDDEN);
+
+    let r = send(
+        &app,
+        Req::new("POST", "/api/auth/social/complete")
+            .cookie(&session)
+            .json(json!({"agree_terms":true,"agree_privacy":true,
+                "cat":{"name":"치즈","weight_kg":5,"parasite_prevention":["heartworm","external"]}})),
+    )
+    .await;
+    assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
+    assert_eq!(r.body["status"], "active");
+    let r = send(&app, Req::new("GET", "/api/users/me/cats").cookie(&session)).await;
+    let cat = &r.body["cats"][0];
+    assert_eq!(cat["name"], "치즈");
+    assert_eq!(cat["weight_kg"], 5.0);
+    assert_eq!(cat["parasite_prevention"], json!(["heartworm", "external"]));
+    assert_eq!(cat["vaccination"], Value::Null);
+}

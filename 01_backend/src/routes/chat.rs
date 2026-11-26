@@ -15,6 +15,8 @@ use axum::{
 use crate::{
     AppState,
     animal_business::{self, BusinessType},
+    auth::{cookie, session},
+    cats,
     chat::{
         ChatContext, ChatPlace, ChatRequest, ChatResponse, DISCLAIMER, MAX_MESSAGE_CHARS,
         build_price_comparison, ensure_compare_fee,
@@ -119,9 +121,27 @@ impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
     }
 }
 
+/// 로그인한 정상 회원이 고른 **본인** 고양이의 요약 (이름 제외). 로그인 안 함·남의 고양이·조회 실패면 None
+/// (챗봇은 로그인 없이도 쓰므로 오류로 막지 않고 고양이 정보 없이 답합니다)
+async fn my_cat_profile(
+    state: &AppState,
+    headers: &HeaderMap,
+    cat_id: Option<uuid::Uuid>,
+) -> Option<String> {
+    let cat_id = cat_id?;
+    let raw = cookie::get(headers, cookie::SESSION)?;
+    let (_, user) = session::lookup(&state.pool, &raw).await.ok()??;
+    if user.status != "active" {
+        return None;
+    }
+    let cat = cats::get(&state.pool, user.id, cat_id).await.ok()??;
+    Some(cats::chat_profile(&cat, chrono::Utc::now().date_naive()))
+}
+
 pub async fn chat(
     State(state): State<AppState>,
     ClientIp(ip): ClientIp,
+    headers: HeaderMap,
     Json(req): Json<ChatRequest>,
 ) -> Result<Json<ChatResponse>, AppError> {
     let service = state
@@ -185,6 +205,7 @@ pub async fn chat(
         references: health::context_block(&docs),
         sources: health::sources_of(&docs),
         docs_used: docs.len(),
+        cat_profile: my_cat_profile(&state, &headers, req.cat_id).await,
     };
 
     let outcome = service.reply_with_context(&req, &ctx).await;

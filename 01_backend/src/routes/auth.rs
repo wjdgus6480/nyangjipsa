@@ -2,7 +2,7 @@
 //!
 //! | 메서드 | 경로 | 내용 |
 //! |---|---|---|
-//! | POST | /register | 이메일 가입 → 인증 대기(pending) + 인증 메일 |
+//! | POST | /register | 이메일 가입 → 인증 대기(pending) + 인증 메일 (반려묘 정보 선택, 같은 트랜잭션 저장) |
 //! | POST | /email/verify | 인증 링크의 토큰 확인 → 활성화 |
 //! | POST | /email/resend | 인증 메일 재발송 (응답은 가입 여부와 무관하게 같음) |
 //! | POST | /login | 이메일 로그인 → 새 세션 쿠키 |
@@ -12,7 +12,7 @@
 //! | POST | /password/reset | 토큰으로 새 비밀번호 → 모든 세션 폐기 |
 //! | GET  | /kakao, /google | 소셜 로그인 시작 (`?mode=link` 는 로그인한 회원에 연결) |
 //! | GET  | /kakao/callback, /google/callback | 제공자가 돌려보내는 주소 → 프론트엔드로 이동 |
-//! | POST | /social/complete | 소셜 신규 가입 마무리: 약관 동의 + (필요하면) 이메일 입력·인증 |
+//! | POST | /social/complete | 소셜 신규 가입 마무리: 약관 동의 + (필요하면) 이메일 입력·인증 + 반려묘 정보(선택) |
 //!
 //! role 은 어떤 요청으로도 지정할 수 없습니다(요청 구조체에 없음, 모르는 필드는 400).
 
@@ -39,6 +39,7 @@ use crate::{
         token,
         users::{self, MailKind, is_unique_violation},
     },
+    cats::{self, CatInput},
     error::{ApiJson, AppError},
     routes::chat::ClientIp,
 };
@@ -166,6 +167,9 @@ pub struct RegisterRequest {
     pub agree_terms: bool,
     #[serde(default)]
     pub agree_privacy: bool,
+    /// 반려묘 정보 (선택). 비워 두면 저장하지 않음
+    #[serde(default)]
+    pub cat: Option<CatInput>,
 }
 
 async fn register(
@@ -182,6 +186,7 @@ async fn register(
     password::validate(&req.password, Some(&email)).map_err(AppError::Validation)?;
     let nickname = users::normalize_nickname(req.nickname)?;
     require_agreements(req.agree_terms, req.agree_privacy)?;
+    let cat = cats::validate_signup(req.cat)?;
     if users::email_taken(&state.pool, &email).await? {
         return Err(AppError::Conflict(DUPLICATE_EMAIL.into()));
     }
@@ -212,6 +217,10 @@ async fn register(
     .execute(&mut *tx)
     .await?;
     users::record_consents(&mut tx, user_id, &auth.config.policy_version).await?;
+    // 회원과 같은 트랜잭션: 인증 대기 중에도 회원 id 에 연결되어 남고, 인증하면 그대로 이어짐
+    if let Some(cat) = &cat {
+        cats::save_signup_cat(&mut tx, user_id, cat).await?;
+    }
     let raw =
         users::new_email_verification(&mut tx, user_id, &email, auth.config.verification_hours)
             .await?;
@@ -933,6 +942,9 @@ pub struct SocialCompleteRequest {
     pub agree_terms: bool,
     #[serde(default)]
     pub agree_privacy: bool,
+    /// 반려묘 정보 (선택). 다시 제출하면 가입 때 등록한 고양이를 교체, 비워 두면 그대로 둠
+    #[serde(default)]
+    pub cat: Option<CatInput>,
 }
 
 async fn social_complete(
@@ -953,6 +965,7 @@ async fn social_complete(
     }
     require_agreements(req.agree_terms, req.agree_privacy)?;
     let nickname = users::normalize_nickname(req.nickname)?;
+    let cat = cats::validate_signup(req.cat)?;
     let typed_email = match req.email.as_deref().map(str::trim) {
         None | Some("") => None,
         Some(raw) => Some(email::normalize(raw).map_err(AppError::Validation)?),
@@ -972,6 +985,9 @@ async fn social_complete(
         .execute(&mut *tx)
         .await?;
         users::record_consents(&mut tx, user.id, &auth.config.policy_version).await?;
+        if let Some(cat) = &cat {
+            cats::save_signup_cat(&mut tx, user.id, cat).await?;
+        }
         tx.commit().await?;
         let out = users::out_by_id(&state.pool, user.id).await?;
         return Ok(Json(json!({ "status": "active", "user": out })));
@@ -1012,6 +1028,10 @@ async fn social_complete(
     .execute(&mut *tx)
     .await?;
     users::record_consents(&mut tx, user.id, &auth.config.policy_version).await?;
+    // 이메일 인증 대기 중에도 저장 (인증하면 같은 회원 id 로 이어짐)
+    if let Some(cat) = &cat {
+        cats::save_signup_cat(&mut tx, user.id, cat).await?;
+    }
     let raw =
         users::new_email_verification(&mut tx, user.id, &target, auth.config.verification_hours)
             .await?;

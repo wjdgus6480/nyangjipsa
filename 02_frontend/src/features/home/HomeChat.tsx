@@ -9,6 +9,8 @@ import { requestMyLocation } from "../chatbot/geolocation";
 import { SourceList } from "../chatbot/SourceList";
 import type { LatLon } from "../chatbot/chatCore";
 import { createConsultTracker } from "../../services/analytics/consult";
+import { ChatCatPicker } from "../cats/ChatCatPicker";
+import { useChatCat } from "../cats/useChatCat";
 
 const SUGGESTIONS = [
   "고양이가 토를 너무 자주 해요.",
@@ -34,9 +36,10 @@ type Msg =
   | { id: number; who: "bot"; kind: "error"; message: string };
 
 /** 기존 askChat: history 는 최근 6개 항목만 */
-async function askChat({ message, history, choiceKeyword, location }: { message: string; history: ChatHistoryItem[]; choiceKeyword?: string; location: LatLon | null }) {
+async function askChat({ message, history, choiceKeyword, location, catId }: { message: string; history: ChatHistoryItem[]; choiceKeyword?: string; location: LatLon | null; catId?: string | null }) {
   const body: ChatRequest = { message, history: history.slice(-6) };
   if (choiceKeyword) body.choice_keyword = choiceKeyword;
+  if (catId) body.cat_id = catId; // 내 고양이 기준 답변 (서버가 본인 고양이인지 확인)
   if (location) {
     body.lat = location.lat;
     body.lon = location.lon;
@@ -67,6 +70,8 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
   const logRef = useRef<HTMLDivElement>(null);
   // 분석: 상담 시작·완료 (상담 문장은 보내지 않음)
   const consult = useRef(createConsultTracker("home"));
+  // 로그인 회원의 "내 고양이 기준 답변" (고양이가 없으면 아무것도 안 함)
+  const chatCat = useChatCat();
 
   useImperativeHandle(ref, () => ({
     setInput,
@@ -103,7 +108,7 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
     setMessages((ms) => [...ms, { id: nextId(), who: "user", text }, { id: typingId, who: "bot", kind: "typing" }]);
     let next: Msg;
     try {
-      const r = await askChat({ message: text, history: state.current.history, choiceKeyword: keyword, location: state.current.location });
+      const r = await askChat({ message: text, history: state.current.history, choiceKeyword: keyword, location: state.current.location, catId: chatCat.catId });
       state.current.history.push({ role: "user", text }, { role: "assistant", text: r.answer });
       consult.current.onReply({
         hospitals: r.hospitals?.length ?? 0,
@@ -183,6 +188,7 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
                 ),
               )}
             </div>
+            <ChatCatPicker chatCat={chatCat} />
             <form
               className="chat__form"
               onSubmit={(e) => {
