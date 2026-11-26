@@ -9,7 +9,8 @@
 // - 모든 이벤트에 유입 경로 utm_source / utm_medium / utm_campaign 을 붙임 (attribution.ts)
 //
 // 이벤트 이름은 팀 분석 계획(소문자_밑줄)을 그대로 씁니다. 새 이벤트는 AnalyticsEvent 에 먼저 추가하세요.
-import * as amplitude from "@amplitude/analytics-browser";
+// SDK 는 첫 로딩을 줄이려고 import() 로 따로 받습니다 (타입만 미리 가져옴)
+import type * as amplitudeTypes from "@amplitude/analytics-browser";
 import { AMPLITUDE_API_KEY, AMPLITUDE_SERVER_URL } from "../config/env";
 import { captureUtm, currentUtm } from "./attribution";
 
@@ -73,29 +74,36 @@ export interface Analytics {
 
 /** SDK 에서 쓰는 부분만 (테스트에서 가짜로 바꿈) */
 export interface AmplitudeClient {
-  init(apiKey: string, options?: amplitude.Types.BrowserOptions): unknown;
+  init(apiKey: string, options?: amplitudeTypes.Types.BrowserOptions): unknown;
   track(eventType: string, eventProperties?: Record<string, unknown>): unknown;
   setUserId(userId: string | undefined): void;
   reset(): void;
 }
 
-/** Amplitude Browser SDK 로 보내는 분석 (앱에서 쓰는 기본 구현) */
+/** Amplitude Browser SDK 로 보내는 분석 (앱에서 쓰는 기본 구현)
+ * - client 를 주지 않으면 SDK 를 import() 로 따로 받습니다 (첫 화면 파일에 포함하지 않음).
+ *   받기 전에 생긴 이벤트·로그인 연결은 순서대로 모아 두었다가 받은 뒤 보냅니다.
+ */
 export function createSdkAnalytics({
   apiKey,
   serverUrl,
-  client = amplitude,
+  client,
+  load = () => import("@amplitude/analytics-browser"),
 }: {
   apiKey: string;
   serverUrl?: string;
   client?: AmplitudeClient;
+  /** 테스트에서 바꿈 */
+  load?: () => Promise<AmplitudeClient>;
 }): Analytics {
   if (!apiKey) return { init() {}, track() {}, setUserId() {} };
-  let initialized = false;
+  let sdk: AmplitudeClient | null = client ?? null;
+  let loading: Promise<void> | null = null;
+  const pending: ((c: AmplitudeClient) => void)[] = [];
   let userId: string | null = null;
-  const ensureInit = () => {
-    if (initialized) return;
-    initialized = true;
-    client.init(apiKey, {
+
+  const setup = (c: AmplitudeClient) => {
+    c.init(apiKey, {
       serverUrl: serverUrl || undefined,
       // 자동 수집: 세션·유입(utm·referrer, 사용자 속성)만. 페이지뷰·클릭·폼 자동 수집은 끔 (주소·입력값 보호)
       autocapture: {
@@ -110,17 +118,46 @@ export function createSdkAnalytics({
       trackingOptions: { ipAddress: false },
     });
   };
+  let initialized = false;
+  const ensure = () => {
+    if (sdk) {
+      if (!initialized) {
+        initialized = true;
+        setup(sdk);
+      }
+      return;
+    }
+    if (loading) return;
+    loading = load()
+      .then((c) => {
+        sdk = c;
+        initialized = true;
+        setup(c);
+        for (const run of pending.splice(0)) run(c);
+      })
+      .catch(() => {
+        // 받지 못하면 분석만 빠지고 서비스는 그대로 (모아 둔 이벤트는 버림)
+        pending.length = 0;
+      });
+  };
+  const run = (fn: (c: AmplitudeClient) => void) => {
+    ensure();
+    if (sdk) fn(sdk);
+    else pending.push(fn);
+  };
   return {
-    init: ensureInit,
+    init: ensure,
     track(event, props) {
-      ensureInit();
-      client.track(event, eventProperties(props));
+      const p = eventProperties(props); // 지금 시점의 utm 으로
+      run((c) => c.track(event, p));
     },
     setUserId(id) {
-      ensureInit();
-      if (userId && !id) client.reset(); // 로그아웃: user_id 제거 + 새 device_id
-      else client.setUserId(id ?? undefined);
+      const wasLoggedIn = !!userId;
       userId = id;
+      run((c) => {
+        if (wasLoggedIn && !id) c.reset(); // 로그아웃: user_id 제거 + 새 device_id
+        else c.setUserId(id ?? undefined);
+      });
     },
   };
 }
@@ -198,5 +235,9 @@ export const analytics: Analytics = createSdkAnalytics({ apiKey: AMPLITUDE_API_K
 /** 앱 시작(모든 페이지 공통, main.tsx): 주소의 utm 을 기억하고 SDK 를 초기화 */
 export function startAnalytics(search: string = typeof window !== "undefined" ? window.location.search : "") {
   captureUtm(search);
-  analytics.init();
+  // SDK 파일은 첫 화면이 다 뜬 뒤에 받음 (이벤트는 그 전에도 모아 둠)
+  if (typeof window === "undefined") return;
+  const later = () => setTimeout(() => analytics.init(), 0);
+  if (document.readyState === "complete") later();
+  else window.addEventListener("load", later, { once: true });
 }

@@ -4,6 +4,7 @@
 use axum::{
     Json, Router,
     extract::{Query, State},
+    response::IntoResponse,
     routing::get,
 };
 use serde::{Deserialize, Serialize};
@@ -63,10 +64,11 @@ fn parse_types(raw: Option<&str>) -> Result<Option<Vec<BusinessType>>, AppError>
 }
 
 /// 예: `/api/places/points?type=hospital`
+/// 전국 위치는 동기화 때만 바뀌므로 캐시 헤더를 붙입니다 (routes::PUBLIC_CACHE)
 async fn points(
     State(state): State<AppState>,
     Query(q): Query<PointsQuery>,
-) -> Result<Json<PointsResponse>, AppError> {
+) -> Result<impl IntoResponse, AppError> {
     let types = parse_types(q.types.as_deref())?;
     let rows = animal_business::all_points(&state.pool, types.as_deref()).await?;
     let points: Vec<[f64; 2]> = rows
@@ -80,10 +82,13 @@ async fn points(
             [round_to(p.lon, d), round_to(p.lat, d)]
         })
         .collect();
-    Ok(Json(PointsResponse {
-        count: points.len(),
-        points,
-    }))
+    Ok((
+        [crate::routes::PUBLIC_CACHE],
+        Json(PointsResponse {
+            count: points.len(),
+            points,
+        }),
+    ))
 }
 
 /// 쿼리 파라미터. 예: `/api/places/nearby?lon=127.0490&lat=37.5233&radius_m=1000&type=hospital,pharmacy`

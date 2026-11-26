@@ -1,6 +1,6 @@
 // 기존 주소 호환 리다이렉트, 키 없는 지도 안내, SDK 로더 1회 로드
 import { describe, expect, test, vi } from "vitest";
-import { render, screen } from "@testing-library/react";
+import { render, screen, waitFor } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 
 // 개발자 PC 의 .env 키와 무관하게 "키 없음" 상태로 검사
@@ -44,18 +44,18 @@ describe("기존 주소 호환", () => {
     expect(screen.getByRole("heading", { name: "페이지를 찾을 수 없어요" })).toBeInTheDocument();
   });
 
-  test("챗봇 단독 화면은 지도 SDK 없이 열린다", () => {
+  test("챗봇 단독 화면은 지도 SDK 없이 열린다 (화면 파일은 따로 받음)", async () => {
     at("/chat");
-    expect(screen.getByRole("dialog", { name: "냥집사 AI 도우미" })).toBeInTheDocument();
+    expect(await screen.findByRole("dialog", { name: "냥집사 AI 도우미" })).toBeInTheDocument();
     expect(screen.queryByRole("button", { name: "닫기" })).toBeNull();
     expect(document.title).toBe("냥집사 AI 도우미");
   });
 });
 
 describe("네이버 지도", () => {
-  test("키가 없으면 지도 대신 안내 문구, 스크립트를 붙이지 않음", () => {
+  test("키가 없으면 지도 대신 안내 문구, 스크립트를 붙이지 않음 (화면 파일은 따로 받음)", async () => {
     at("/map");
-    expect(document.querySelector("#map .err")).toHaveTextContent("NAVER_MAP_CLIENT_ID");
+    await waitFor(() => expect(document.querySelector("#map .err")).toHaveTextContent("NAVER_MAP_CLIENT_ID"));
     expect(document.querySelectorAll("script[data-naver-maps]")).toHaveLength(0);
     // 챗봇은 그대로 (위치 없음 기준)
     expect(screen.getByRole("button", { name: "냥집사 AI 도우미 열기" })).toBeInTheDocument();

@@ -69,6 +69,10 @@ async fn counts_open_hospitals_cat_friendly_and_24h(pool: PgPool) {
         .await
         .unwrap();
     assert_eq!(res.status(), StatusCode::OK);
+    assert_eq!(
+        res.headers()["cache-control"],
+        "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400"
+    );
     let v: Value =
         serde_json::from_slice(&to_bytes(res.into_body(), usize::MAX).await.unwrap()).unwrap();
     for k in [

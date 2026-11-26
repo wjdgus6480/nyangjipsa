@@ -8,7 +8,7 @@ use std::{
     time::{Duration, Instant},
 };
 
-use axum::{Json, extract::State};
+use axum::{Json, extract::State, response::IntoResponse};
 use serde::Serialize;
 use sqlx::PgPool;
 
@@ -53,13 +53,21 @@ pub async fn load(pool: &PgPool) -> Result<ServiceStats, sqlx::Error> {
     .await
 }
 
-pub async fn stats(State(state): State<AppState>) -> Result<Json<ServiceStats>, AppError> {
-    if let Some((at, s)) = CACHE.lock().unwrap().as_ref()
-        && at.elapsed() < CACHE_TTL
-    {
-        return Ok(Json(s.clone()));
-    }
-    let s = load(&state.pool).await?;
-    *CACHE.lock().unwrap() = Some((Instant::now(), s.clone()));
-    Ok(Json(s))
+/// 서버 메모리 10분 캐시 + 브라우저·CDN 캐시 헤더 (routes::PUBLIC_CACHE)
+pub async fn stats(State(state): State<AppState>) -> Result<impl IntoResponse, AppError> {
+    let cached = CACHE
+        .lock()
+        .unwrap_or_else(|e| e.into_inner())
+        .as_ref()
+        .filter(|(at, _)| at.elapsed() < CACHE_TTL)
+        .map(|(_, s)| s.clone());
+    let s = match cached {
+        Some(s) => s,
+        None => {
+            let s = load(&state.pool).await?;
+            *CACHE.lock().unwrap_or_else(|e| e.into_inner()) = Some((Instant::now(), s.clone()));
+            s
+        }
+    };
+    Ok(([crate::routes::PUBLIC_CACHE], Json(s)))
 }

@@ -197,7 +197,7 @@ pub async fn dashboard(
     let period = PeriodInfo::new(q.period.as_deref().unwrap_or("7d"), today_kst())?;
     if let Some((at, r)) = CACHE
         .lock()
-        .unwrap()
+        .unwrap_or_else(|e| e.into_inner())
         .as_ref()
         .and_then(|m| m.get(period.key))
         && at.elapsed() < CACHE_TTL
@@ -246,7 +246,7 @@ pub async fn dashboard(
     if res.amplitude.status != "error" {
         CACHE
             .lock()
-            .unwrap()
+            .unwrap_or_else(|e| e.into_inner())
             .get_or_insert_with(HashMap::new)
             .insert(res.period.key, (Instant::now(), res.clone()));
     }

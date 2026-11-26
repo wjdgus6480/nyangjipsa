@@ -26,6 +26,24 @@ function fakeClient() {
 beforeEach(() => resetUtmForTest());
 
 describe("SDK 분석", () => {
+  test("SDK 를 따로 받는 동안의 이벤트·로그인 연결은 모아 두었다가 받은 뒤 순서대로 보냄", async () => {
+    const { client, calls } = fakeClient();
+    let resolve!: (c: typeof client) => void;
+    const load = vi.fn(() => new Promise<typeof client>((r) => (resolve = r)));
+    const a = createSdkAnalytics({ apiKey: "k", load });
+    a.track("landing_viewed", { page: "landing" });
+    a.setUserId("u-1");
+    a.track("cost_viewed", { hospital_id: 3 });
+    expect(load).toHaveBeenCalledTimes(1);
+    expect(calls).toHaveLength(0);
+    resolve(client);
+    await Promise.resolve();
+    await Promise.resolve();
+    expect(client.init).toHaveBeenCalledTimes(1);
+    expect(calls.map((c) => c.type)).toEqual(["landing_viewed", "cost_viewed"]);
+    expect(client.setUserId).toHaveBeenCalledWith("u-1");
+  });
+
   test("키가 없으면 SDK 를 초기화하지도 보내지도 않음", () => {
     const { client, calls } = fakeClient();
     const a = createSdkAnalytics({ apiKey: "", client });
