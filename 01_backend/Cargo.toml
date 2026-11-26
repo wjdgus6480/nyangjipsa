@@ -10,7 +10,7 @@ description = "동물병원 지도 서비스 백엔드 (Axum + SQLx + PostGIS)"
 [dependencies]
 # 웹 서버
 axum = "0.8"
-tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time"] }
+tokio = { version = "1", features = ["macros", "rt-multi-thread", "net", "signal", "time", "sync"] }
 tower-http = { version = "0.7", features = ["cors", "trace"] }
 
 # 데이터베이스 (PostgreSQL + PostGIS). 공간 처리는 SQL에서 하고 Rust는 f64 경도/위도만 사용
@@ -70,6 +70,9 @@ tracing = "0.1"
 tracing-subscriber = { version = "0.3", features = ["env-filter"] }
 thiserror = "2"
 anyhow = "1"
+
+# 관리자 대시보드·성장 분석: Amplitude 조회 여러 개를 함께 기다림 (join_all)
+futures-util = "0.3"
 
 [dev-dependencies]
 tower = { version = "0.5", features = ["util"] }

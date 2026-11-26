@@ -16,7 +16,9 @@
 | 첫 화면 | `landing_viewed` | 홈(`/`) 또는 랜딩(`/intro`)이 열릴 때 (한 번) | 랜딩은 `page`=landing (utm) | `src/features/home/HomePage.tsx` `HomePage`, `src/features/landing/LandingPage.tsx` `LandingPage` 의 `useEffect` | 방문자 수, 어디서 왔는지 (홈·랜딩 구분) |
 | AI 상담 | `consult_started` | 한 대화에서 AI 가 첫 질문에 답했을 때 | `surface`(home/chatbot/map), `fallback` | `src/services/analytics/consult.ts` `onReply` ← `src/features/home/HomeChat.tsx` `send`, `src/features/chatbot/Chatbot.tsx` `request` | 상담 시작률 |
 | AI 상담 | `consult_completed` | 상담 결과가 나왔을 때 (한 번): 병원·장소 목록·가격 비교가 나오거나, AI 가 더 묻지 않고 답을 마침 | `surface`, `result_type`(hospitals/price/places/answer), `reply_count`, `fallback` | 위와 같음 (`consult.ts` `resultType`) | 상담 완료율 |
-| 지도 | `cost_viewed` | 지도에서 고른 병원의 예상 진료비(정보창)가 보일 때 (병원마다 한 번) | `hospital_id` | `src/features/map/MapPage.tsx` `selectedId` `useEffect` | 진료비 확인률 |
+| 지도 | `fee_menu_viewed` | 진료비 메뉴(병원·진료비 지도 `/map`) 화면이 열릴 때 (한 번) | `surface`=map | `MapPage.tsx` 첫 `useEffect` | 진료비 메뉴 진입 (성장 분석 퍼널 2단계) |
+| 지도 | `fee_filter_selected` | 조회 조건을 고를 때: 업종 체크·반경·지역 선택·내 위치 | `filter_type`(place_type/radius/region/my_location) — 값·위치는 보내지 않음 | `MapPage.tsx` `trackFilter` | 조회 조건 선택 (퍼널 3단계) |
+| 지도·AI 상담 | `cost_viewed` | **진료비 조회 완료 (노스스타)**: 지도에서 고른 병원의 예상 진료비(정보창)가 보일 때 (병원마다 한 번), AI 답변에 진료비 비교표가 나올 때 (대화마다 한 번) | 지도 `hospital_id`, 공통 `surface`(map/home/chatbot), `repeat_view`(이 브라우저에서 이전 날에 진료비를 본 적 있음) | `MapPage.tsx` `selectedId` `useEffect`, `src/services/analytics/consult.ts`, `feeView.ts` | 진료비 조회 사용자(NSM)·재조회 |
 | 지도 | `hospital_clicked` | 병원 상세(목록·핀 선택 → 정보창)·전화·길찾기를 눌렀을 때, 랜딩 미리보기의 "지도에서 보기" | `hospital_id`, `click_type`(detail/call/route), 랜딩은 `page`=landing | detail: `MapPage.tsx` `selectedId` `useEffect`, `LandingPage.tsx` `PreviewCard` / call·route: `src/features/hospital/HospitalActions.tsx` `onCall`·`onRoute` | 핵심 지표(노스스타) |
 | 지도 | `result_shared` | 병원 정보 카카오톡 공유 버튼을 눌렀을 때 | `hospital_id`, `share_type`=hospital | `HospitalActions.tsx` `onShare` | 공유율 |
 | 공유받은 지도 | `route_viewed` | 길찾기를 열었을 때 | `hospital_id` | `HospitalActions.tsx` `onRoute` | 길찾기 이용 |
@@ -44,7 +46,8 @@
 ## Amplitude 에서 볼 차트 (제안)
 
 - 퍼널: `landing_viewed` → `consult_started` → `consult_completed` → `cost_viewed` → `hospital_clicked`
-- 노스스타: `hospital_clicked` 고유 사용자 수 (주간), `click_type` 별 분할
+- 노스스타: **`cost_viewed` 고유 사용자 수 (진료비 조회 사용자)**. 2026-11-26 병원 연결(`hospital_clicked`)에서 변경
+- 진료비 조회 퍼널: `session_start` → `fee_menu_viewed` → `fee_filter_selected` → `cost_viewed`
 - 공유: `result_shared` / `hospital_clicked` 비율, `utm_campaign = hospital_card` 유입의 `route_viewed` 전환
 
 ## 테스트
@@ -66,16 +69,44 @@
 
 | 영역 | 데이터 | 비고 |
 |---|---|---|
-| 핵심 지표 카드 5개 | Amplitude 이벤트별 고유 사용자 (기간 전체) | 이전 같은 길이 기간 대비 ▲▼%. 이전 0 이면 "새로 생김". `hospital_clicked` = 노스스타 강조 |
-| 사용자 여정 퍼널 | Amplitude 순서 퍼널 (`landing_viewed` → … → `result_shared`) | 단계별 전환율·이탈률, 가장 많이 빠지는 단계 |
-| 어디서 왔나요? | `landing_viewed` 를 `utm_source` 로 나눔 | 없음 = 직접 방문, `share` = 카톡 공유 링크 |
+| 핵심 지표 카드 5개 | Amplitude 이벤트별 고유 사용자 (기간 전체): 방문자·AI 상담 시작·상담 완료·**진료비 조회**·병원 연결 | 이전 같은 길이 기간 대비 ▲▼%. 이전 0 이면 "새로 생김". `cost_viewed` = 노스스타 강조 |
+| 사용자 여정 퍼널 | Amplitude 순서 퍼널 (`landing_viewed` → … → `cost_viewed` → `hospital_clicked`) | 단계별 전환율·이탈률, 가장 많이 빠지는 단계 |
 | 일일 활성 사용자 (막대) | Amplitude `_active` 일별 고유 사용자 | 주별·월별은 **하루 평균** (같은 사람 중복 집계 방지) |
-| 병원 연결 추세 (선) | `hospital_clicked` 일별 고유 사용자, 이전 기간 점선 | |
+| 진료비 조회 추세 (선) | `cost_viewed` 일별 고유 사용자, 이전 기간 점선 | |
 | 많이 연결된 병원 TOP 5 | `hospital_clicked` 를 `hospital_id` 로 나눈 횟수 + DB 병원 이름 | 삭제(폐업)된 병원은 번호만 |
 | 운영 현황 | PostgreSQL: 회원·가입·공유 링크·병원 수 | Amplitude 없이도 항상 표시 |
 
 - Amplitude 키가 없거나 응답이 실패하면 가짜 숫자 없이 "연결 안 됨/오류" 안내와 빈 그래프를 보여 줍니다
-- 서버가 기간별 결과를 5분간 캐시합니다 (Amplitude 요청 비용·동시 요청 제한)
-- Amplitude 조회는 동시에 보내지 않고 차례로 보내며, 429(동시 조회 비용 초과)면 잠깐 기다렸다 다시 시도합니다
 - 90일 보기는 없습니다: 무료 플랜 조회 비용 한도에 자주 걸리고 서비스 초기라 데이터도 없음. 30일 보기에서 일별·주별·월별을 고를 수 있습니다
-- 성장 분석·병원 관리·설정 메뉴는 틀만 있고 "준비 중" 입니다
+- 유입 경로는 성장 분석으로 옮겼습니다 (겹치지 않게). 병원 관리·설정 메뉴는 틀만 있고 "준비 중" 입니다
+
+## 성장 분석 (`/admin/growth`)
+
+API `GET /api/admin/growth?period=1d|7d|30d|custom&start=YYYY-MM-DD&end=YYYY-MM-DD` (`01_backend/src/routes/admin_growth.rs`), 화면 `02_frontend/src/features/admin/GrowthPage.tsx` (계산 `growthModel.ts`).
+
+- 기간: 최근 1일(오늘, **시간별** 그래프) / 7일 / 30일 / 직접 설정(최대 31일, 최근 180일 안). 이전 기간 = 바로 앞의 같은 길이
+- 사용자 = Amplitude 사용자 (익명 device_id, 로그인하면 user_id 로 합쳐져 한 사람)
+
+| 영역 | 정의 (Amplitude) | 비고 |
+|---|---|---|
+| 진료비 조회 사용자 (NSM) | `cost_viewed` 고유 사용자 | 증감률(%) 크게 + 실제 증감(명) 작게. 이전 0 이면 "비교 불가" |
+| 조회 전환율 | NSM ÷ 방문자(`_active` 고유 사용자) | 증감은 **%p** |
+| 전체 진료비 조회 | `cost_viewed` 횟수 | |
+| 재조회 사용자 | `cost_viewed` 중 `repeat_view = true` 고유 사용자 | 속성이 들어오기 전에는 "수집 시작 전" |
+| 유입 채널 (도넛) | `_active` 를 사용자 속성 `utm_source`·`referring_domain` 으로 나눠 분류 | utm 우선. 검색·직접·SNS·공유 링크·다른 사이트·기타 캠페인 중 **사용자가 있는 채널만** |
+| 신규·재방문 (누적 막대) | 신규 = `_new`, 재방문 = `_active` − `_new` | |
+| 성장 추이 (선 + 보조선) | 칸별 NSM, 칸별 NSM ÷ 방문자 | 방문 0 인 칸은 전환율 선을 끊음 |
+| 진료비 조회 퍼널 | 순서 퍼널 `session_start` → `fee_menu_viewed` → `fee_filter_selected` → `cost_viewed` | 아직 수집 안 된 단계는 "수집 전"(0 과 구분). 가장 큰 이탈 강조 |
+| 병원 이용 (막대) | `hospital_clicked` 를 `click_type`(detail/call/route)로 나눈 고유 사용자 + 순서 퍼널 `cost_viewed` → `hospital_clicked`(call·route) | 조회 사용자 대비 비율 |
+| 유지율 (코호트 히트맵) | 리텐션 `_new`→`_active`, `_active`→`_active` (N일째). 재방문 코호트 = 전체 − 신규 | D1·D7·D30, 아직 안 지난 칸은 "–" |
+
+- 섹션(유입·퍼널·병원 이용·유지율)은 따로 실패할 수 있고, 실패한 칸에만 안내가 나옵니다
+
+## 조회 속도 (Amplitude 가 느리던 이유와 개선, 2026-11-26)
+
+- **원인**: 대시보드 한 번에 Amplitude 조회 약 22개를 **하나씩 차례로** 보냈음(이벤트 6개 × 현재·이전·그래프 앞 기간 + 퍼널 2 + 병원 순위 + 유입). 조회 하나가 1초 안팎이라 캐시가 없을 때 첫 화면이 수십 초 걸렸고, 5분마다 바뀌지 않는 "이전 기간" 숫자까지 다시 받았음. Render 무료 서버가 잠들어 있으면 깨어나는 시간이 더해짐
+- **개선** (`01_backend/src/amplitude.rs`, `routes/admin_cache.rs`)
+  - 동시에 **3개까지** 보냄 (무료 플랜 동시 조회 비용 한도 429 를 넘지 않는 선, 429 는 기존처럼 잠깐 기다렸다 재시도)
+  - 같은 조회 결과 재사용: 오늘이 들어간 조회 5분, **지난 날짜만 보는 조회 6시간**. 대시보드와 성장 분석이 같은 조회를 나눠 씀
+  - 화면 응답 캐시: 5분 안은 그대로, 1시간 안은 **지난 집계를 바로 보여 주고 뒤에서 새로 집계** (집계 시각이 화면 아래에 표시)
+- 브라우저 SDK 는 원래대로 첫 화면이 다 뜬 뒤 따로 받습니다 (첫 화면 속도와 무관)

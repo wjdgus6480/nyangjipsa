@@ -4,6 +4,7 @@
 // - 기존 ?focus=위도,경도&name=…&addr=…&tel=…&type=… 쿼리를 그대로 지원합니다.
 // - 공유 링크(/s/{code})로 들어오면 &hospital=병원id 가 붙어 그 병원의 전화·길찾기·공유 버튼을 바로 보여 줍니다.
 // - 분석: 병원 선택(hospital_clicked detail), 진료비 표시(cost_viewed) — 병원 id 만 보냄
+//   진료비 조회 퍼널: 화면 진입(fee_menu_viewed) → 조회 조건 선택(fee_filter_selected: 종류·반경·지역·내 위치) → cost_viewed
 // - 내 위치: 버튼을 누르면 위치 권한을 묻고 파란 점 + 그 주변 검색. 길찾기 출발지로도 씀 (좌표는 저장·분석에 쓰지 않음)
 // - 길찾기: 고른 병원의 "길찾기" → RoutePanel (백엔드 /api/route, 도보·대중교통) → 지도에 경로 선
 // - 위쪽 탭: [길찾기] 가격 없이 병원·길찾기만 / [가격 조회] 가격을 보여 주고, 병원을 골라 지도에 가격표(조회하기)·비교표(비교하기)
@@ -22,6 +23,7 @@ import { PLACE_TYPES } from "../hospital/fees";
 import { PlaceList } from "../hospital/PlaceList";
 import { HospitalActions, type ActionHospital } from "../hospital/HospitalActions";
 import { analytics } from "../../services/analytics/analytics";
+import { feeViewProps } from "../../services/analytics/feeView";
 import { HospitalMap, type RadiusOption, type RegionBarState } from "./hospitalMap";
 import { NAVER_AUTH_FAILED_MESSAGE, loadNaverMaps, onNaverAuthFailure } from "./naverLoader";
 import { RegionBar } from "./RegionBar";
@@ -91,6 +93,13 @@ export function MapPage() {
     setSelectedPlace((prev) => (id == null ? null : (itemsRef.current.find((x) => x.id === id) ?? (prev?.id === id ? prev : null))));
   }, []);
 
+  // 진료비 메뉴(병원·진료비 지도) 진입 — 화면이 열릴 때 한 번
+  useEffect(() => {
+    analytics.track("fee_menu_viewed", { surface: "map" });
+  }, []);
+  /** 조회 조건 선택 (어떤 조건인지만 보냄, 값·위치는 보내지 않음) */
+  const trackFilter = (filter_type: "place_type" | "radius" | "region" | "my_location") => analytics.track("fee_filter_selected", { filter_type });
+
   // 병원을 고르면(목록·핀) 상세 정보창이 열림 → hospital_clicked(detail), 진료비가 보이면 cost_viewed (병원마다 한 번)
   const costSeen = useRef(new Set<number>());
   useEffect(() => {
@@ -99,7 +108,7 @@ export function MapPage() {
     analytics.track("hospital_clicked", { hospital_id: p.hospital_id, click_type: "detail" });
     if (p.fees?.length && !costSeen.current.has(p.hospital_id)) {
       costSeen.current.add(p.hospital_id);
-      analytics.track("cost_viewed", { hospital_id: p.hospital_id });
+      analytics.track("cost_viewed", { hospital_id: p.hospital_id, surface: "map", ...feeViewProps() });
     }
   }, [selectedId]);
 
@@ -231,8 +240,10 @@ export function MapPage() {
     [],
   );
 
-  const toggleType = (value: string, checked: boolean) =>
+  const toggleType = (value: string, checked: boolean) => {
+    trackFilter("place_type");
     setTypes((cur) => PLACE_TYPES.map((t) => t.value).filter((v) => (v === value ? checked : cur.includes(v))));
+  };
 
   return (
     <div className="map-page">
@@ -267,7 +278,14 @@ export function MapPage() {
             </div>
             <div className="row row-sub">
               반경
-              <select id="radius" value={String(radius)} onChange={(e) => setRadius(e.target.value === "auto" ? "auto" : Number(e.target.value))}>
+              <select
+                id="radius"
+                value={String(radius)}
+                onChange={(e) => {
+                  trackFilter("radius");
+                  setRadius(e.target.value === "auto" ? "auto" : Number(e.target.value));
+                }}
+              >
                 {RADIUS_OPTIONS.map((o) => (
                   <option key={o.label} value={String(o.value)}>{o.label}</option>
                 ))}
@@ -321,14 +339,27 @@ export function MapPage() {
             {authFailed && <div className="err">{NAVER_AUTH_FAILED_MESSAGE}</div>}
           </div>
           {loaded && (
-            <button type="button" className="my-loc-btn" onClick={() => void locate(true)} disabled={locating} aria-label="내 위치로 이동" title="내 위치">
+            <button
+              type="button"
+              className="my-loc-btn"
+              onClick={() => {
+                trackFilter("my_location");
+                void locate(true);
+              }}
+              disabled={locating}
+              aria-label="내 위치로 이동"
+              title="내 위치"
+            >
               {locating ? "…" : "◎"}<span>내 위치</span>
             </button>
           )}
           {loaded && (
             <RegionBar
               state={region}
-              onSelect={(level, code) => hmRef.current?.selectRegion(level, code)}
+              onSelect={(level, code) => {
+                trackFilter("region");
+                hmRef.current?.selectRegion(level, code);
+              }}
               onClear={(fitNation) => hmRef.current?.clearRegion({ fitNation })}
             />
           )}

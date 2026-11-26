@@ -28,6 +28,9 @@ export type AnalyticsEvent =
   | "landing_viewed"
   | "consult_started"
   | "consult_completed"
+  // 진료비 조회 퍼널 (진료비 메뉴 진입 → 조회 조건 선택 → 진료비 조회 완료 = cost_viewed)
+  | "fee_menu_viewed"
+  | "fee_filter_selected"
   | "cost_viewed"
   | "hospital_clicked"
   | "result_shared"
