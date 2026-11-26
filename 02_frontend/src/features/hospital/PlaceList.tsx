@@ -30,12 +30,20 @@ export function PlaceList({ items, selectedId, onSelect, showFees = true, pick }
         const canPick = !!pick && !!p.fees?.length;
         const picked = !!pick?.ids.includes(p.id);
         return (
-          <li key={p.id} data-id={p.id} className={(p.id === selectedId ? "sel" : "") + (picked ? " is-picked" : "")} onClick={() => onSelect(p.id)}>
-            {canPick && (
-              <label className="pick" onClick={(e) => e.stopPropagation()} title={!picked && pick.full ? "최대 개수까지 골랐어요" : "비교할 병원으로 고르기"}>
-                <input type="checkbox" checked={picked} disabled={!picked && pick.full} onChange={() => pick.onToggle(p)} aria-label={`${p.name} 비교에 추가`} />
-              </label>
-            )}
+          <li
+            key={p.id}
+            data-id={p.id}
+            className={(p.id === selectedId ? "sel" : "") + (picked ? " is-picked" : "") + (canPick ? " is-pickable" : "")}
+            // 가격 조회 탭: 칸을 누르면 비교 대상으로 고르거나 빼고, 지도에서도 그 병원을 보여 줌
+            onClick={() => {
+              if (canPick && (picked || !pick.full)) pick.onToggle(p);
+              onSelect(p.id);
+            }}
+            aria-pressed={canPick ? picked : undefined}
+            title={canPick ? (picked ? "누르면 비교에서 빠져요" : pick.full ? "최대 개수까지 골랐어요" : "누르면 비교할 병원으로 골라요") : undefined}
+          >
+            {/* 고름 표시 (누르는 곳은 칸 전체) */}
+            {canPick && <span className={"pick" + (picked ? " is-on" : "")} aria-hidden="true">{picked ? "✓" : ""}</span>}
             <div className="name">{p.name}</div>
             <div className="meta">{`${TYPE_LABEL[p.type] || p.type} · ${fmtDist(p.distance_m)} · ${p.road_address || p.lot_address || "주소 없음"}`}</div>
             {fee && <div className="fee">{fee}</div>}

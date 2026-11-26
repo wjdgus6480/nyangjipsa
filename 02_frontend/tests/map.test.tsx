@@ -57,6 +57,18 @@ describe("HospitalMap (SDK 조작)", () => {
     hm.destroy();
   });
 
+  test("가격 조회 탭: 가격은 받되(include_fees=true) 정보창에는 바로 보여 주지 않음", async () => {
+    const { calls } = api();
+    const hm = new HospitalMap(document.createElement("div"), { types: ["hospital"], radius: "auto", withFees: true, feesInInfo: false }, { onItems: vi.fn(), onStatus: vi.fn(), onSelected: vi.fn(), onRegion: vi.fn() });
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(calls.find((c) => c.url.startsWith("/api/places/nearby"))!.url).toContain("include_fees=true");
+    hm.select(11, true);
+    const iw = (hm as unknown as { infoWindow: { content: HTMLElement } }).infoWindow.content;
+    expect(iw.textContent).toContain("청담냥병원");
+    expect(iw.querySelector(".iw-fees")).toBeNull();
+    hm.destroy();
+  });
+
   test("업종을 모두 끄면 검색하지 않고 안내", async () => {
     const { calls } = api();
     const onStatus = vi.fn();
@@ -244,12 +256,17 @@ describe("지도 탭: 길찾기 · 가격 조회", () => {
     fireEvent.click(screen.getByRole("tab", { name: "가격 조회" }));
     await waitFor(() => expect(calls.filter((c) => c.url.startsWith("/api/places/nearby")).length).toBe(n + 1));
     expect(calls.at(-1)!.url).toContain("include_fees=true");
-    await waitFor(() => expect(document.querySelector("#list .fee")).toHaveTextContent("초진 진찰료 12,000원"));
-    // 진료비가 있는 병원만 고를 수 있음 (약국은 체크 없음)
-    expect(document.querySelectorAll("#list .pick")).toHaveLength(1);
+    // 가격은 받아 두지만 목록에는 바로 보여 주지 않음. 진료비가 있는 병원만 고를 수 있음 (약국은 고름 표시 없음)
+    await waitFor(() => expect(document.querySelectorAll("#list .pick")).toHaveLength(1));
+    expect(document.querySelector("#list .fee")).toBeNull();
     expect(screen.getByText(/최대 4곳까지/)).toBeInTheDocument();
 
-    fireEvent.click(screen.getByLabelText("청담냥병원 비교에 추가"));
+    // 칸을 누르면 고름 (체크 칸을 따로 누르지 않아도 됨). 가격 조회 탭에서는 전화·길찾기·공유를 보여 주지 않음
+    const hospitalRow = document.querySelector("#list li")!;
+    fireEvent.click(hospitalRow);
+    expect(hospitalRow).toHaveClass("is-picked");
+    expect(hospitalRow).toHaveAttribute("aria-pressed", "true");
+    expect(screen.queryByRole("button", { name: "길찾기" })).toBeNull();
     expect(screen.getByText("선택", { exact: false })).toHaveTextContent("1/4곳 선택");
     // 한 곳만 고르면 비교하기는 못 누름
     expect(screen.getByRole("button", { name: "비교하기" })).toBeDisabled();
@@ -258,6 +275,13 @@ describe("지도 탭: 길찾기 · 가격 조회", () => {
     const tag = fake.markers.find((m) => m.opts.icon?.content.includes("price-tag"))!;
     expect(tag.opts.icon!.content).toContain("청담냥병원");
     expect(tag.opts.icon!.content).toContain("초진 진찰료 12,000원");
+
+    // 한 번 더 누르면 빠지고, 다시 고름
+    fireEvent.click(hospitalRow);
+    expect(hospitalRow).not.toHaveClass("is-picked");
+    expect(screen.queryByRole("button", { name: "조회하기" })).toBeNull();
+    fireEvent.click(hospitalRow);
+    expect(tag.setMap).toHaveBeenCalledWith(null);
 
     // 길찾기 탭으로 돌아가면 가격표·가격이 사라짐
     fireEvent.click(screen.getByRole("tab", { name: "길찾기" }));

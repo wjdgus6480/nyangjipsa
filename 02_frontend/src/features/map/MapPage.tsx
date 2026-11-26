@@ -3,7 +3,7 @@
 // - 화면을 떠나면(언마운트) 지도·마커·이벤트를 모두 정리해 재진입 시 중복 생성되지 않습니다.
 // - 기존 ?focus=위도,경도&name=…&addr=…&tel=…&type=… 쿼리를 그대로 지원합니다.
 // - 공유 링크(/s/{code})로 들어오면 &hospital=병원id 가 붙어 그 병원의 전화·길찾기·공유 버튼을 바로 보여 줍니다.
-// - 분석: 병원 선택(hospital_clicked detail), 진료비 표시(cost_viewed) — 병원 id 만 보냄
+// - 분석: 병원 선택(hospital_clicked detail), 진료비 표시(cost_viewed: 조회하기·비교하기를 눌렀을 때) — 병원 id 만 보냄
 // - 내 위치: 버튼을 누르면 위치 권한을 묻고 파란 점 + 그 주변 검색. 길찾기 출발지로도 씀 (좌표는 저장·분석에 쓰지 않음)
 // - 길찾기: 고른 병원의 "길찾기" → RoutePanel (백엔드 /api/route, 도보·대중교통) → 지도에 경로 선
 // - 위쪽 탭: [길찾기] 가격 없이 병원·길찾기만 / [가격 조회] 가격을 보여 주고, 병원을 골라 지도에 가격표(조회하기)·비교표(비교하기)
@@ -77,11 +77,12 @@ export function MapPage() {
   const [tagsShown, setTagsShown] = useState(false);
   const [compareOpen, setCompareOpen] = useState(false);
   const withFees = tab === "price";
-  const filters = useRef({ types, radius, withFees });
+  // 가격 조회 탭은 가격을 받아 두되(고를 수 있는 병원·비교용) 목록·정보창에는 바로 보여 주지 않음
+  const filters = useRef({ types, radius, withFees, feesInInfo: false });
   const paramsRef = useRef(params);
   const itemsRef = useRef(items);
   useLayoutEffect(() => {
-    filters.current = { types, radius, withFees };
+    filters.current = { types, radius, withFees, feesInInfo: false };
     paramsRef.current = params;
     itemsRef.current = items;
   });
@@ -91,17 +92,22 @@ export function MapPage() {
     setSelectedPlace((prev) => (id == null ? null : (itemsRef.current.find((x) => x.id === id) ?? (prev?.id === id ? prev : null))));
   }, []);
 
-  // 병원을 고르면(목록·핀) 상세 정보창이 열림 → hospital_clicked(detail), 진료비가 보이면 cost_viewed (병원마다 한 번)
-  const costSeen = useRef(new Set<number>());
+  // 병원을 고르면(목록·핀) 상세 정보창이 열림 → hospital_clicked(detail)
   useEffect(() => {
     const p = itemsRef.current.find((x) => x.id === selectedId);
     if (!p?.hospital_id) return;
     analytics.track("hospital_clicked", { hospital_id: p.hospital_id, click_type: "detail" });
-    if (p.fees?.length && !costSeen.current.has(p.hospital_id)) {
-      costSeen.current.add(p.hospital_id);
-      analytics.track("cost_viewed", { hospital_id: p.hospital_id });
-    }
   }, [selectedId]);
+
+  // 가격을 실제로 보여 줄 때(조회하기·비교하기) cost_viewed (병원마다 한 번)
+  const costSeen = useRef(new Set<number>());
+  const trackCostViewed = (list: NearbyPlace[]) => {
+    for (const p of list)
+      if (p.hospital_id && !costSeen.current.has(p.hospital_id)) {
+        costSeen.current.add(p.hospital_id);
+        analytics.track("cost_viewed", { hospital_id: p.hospital_id });
+      }
+  };
 
   // 행동 버튼을 보여 줄 병원: 고른 병원, 없으면 공유 링크로 받은 병원(?hospital=id)
   const actionHospital = useMemo<ActionHospital | null>(() => {
@@ -180,7 +186,7 @@ export function MapPage() {
 
   // 필터·탭 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도, 탭이 바뀌면 가격 포함 여부도)
   useEffect(() => {
-    hmRef.current?.setFilters({ types, radius, withFees });
+    hmRef.current?.setFilters({ types, radius, withFees, feesInInfo: false });
   }, [types, radius, withFees]);
 
   // 지도 가격표: 가격 조회 탭에서 조회하기를 눌렀을 때만, 고른 병원이 바뀌면 다시 그림
@@ -281,12 +287,17 @@ export function MapPage() {
               onShow={() => {
                 setTagsShown(true);
                 hmRef.current?.showPriceTags(picked, { fit: true });
+                trackCostViewed(picked);
               }}
-              onCompare={() => setCompareOpen(true)}
+              onCompare={() => {
+                setCompareOpen(true);
+                trackCostViewed(picked);
+              }}
               onClear={() => updatePicked([])}
             />
           )}
-          {actionHospital && (
+          {/* 전화·길찾기·공유는 길찾기 탭에서만 (가격 조회 탭은 고르기·비교에 집중) */}
+          {actionHospital && !withFees && (
             <HospitalActions
               key={actionKey}
               hospital={actionHospital}
@@ -310,7 +321,7 @@ export function MapPage() {
             items={items}
             selectedId={selectedId}
             onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : selectPlace(id))}
-            showFees={withFees}
+            showFees={false}
             pick={withFees ? { ids: picked.map((p) => p.id), full: picked.length >= MAX_COMPARE, onToggle: togglePick } : undefined}
           />
         </aside>
