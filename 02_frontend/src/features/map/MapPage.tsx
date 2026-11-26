@@ -4,7 +4,9 @@
 // - 기존 ?focus=위도,경도&name=…&addr=…&tel=…&type=… 쿼리를 그대로 지원합니다.
 // - 공유 링크(/s/{code})로 들어오면 &hospital=병원id 가 붙어 그 병원의 전화·길찾기·공유 버튼을 바로 보여 줍니다.
 // - 분석: 병원 선택(hospital_clicked detail), 진료비 표시(cost_viewed) — 병원 id 만 보냄
-import { useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
+// - 내 위치: 버튼을 누르면 위치 권한을 묻고 파란 점 + 그 주변 검색. 길찾기 출발지로도 씀 (좌표는 저장·분석에 쓰지 않음)
+// - 길찾기: 고른 병원의 "길찾기" → RoutePanel (백엔드 /api/route, 도보·대중교통) → 지도에 경로 선
+import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useSearchParams } from "react-router";
 import "../../styles/map.css";
 import "../../styles/chatbot.css";
@@ -20,9 +22,13 @@ import { PlaceList } from "../hospital/PlaceList";
 import { HospitalActions, type ActionHospital } from "../hospital/HospitalActions";
 import { analytics } from "../../services/analytics/analytics";
 import { HospitalMap, type RadiusOption, type RegionBarState } from "./hospitalMap";
-import { loadNaverMaps } from "./naverLoader";
+import { NAVER_AUTH_FAILED_MESSAGE, loadNaverMaps, onNaverAuthFailure } from "./naverLoader";
 import { RegionBar } from "./RegionBar";
 import { REGION_CONFIG } from "./regions/regionConfig";
+import { RoutePanel, type RouteEnds } from "./RoutePanel";
+import type { RouteLine } from "./routeCore";
+import { requestMyLocation } from "../chatbot/geolocation";
+import type { LatLon } from "../chatbot/chatCore";
 
 const RADIUS_OPTIONS: { value: RadiusOption; label: string }[] = [
   { value: "auto", label: "지도 화면 기준" },
@@ -45,8 +51,15 @@ export function MapPage() {
   const [status, setStatus] = useState("지도 불러오는 중…");
   const [items, setItems] = useState<NearbyPlace[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  /** 고른 업소 (고를 때 기억해 둠). 지도를 움직여 목록이 다시 검색돼 이 업소가 빠져도 버튼·길찾기가 사라지지 않게 */
+  const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
   const [region, setRegion] = useState<RegionBarState>({ level: null, here: null, sel: null });
   const [loaded, setLoaded] = useState(false);
+  const [myLocation, setMyLocation] = useState<LatLon | null>(null);
+  const [locating, setLocating] = useState(false);
+  /** 길찾기 패널이 열린 병원 (actionKey). 다른 병원을 고르면 자동으로 닫힘 */
+  const [routeFor, setRouteFor] = useState<string | null>(null);
+  const [authFailed, setAuthFailed] = useState(false);
   const filters = useRef({ types, radius });
   const paramsRef = useRef(params);
   const itemsRef = useRef(items);
@@ -55,6 +68,11 @@ export function MapPage() {
     paramsRef.current = params;
     itemsRef.current = items;
   });
+
+  const selectPlace = useCallback((id: number | null) => {
+    setSelectedId(id);
+    setSelectedPlace((prev) => (id == null ? null : (itemsRef.current.find((x) => x.id === id) ?? (prev?.id === id ? prev : null))));
+  }, []);
 
   // 병원을 고르면(목록·핀) 상세 정보창이 열림 → hospital_clicked(detail), 진료비가 보이면 cost_viewed (병원마다 한 번)
   const costSeen = useRef(new Set<number>());
@@ -70,14 +88,36 @@ export function MapPage() {
 
   // 행동 버튼을 보여 줄 병원: 고른 병원, 없으면 공유 링크로 받은 병원(?hospital=id)
   const actionHospital = useMemo<ActionHospital | null>(() => {
-    const p = items.find((x) => x.id === selectedId);
-    if (p?.hospital_id) return { hospitalId: p.hospital_id, name: p.name, phone: p.phone, lat: p.lat, lon: p.lon };
+    const p = selectedPlace;
+    // 동물병원이면 병원 표 id 가 없어도 전화·길찾기는 보여 줌 (공유만 숨김)
+    if (p && (p.hospital_id || p.type === "hospital"))
+      return { hospitalId: p.hospital_id ?? null, name: p.name, phone: p.phone, lat: p.lat, lon: p.lon };
     const sharedId = Number(params.get("hospital"));
     const focus = parseMapFocus(params);
     if (Number.isInteger(sharedId) && sharedId > 0 && focus)
       return { hospitalId: sharedId, name: focus.name, phone: focus.phone ?? null, lat: focus.lat, lon: focus.lon };
     return null;
-  }, [items, selectedId, params]);
+  }, [selectedPlace, params]);
+
+  // 길찾기 패널: 지금 고른 병원에 대해 열었을 때만 보임
+  const actionKey = actionHospital ? actionHospital.lat + "," + actionHospital.lon : "";
+  const routeOpen = routeFor !== null && routeFor === actionKey;
+
+  /** 내 위치 요청 → 지도에 파란 점 + 이동(주변 다시 검색). 성공하면 true */
+  const locate = useCallback(async (move = true): Promise<boolean> => {
+    setLocating(true);
+    const pos = await requestMyLocation({ enableHighAccuracy: true, timeout: 10000, maximumAge: 60000 });
+    setLocating(false);
+    if (!pos) {
+      setStatus("위치 권한이 없어 내 위치를 표시할 수 없어요. 브라우저에서 위치를 허용해 주세요.");
+      return false;
+    }
+    setMyLocation(pos);
+    hmRef.current?.showMyLocation(pos, { move });
+    return true;
+  }, []);
+
+  const drawRoute = useCallback((lines: RouteLine[], ends?: RouteEnds) => hmRef.current?.drawRoute(lines, ends), []);
 
   // 지도 생성/정리 (StrictMode 이중 실행·화면 재진입에도 인스턴스 하나만 유지)
   useEffect(() => {
@@ -85,13 +125,22 @@ export function MapPage() {
     const el = mapEl.current;
     let cancelled = false;
     let hm: HospitalMap | null = null;
+    // 네이버 인증 실패: 지도를 정리하고 안내 (화면은 유지)
+    const offAuth = onNaverAuthFailure(() => {
+      if (cancelled) return;
+      hm?.destroy();
+      if (hmRef.current === hm) hmRef.current = null;
+      setLoaded(false);
+      setAuthFailed(true);
+      setStatus(NAVER_AUTH_FAILED_MESSAGE);
+    });
     loadNaverMaps(NAVER_MAP_CLIENT_ID)
       .then(() => {
         if (cancelled) return;
         hm = new HospitalMap(el, filters.current, {
           onStatus: setStatus,
           onItems: setItems,
-          onSelected: setSelectedId,
+          onSelected: selectPlace,
           onRegion: setRegion,
         });
         hmRef.current = hm;
@@ -104,11 +153,12 @@ export function MapPage() {
       });
     return () => {
       cancelled = true;
+      offAuth();
       hm?.destroy();
       if (hmRef.current === hm) hmRef.current = null;
       setLoaded(false);
     };
-  }, []);
+  }, [selectPlace]);
 
   // 필터 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도)
   useEffect(() => {
@@ -172,14 +222,29 @@ export function MapPage() {
             </div>
             <div className="status" id="status" role="status">{status}</div>
           </div>
-          {actionHospital && <HospitalActions key={actionHospital.hospitalId} hospital={actionHospital} />}
-          <PlaceList items={items} selectedId={selectedId} onSelect={(id) => hmRef.current?.select(id, true)} />
+          {actionHospital && <HospitalActions key={actionKey} hospital={actionHospital} onOpenRoute={() => setRouteFor(actionKey)} />}
+          {actionHospital && routeOpen && (
+            <RoutePanel
+              hospital={actionHospital}
+              myLocation={myLocation}
+              onLocate={() => locate(false)}
+              onDraw={drawRoute}
+              onClose={() => setRouteFor(null)}
+            />
+          )}
+          <PlaceList items={items} selectedId={selectedId} onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : selectPlace(id))} />
         </aside>
         <div className="map-wrap">
           {/* 지도 SDK 가 이 div 안을 직접 그리므로 React 자식은 키가 없을 때의 안내뿐 */}
           <div id="map" ref={mapEl}>
             {!NAVER_MAP_CLIENT_ID && <div className="err">{MISSING_KEY}</div>}
+            {authFailed && <div className="err">{NAVER_AUTH_FAILED_MESSAGE}</div>}
           </div>
+          {loaded && (
+            <button type="button" className="my-loc-btn" onClick={() => void locate(true)} disabled={locating} aria-label="내 위치로 이동" title="내 위치">
+              {locating ? "…" : "◎"}<span>내 위치</span>
+            </button>
+          )}
           {loaded && (
             <RegionBar
               state={region}

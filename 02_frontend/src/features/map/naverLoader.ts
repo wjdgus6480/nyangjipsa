@@ -2,6 +2,30 @@
 // (화면을 나갔다 다시 들어와도 스크립트를 다시 받지 않음)
 let pending: Promise<typeof naver.maps> | null = null;
 
+// 네이버 지도 인증 실패 (키가 없거나, 지금 주소가 콘솔의 "Web 서비스 URL" 에 등록되지 않음).
+// SDK 는 스크립트를 불러온 뒤 비동기로 인증하고, 실패하면 window.navermap_authFailure 를 부르고 naver.maps 를 비웁니다.
+let authFailed = false;
+const authListeners = new Set<() => void>();
+if (typeof window !== "undefined") {
+  (window as unknown as { navermap_authFailure?: () => void }).navermap_authFailure = () => {
+    authFailed = true;
+    for (const cb of authListeners) cb();
+  };
+}
+
+export const NAVER_AUTH_FAILED_MESSAGE =
+  "네이버 지도 인증에 실패했어요. 네이버 클라우드 콘솔의 Maps 앱 설정에서 Web 서비스 URL 에 지금 주소를 등록했는지 확인해 주세요.";
+
+/** 인증 실패를 알려 줌 (이미 실패했으면 바로 호출). 해제 함수를 돌려줌 */
+export function onNaverAuthFailure(cb: () => void): () => void {
+  if (authFailed) cb();
+  authListeners.add(cb);
+  return () => authListeners.delete(cb);
+}
+
+/** 지금 SDK 를 쓸 수 있는지 (인증 실패 후에는 naver.maps 가 비어 있음) */
+export const naverReady = (): boolean => !!(window as unknown as { naver?: { maps?: unknown } }).naver?.maps;
+
 export const SDK_URL = "https://oapi.map.naver.com/openapi/v3/maps.js";
 
 export function loadNaverMaps(clientId: string): Promise<typeof naver.maps> {
@@ -32,4 +56,6 @@ export function loadNaverMaps(clientId: string): Promise<typeof naver.maps> {
 /** 테스트용 */
 export function __resetNaverLoader() {
   pending = null;
+  authFailed = false;
+  authListeners.clear();
 }

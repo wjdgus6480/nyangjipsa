@@ -73,6 +73,9 @@ export function Header() {
             )}
             {user?.status === "active" ? (
               <>
+                {user.role === "admin" && (
+                  <Link className="nav__link" to={ROUTES.admin} onClick={() => setOpen(false)}>관리자</Link>
+                )}
                 <Link className="nav__link" to={ROUTES.me} onClick={() => setOpen(false)}>
                   {user.nickname ? `${user.nickname}님` : "내 정보"}
                 </Link>

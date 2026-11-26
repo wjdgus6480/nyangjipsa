@@ -1,4 +1,5 @@
 pub mod admin;
+pub mod admin_dashboard;
 pub mod auth;
 pub mod chat;
 pub mod directions;
@@ -25,6 +26,7 @@ pub fn router(state: AppState) -> Router {
         .nest("/api/hospitals", hospitals::router())
         .route("/api/chat", post(chat::chat))
         .route("/api/route", get(directions::route))
+        .route("/api/search/places", get(directions::search_places))
         .route("/api/stats", get(stats::stats))
         .route("/api/share", post(share::create))
         .route("/api/share/{code}", get(share::resolve))

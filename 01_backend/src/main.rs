@@ -96,6 +96,21 @@ async fn main() -> anyhow::Result<()> {
         config.public_base_url,
         config.frontend_base_url
     );
+    // 관리자 대시보드 Amplitude 조회 (API 키 + Secret 키가 모두 있을 때만)
+    match (&config.amplitude_api_key, &config.amplitude_secret_key) {
+        (Some(key), Some(secret)) => {
+            state = state.with_amplitude(nyangjipsa_api::amplitude::AmplitudeClient::new(
+                key,
+                secret,
+                config.amplitude_dashboard_url.as_deref(),
+            )?);
+            tracing::info!("관리자 대시보드 Amplitude 연동 켜짐");
+        }
+        _ => tracing::info!(
+            "관리자 대시보드 Amplitude 연동 꺼짐 (AMPLITUDE_API_KEY·AMPLITUDE_SECRET_KEY 없음)"
+        ),
+    }
+
     // 회원 인증 (운영에서 위험한 설정 — APP_BASE_URL 없음, MAIL_MODE=log 등 — 이면 시작하지 않음)
     let auth = nyangjipsa_api::auth::AuthService::from_env(&config.auth, config.is_development())
         .map_err(anyhow::Error::msg)

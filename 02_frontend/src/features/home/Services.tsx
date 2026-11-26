@@ -1,5 +1,5 @@
 import { useNavigate } from "react-router";
-import { ROUTES } from "../../services/config/site";
+import { ROUTES, SITE } from "../../services/config/site";
 import { scrollToSection } from "../../components/common/scroll";
 import { SERVICES } from "./content";
 import { ICONS } from "./icons";
@@ -10,6 +10,7 @@ export function Services({ onOpenGuide }: { onOpenGuide(id: string): void }) {
     <section id="services" className="section section--soft">
       <div className="container">
         <div className="section__head reveal">
+          <img className="section__mascot" src={SITE.characters.wave} alt="" />
           <span className="eyebrow">주요 서비스</span>
           <h2>초보 집사를 위한 똑똑한 건강관리</h2>
         </div>

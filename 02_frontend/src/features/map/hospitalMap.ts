@@ -11,6 +11,8 @@ import { INFO_FEES, TYPE_LABEL, fmtPrice, pickFees, shortFee } from "../hospital
 import { REGION_CONFIG, type RegionLevel } from "./regions/regionConfig";
 import * as RegionCore from "./regions/regionCore";
 import { createRegionLayer, type RegionLayer, type RegionSelection } from "./regions/regionLayer";
+import { LINE_STYLE, type RouteLine } from "./routeCore";
+import { naverReady } from "./naverLoader";
 
 export const START: LatLon = { lon: 127.049, lat: 37.5233 }; // 청담동 (API 예시 좌표)
 export const MAX_RADIUS = 20000;
@@ -40,11 +42,15 @@ export interface HospitalMapCallbacks {
 // 좌표 변환은 이 함수 한 곳에서만: API {lon,lat} → 네이버 LatLng(위도, 경도)
 const toLatLng = (p: { lat: number; lon: number }) => new naver.maps.LatLng(p.lat, p.lon);
 
-// 브랜드 컬러 핀 (선택한 핀은 진한 파란색)
+// 고양이 얼굴 모양 핀 (선택 전: 하늘색, 선택한 핀: 진한 파란색). 색·크기는 map.css 의 .pin
+const CAT_HEAD_PATH =
+  "M16 2 L41 15 Q50 13 59 15 L84 2 L93 33 C99 46 99 60 96 72 C89 94 70 101 50 101 C30 101 11 94 4 72 C1 60 1 46 7 33 Z";
+const catPin = (cls: string) =>
+  `<div class="${cls}"><svg viewBox="0 0 100 104" aria-hidden="true"><path d="${CAT_HEAD_PATH}"/></svg></div>`;
 const pinIcon = (sel: boolean): naver.maps.HtmlIcon =>
   sel
-    ? { content: '<div class="pin is-sel"></div>', anchor: new naver.maps.Point(8, 20) }
-    : { content: '<div class="pin"></div>', anchor: new naver.maps.Point(6, 15) };
+    ? { content: catPin("pin is-sel"), anchor: new naver.maps.Point(13, 27) }
+    : { content: catPin("pin"), anchor: new naver.maps.Point(9, 19) };
 
 const fmtKm = (m: number) => (m / 1000).toFixed(1);
 
@@ -61,6 +67,12 @@ export class HospitalMap implements MapBridge {
   private controller: AbortController | null = null;
   private pointsController: AbortController | null = null;
   private focusMarker: naver.maps.Marker | null = null;
+  /** 내 위치 (파란 점) — 좌표는 화면 표시·길찾기에만 쓰고 저장·분석에 쓰지 않음 */
+  private myMarker: naver.maps.Marker | null = null;
+  /** 길찾기 경로 선 */
+  private routeLines: naver.maps.Polyline[] = [];
+  /** 길찾기 출발(파랑)·도착(빨강) 표시 */
+  private routeEnds: naver.maps.Marker[] = [];
   private destroyed = false;
 
   constructor(
@@ -112,6 +124,7 @@ export class HospitalMap implements MapBridge {
         this.scheduleLoad();
       },
       onChange: (info) => {
+        if (this.destroyed) return;
         if (info.error) {
           this.cb.onStatus(info.error);
           return;
@@ -234,7 +247,7 @@ export class HospitalMap implements MapBridge {
     m.setIcon(pinIcon(true));
     this.selectedId = id;
     this.cb.onSelected(id);
-    const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`);
+    const div = infoContent(p.name, (p.road_address || p.lot_address || "주소 없음") + (p.address_masked ? " (일부 비공개)" : ""), `${TYPE_LABEL[p.type] || p.type} · ${p.phone || "전화번호 없음"}`, () => this.infoWindow.close());
     const iwFees = pickFees(p.fees, INFO_FEES);
     if (iwFees.length) {
       const ul = document.createElement("ul");
@@ -269,12 +282,89 @@ export class HospitalMap implements MapBridge {
     const pos = toLatLng({ lat: card.lat, lon: card.lon });
     this.focusMarker?.setMap(null);
     this.focusMarker = new naver.maps.Marker({ position: pos, map: this.map, title: card.name, zIndex: 1000, icon: pinIcon(true) });
-    const div = infoContent(card.name, card.address || "주소 없음", `${card.typeLabel || "동물병원"} · ${card.phone || "전화번호 없음"}`);
+    const div = infoContent(card.name, card.address || "주소 없음", `${card.typeLabel || "동물병원"} · ${card.phone || "전화번호 없음"}`, () => this.infoWindow.close());
     this.infoWindow.setContent(div);
     this.map.setZoom(Math.max(this.map.getZoom(), 16), false);
     this.map.setCenter(pos);
     if (rightInset > 0) this.map.panBy(new naver.maps.Point(rightInset / 2, 0));
     this.infoWindow.open(this.map, this.focusMarker);
+  }
+
+  // ---------- 내 위치·길찾기 ----------
+  /** 내 위치에 파란 점을 찍고 그 위치로 이동 (이동하면 idle 이벤트로 주변을 다시 검색) */
+  showMyLocation(p: LatLon, { move = true }: { move?: boolean } = {}) {
+    if (this.destroyed || !naverReady()) return;
+    const pos = toLatLng(p);
+    if (this.myMarker) this.myMarker.setPosition(pos);
+    else
+      this.myMarker = new naver.maps.Marker({
+        position: pos,
+        map: this.map,
+        title: "내 위치",
+        zIndex: 1100,
+        icon: { content: '<div class="my-loc" aria-label="내 위치"></div>', anchor: new naver.maps.Point(11, 11) },
+      });
+    if (move) {
+      this.map.setZoom(Math.max(this.map.getZoom(), 15), false);
+      this.map.setCenter(pos);
+    }
+  }
+
+  /** 길찾기 경로를 선으로 그리고 전체가 보이게 맞춤. 종류마다 여러 겹(테두리·바탕·가운데 흰 점선, routeCore LINE_STYLE) */
+  drawRoute(lines: RouteLine[], ends?: { from: LatLon; to: LatLon }) {
+    this.clearRoute();
+    if (this.destroyed || lines.length === 0 || !naverReady()) return;
+    let minLat = 90, minLon = 180, maxLat = -90, maxLon = -180;
+    // 출발·도착 표시 (선이 정류장에서 끝나도 실제 출발·도착 지점이 보이게) + 화면 맞춤에 포함
+    // 이름표는 지점의 오른쪽 위에 띄워 병원 핀(고양이)을 가리지 않고, 눌러도 아래 핀이 눌리게(pointer-events:none, clickable:false)
+    if (ends) {
+      for (const [p, cls, label] of [[ends.from, "from", "출발"], [ends.to, "to", "도착"]] as const) {
+        this.routeEnds.push(
+          new naver.maps.Marker({
+            position: toLatLng(p),
+            map: this.map,
+            title: label,
+            zIndex: 1050,
+            clickable: false,
+            icon: { content: `<div class="route-end route-end--${cls}" aria-hidden="true"><span>${label}</span></div>`, anchor: new naver.maps.Point(-10, 40) },
+          }),
+        );
+        minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+        minLon = Math.min(minLon, p.lon); maxLon = Math.max(maxLon, p.lon);
+      }
+    }
+    for (const l of lines) {
+      const path = l.path.map(([lon, lat]) => new naver.maps.LatLng(lat, lon));
+      // 대중교통은 도보 위에 보이게 (같은 종류 안에서는 테두리 → 바탕 → 가운데 점선 순서)
+      const base = l.kind === "WALKING" ? 900 : 910;
+      LINE_STYLE[l.kind].layers.forEach((layer, i) => {
+        this.routeLines.push(
+          new naver.maps.Polyline({
+            map: this.map,
+            path,
+            strokeColor: layer.color,
+            strokeWeight: layer.weight,
+            strokeOpacity: layer.opacity,
+            strokeStyle: layer.style,
+            strokeLineCap: "round",
+            strokeLineJoin: "round",
+            zIndex: base + i,
+          }),
+        );
+      });
+      for (const [lon, lat] of l.path) {
+        minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
+        minLon = Math.min(minLon, lon); maxLon = Math.max(maxLon, lon);
+      }
+    }
+    this.map.fitBounds(new naver.maps.LatLngBounds(new naver.maps.LatLng(minLat, minLon), new naver.maps.LatLng(maxLat, maxLon)), { top: 60, right: 60, bottom: 60, left: 60 });
+  }
+
+  clearRoute() {
+    for (const l of this.routeLines) l.setMap(null);
+    this.routeLines = [];
+    for (const m of this.routeEnds) m.setMap(null);
+    this.routeEnds = [];
   }
 
   /** 화면을 떠날 때: 타이머·요청·이벤트·오버레이·지도 인스턴스 정리 (재진입 시 중복 생성 방지) */
@@ -284,6 +374,19 @@ export class HospitalMap implements MapBridge {
     clearTimeout(this.timer);
     this.controller?.abort();
     this.pointsController?.abort();
+    // 네이버 인증 실패 등으로 SDK 가 비었으면 SDK 정리는 건너뜀 (예외로 화면 전체가 멈추지 않게)
+    if (!naverReady()) {
+      try {
+        this.regions?.destroy();
+      } catch {
+        /* SDK 가 비어 정리할 수 없음 */
+      }
+      this.listeners.length = 0;
+      this.markers.clear();
+      this.routeLines = [];
+      this.routeEnds = [];
+      return;
+    }
     naver.maps.Event.removeListener(this.listeners);
     this.listeners.length = 0;
     this.regions?.destroy();
@@ -291,17 +394,23 @@ export class HospitalMap implements MapBridge {
     for (const m of this.markers.values()) m.setMap(null);
     this.markers.clear();
     this.focusMarker?.setMap(null);
+    this.myMarker?.setMap(null);
+    this.clearRoute();
     this.map.destroy();
   }
 }
 
 /** 정보창 내용 (데이터는 textContent 로만 넣음) */
-function infoContent(name: string, address: string, line: string): HTMLDivElement {
+function infoContent(name: string, address: string, line: string, onClose: () => void): HTMLDivElement {
   const div = document.createElement("div");
   div.className = "iw";
-  div.innerHTML = `<b></b><br><span class="a"></span><br><span class="t"></span>`;
+  div.innerHTML = `<button type="button" class="iw-close" aria-label="정보창 닫기" title="닫기">×</button><b></b><br><span class="a"></span><br><span class="t"></span>`;
   div.querySelector("b")!.textContent = name;
   div.querySelector(".a")!.textContent = address;
   div.querySelector(".t")!.textContent = line;
+  div.querySelector<HTMLButtonElement>(".iw-close")!.addEventListener("click", (e) => {
+    e.stopPropagation();
+    onClose();
+  });
   return div;
 }

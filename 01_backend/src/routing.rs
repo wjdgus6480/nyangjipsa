@@ -4,6 +4,7 @@
 //! - 카카오 REST API 키는 서버에만 둡니다 (`.env` 의 `KAKAO_REST_API_KEY`).
 //! - 무료 쿼터(도보·대중교통 각 하루 1,000건)를 아끼려고 같은 요청은 잠시 캐시합니다.
 //! - 대중교통 응답은 정류장·역 사이 구간만 들어 있고, 출발지→첫 정류장, 마지막 정류장→도착지 도보는 없습니다.
+//! - 길찾기 출발·도착지 검색: 카카오 로컬 키워드 검색 (`search_places`). 검색어는 장소 이름만 보내고 저장하지 않습니다.
 
 use std::{
     collections::HashMap,
@@ -19,8 +20,8 @@ use crate::{chat::limiter::RateLimiter, coordinate::Coordinate};
 const BASE_URL: &str = "https://dapi.kakao.com";
 const CACHE_TTL: Duration = Duration::from_secs(10 * 60);
 const CACHE_MAX: usize = 500;
-/// 대중교통 경로 후보는 앞에서부터 이만큼만
-const MAX_TRANSIT_OPTIONS: usize = 5;
+/// 카카오 대중교통 후보는 앞에서부터 이만큼까지 받아서 그중에서 고릅니다 (select_transit)
+const MAX_TRANSIT_CANDIDATES: usize = 20;
 
 pub const ROUTE_NOTICE: &str =
     "경로·소요 시간·요금 정보: 카카오맵. 실제 교통 상황과 다를 수 있습니다.";
@@ -98,6 +99,9 @@ pub struct RouteOption {
     pub egress_walk: Option<WalkLeg>,
     /// 문 앞에서 문 앞까지 총 시간(초). 대중교통 = 앞 도보 + time_s + 뒤 도보, 도보 경로 = time_s
     pub total_time_s: i64,
+    /// 대중교통 후보 이름표 (예: 가장 빠름, 환승 없음, 환승 있음, 지하철)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub labels: Vec<&'static str>,
 }
 
 /// 정류장(역) 앞뒤 도보 구간
@@ -177,12 +181,30 @@ pub enum RoutingError {
     Upstream(String),
 }
 
+/// 장소 검색 결과 한 건 (길찾기 출발·도착지 후보)
+#[derive(Debug, Clone, Serialize)]
+pub struct PlaceHit {
+    pub name: String,
+    /// 도로명 주소 (없으면 지번)
+    pub address: String,
+    /// 카카오 분류 마지막 단계 (예: 지하철역, 동물병원)
+    pub category: String,
+    pub lat: f64,
+    pub lon: f64,
+}
+
+/// 장소 검색 결과 최대 개수
+pub const SEARCH_LIMIT: usize = 8;
+
 pub struct RouteService {
     http: reqwest::Client,
     base_url: String,
     api_key: String,
     per_client: RateLimiter,
+    /// 장소 검색은 입력 중에 자주 불리므로 길찾기와 따로, 더 넉넉하게 제한
+    search_per_client: RateLimiter,
     cache: Mutex<HashMap<String, (Instant, RouteResponse)>>,
+    search_cache: Mutex<HashMap<String, (Instant, Vec<PlaceHit>)>>,
 }
 
 impl RouteService {
@@ -203,12 +225,74 @@ impl RouteService {
             base_url: base_url.into(),
             api_key: api_key.into(),
             per_client: RateLimiter::new(client_rpm),
+            search_per_client: RateLimiter::new(client_rpm.saturating_mul(3)),
             cache: Mutex::new(HashMap::new()),
+            search_cache: Mutex::new(HashMap::new()),
         })
     }
 
     pub fn allow_client(&self, client: &str) -> bool {
         self.per_client.allow(client)
+    }
+
+    pub fn allow_search(&self, client: &str) -> bool {
+        self.search_per_client.allow(client)
+    }
+
+    /// 장소 검색 (카카오 로컬 키워드 검색). `near` 가 있으면 그 근처를 먼저 보여 줍니다(정확도순 유지, 거리 가중).
+    /// 같은 검색은 10분간 캐시합니다.
+    pub async fn search_places(
+        &self,
+        query: &str,
+        near: Option<Coordinate>,
+    ) -> Result<Vec<PlaceHit>, RoutingError> {
+        let key = match near {
+            Some(c) => format!("{query}|{:.3},{:.3}", c.lon, c.lat),
+            None => query.to_owned(),
+        };
+        {
+            let map = self.search_cache.lock().unwrap_or_else(|e| e.into_inner());
+            if let Some((at, hits)) = map.get(&key)
+                && at.elapsed() < CACHE_TTL
+            {
+                return Ok(hits.clone());
+            }
+        }
+        let mut params: Vec<(&str, String)> = vec![
+            ("query", query.to_owned()),
+            ("size", SEARCH_LIMIT.to_string()),
+        ];
+        if let Some(c) = near {
+            params.push(("x", format!("{:.6}", c.lon)));
+            params.push(("y", format!("{:.6}", c.lat)));
+            params.push(("radius", "20000".into()));
+        }
+        let res = self
+            .http
+            .get(format!("{}/v2/local/search/keyword.json", self.base_url))
+            .header("Authorization", format!("KakaoAK {}", self.api_key))
+            .query(&params)
+            .send()
+            .await
+            .map_err(|e| RoutingError::Upstream(e.without_url().to_string()))?;
+        let status = res.status();
+        let body: Value = res.json().await.unwrap_or(Value::Null);
+        if status.as_u16() == 429 {
+            return Err(RoutingError::QuotaExceeded);
+        }
+        if !status.is_success() {
+            return Err(RoutingError::Upstream(format!("HTTP {status}")));
+        }
+        let hits = parse_places(&body);
+        let mut map = self.search_cache.lock().unwrap_or_else(|e| e.into_inner());
+        if map.len() >= CACHE_MAX {
+            map.retain(|_, (at, _)| at.elapsed() < CACHE_TTL);
+            if map.len() >= CACHE_MAX {
+                map.clear();
+            }
+        }
+        map.insert(key, (Instant::now(), hits.clone()));
+        Ok(hits)
     }
 
     /// 길찾기. 대중교통은 정류장(역) 앞뒤 도보 시간을 붙입니다:
@@ -223,22 +307,26 @@ impl RouteService {
     ) -> Result<RouteResponse, RoutingError> {
         let mut response = self.fetch(mode, from, to).await?;
         if mode == Mode::Transit && !response.routes.is_empty() {
-            let detail = detail.unwrap_or(0).min(response.routes.len() - 1);
-            for (i, option) in response.routes.iter_mut().enumerate() {
-                let Some((first_stop, last_stop)) = stop_ends(option) else {
-                    continue;
-                };
-                let (access, egress) = if i == detail {
-                    (
-                        self.walk_leg(from, first_stop).await,
-                        self.walk_leg(last_stop, to).await,
-                    )
-                } else {
-                    (
+            // 1) 모든 후보에 앞뒤 도보 추정치를 붙여 문 앞에서 문 앞까지 시간 계산
+            for option in response.routes.iter_mut() {
+                if let Some((first_stop, last_stop)) = stop_ends(option) {
+                    let (access, egress) = (
                         estimate_walk(from, first_stop),
                         estimate_walk(last_stop, to),
-                    )
-                };
+                    );
+                    option.total_time_s = access.time_s + option.time_s + egress.time_s;
+                    option.access_walk = Some(access);
+                    option.egress_walk = Some(egress);
+                }
+            }
+            // 2) 보여 줄 후보만 고름 (환승 없음·있음 중 가장 빠른 것, 필요하면 지하철)
+            response.routes = select_transit(std::mem::take(&mut response.routes));
+            // 3) 고른 후보 중 detail 번째만 실제 도보 경로 (카카오 도보 API 2회, 캐시)
+            let detail = detail.unwrap_or(0).min(response.routes.len() - 1);
+            let option = &mut response.routes[detail];
+            if let Some((first_stop, last_stop)) = stop_ends(option) {
+                let access = self.walk_leg(from, first_stop).await;
+                let egress = self.walk_leg(last_stop, to).await;
                 option.total_time_s = access.time_s + option.time_s + egress.time_s;
                 option.access_walk = Some(access);
                 option.egress_walk = Some(egress);
@@ -427,6 +515,7 @@ pub fn parse_walk(body: &Value) -> RouteResponse {
         access_walk: None,
         egress_walk: None,
         total_time_s: 0,
+        labels: vec![],
     });
     if let Some(o) = response.routes.last_mut() {
         o.total_time_s = o.time_s;
@@ -435,6 +524,62 @@ pub fn parse_walk(body: &Value) -> RouteResponse {
 }
 
 /// 대중교통 경로 응답 정리 (앞에서부터 최대 5개)
+/// 대중교통 후보가 너무 많으면 번잡해서, 문 앞에서 문 앞까지 시간 기준으로
+/// **환승 없는 길 중 가장 빠른 것** + **환승 있는 길 중 가장 빠른 것**만 보여 줍니다.
+/// 둘 다 지하철을 타지 않는데 지하철 경로가 있으면 **가장 빠른 지하철 경로**를 하나 더 붙입니다.
+/// 결과는 빠른 순, 각 후보에 이름표(labels)를 답니다.
+pub fn select_transit(mut all: Vec<RouteOption>) -> Vec<RouteOption> {
+    if all.is_empty() {
+        return all;
+    }
+    // 같은 시간이면 카카오 추천 순서 유지 (stable sort)
+    all.sort_by_key(|r| r.total_time_s.max(r.time_s));
+    let uses_subway = |r: &RouteOption| {
+        r.kind == "SUBWAY"
+            || r.kind == "BUS_AND_SUBWAY"
+            || r.steps.iter().any(|s| s.kind == "SUBWAY")
+    };
+    let no_transfer = |r: &RouteOption| r.transfers.unwrap_or(0) == 0;
+
+    let mut picked: Vec<usize> = Vec::new();
+    if let Some(i) = all.iter().position(&no_transfer) {
+        picked.push(i);
+    }
+    if let Some(i) = all.iter().position(|r| !no_transfer(r)) {
+        picked.push(i);
+    }
+    if picked.is_empty() {
+        picked.push(0);
+    }
+    let mut subway_extra = None;
+    if !picked.iter().any(|&i| uses_subway(&all[i]))
+        && let Some(i) = all.iter().position(&uses_subway)
+    {
+        picked.push(i);
+        subway_extra = Some(i);
+    }
+    picked.sort_unstable();
+
+    let mut out = Vec::with_capacity(picked.len());
+    for (n, &i) in picked.iter().enumerate() {
+        let mut r = all[i].clone();
+        r.labels.clear();
+        if n == 0 {
+            r.labels.push("가장 빠름");
+        }
+        r.labels.push(if no_transfer(&r) {
+            "환승 없음"
+        } else {
+            "환승 있음"
+        });
+        if subway_extra == Some(i) || (uses_subway(&r) && !r.labels.contains(&"지하철")) {
+            r.labels.push("지하철");
+        }
+        out.push(r);
+    }
+    out
+}
+
 pub fn parse_transit(body: &Value) -> RouteResponse {
     let status = text(&body["status"]);
     let mut response = RouteResponse {
@@ -453,7 +598,7 @@ pub fn parse_transit(body: &Value) -> RouteResponse {
         .as_array()
         .into_iter()
         .flatten()
-        .take(MAX_TRANSIT_OPTIONS)
+        .take(MAX_TRANSIT_CANDIDATES)
     {
         let p = &r["properties"];
         let steps = r["steps"]
@@ -495,12 +640,43 @@ pub fn parse_transit(body: &Value) -> RouteResponse {
             access_walk: None,
             egress_walk: None,
             total_time_s: int(&p["totalTime"]),
+            labels: vec![],
         });
     }
     if response.routes.is_empty() {
         response.message = Some(status_message("NO_RESULTS"));
     }
     response
+}
+
+/// 카카오 키워드 검색 응답 → 장소 목록 (좌표가 없는 항목은 뺌)
+pub fn parse_places(body: &Value) -> Vec<PlaceHit> {
+    body["documents"]
+        .as_array()
+        .map(|docs| {
+            docs.iter()
+                .filter_map(|d| {
+                    let lon = d["x"].as_str()?.parse::<f64>().ok()?;
+                    let lat = d["y"].as_str()?.parse::<f64>().ok()?;
+                    let road = d["road_address_name"].as_str().unwrap_or("");
+                    let lot = d["address_name"].as_str().unwrap_or("");
+                    Some(PlaceHit {
+                        name: d["place_name"].as_str()?.to_owned(),
+                        address: if road.is_empty() { lot } else { road }.to_owned(),
+                        category: d["category_name"]
+                            .as_str()
+                            .and_then(|c| c.rsplit('>').next())
+                            .unwrap_or("")
+                            .trim()
+                            .to_owned(),
+                        lat,
+                        lon,
+                    })
+                })
+                .take(SEARCH_LIMIT)
+                .collect()
+        })
+        .unwrap_or_default()
 }
 
 #[cfg(test)]
@@ -582,5 +758,75 @@ mod tests {
         assert_eq!(Mode::parse("walk"), Some(Mode::Walk));
         assert_eq!(Mode::parse("transit"), Some(Mode::Transit));
         assert_eq!(Mode::parse("car"), None);
+    }
+
+    fn opt(kind: &str, minutes: i64, transfers: i64, steps: &[&str]) -> RouteOption {
+        RouteOption {
+            kind: kind.into(),
+            time_s: minutes * 60,
+            distance_m: 1000,
+            fare: Some(1500),
+            transfers: Some(transfers),
+            steps: steps
+                .iter()
+                .map(|k| RouteStep {
+                    kind: (*k).into(),
+                    guidance: String::new(),
+                    distance_m: 0,
+                    time_s: 0,
+                    vehicles: vec![],
+                    stops: vec![],
+                    path: vec![],
+                })
+                .collect(),
+            access_walk: None,
+            egress_walk: None,
+            total_time_s: minutes * 60,
+            labels: vec![],
+        }
+    }
+
+    #[test]
+    fn select_transit_picks_fastest_no_transfer_and_transfer() {
+        // 연산역 → 서면 실제 응답과 비슷한 구성
+        let all = vec![
+            opt("SUBWAY", 22, 0, &["SUBWAY"]),
+            opt("BUS_AND_SUBWAY", 19, 1, &["SUBWAY", "BUS"]),
+            opt("BUS", 29, 0, &["BUS"]),
+            opt("BUS_AND_SUBWAY", 18, 1, &["SUBWAY", "BUS"]),
+            opt("BUS", 26, 1, &["BUS", "BUS"]),
+        ];
+        let out = select_transit(all);
+        assert_eq!(out.len(), 2, "환승 없음 1 + 환승 있음 1");
+        assert_eq!(out[0].total_time_s, 18 * 60);
+        assert_eq!(out[0].labels, vec!["가장 빠름", "환승 있음", "지하철"]);
+        assert_eq!(out[1].total_time_s, 22 * 60);
+        assert_eq!(out[1].labels, vec!["환승 없음", "지하철"]);
+    }
+
+    #[test]
+    fn select_transit_adds_subway_when_picks_are_bus_only() {
+        let all = vec![
+            opt("BUS", 20, 0, &["BUS"]),
+            opt("BUS", 25, 1, &["BUS", "BUS"]),
+            opt("BUS", 27, 0, &["BUS"]),
+            opt("SUBWAY", 35, 1, &["SUBWAY", "SUBWAY"]),
+        ];
+        let out = select_transit(all);
+        assert_eq!(out.len(), 3);
+        assert_eq!(
+            out.iter().map(|o| o.time_s / 60).collect::<Vec<_>>(),
+            vec![20, 25, 35]
+        );
+        assert_eq!(out[2].labels, vec!["환승 있음", "지하철"]);
+        assert_eq!(out[0].labels, vec!["가장 빠름", "환승 없음"]);
+    }
+
+    #[test]
+    fn select_transit_single_option() {
+        let out = select_transit(vec![opt("BUS", 30, 0, &["BUS"])]);
+        assert_eq!(out.len(), 1);
+        assert_eq!(out[0].labels, vec!["가장 빠름", "환승 없음"]);
+        assert!(select_transit(vec![]).is_empty());
     }
 }

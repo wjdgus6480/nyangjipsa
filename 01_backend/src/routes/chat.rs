@@ -1,11 +1,15 @@
 //! POST /api/chat — 고양이 병원·진료 안내 챗봇
 
-use std::{convert::Infallible, net::SocketAddr};
+use std::{
+    convert::Infallible,
+    net::{IpAddr, SocketAddr},
+    sync::OnceLock,
+};
 
 use axum::{
     Json,
     extract::{ConnectInfo, FromRequestParts, State},
-    http::request::Parts,
+    http::{HeaderMap, request::Parts},
 };
 
 use crate::{
@@ -28,12 +32,59 @@ const CHAT_PLACE_LIMIT: i64 = 3;
 const CHAT_COMPARE_LIMIT: i64 = 10;
 
 /// 요청자 IP (ConnectInfo 가 없으면 "unknown"). 리버스 프록시 뒤에서는 프록시 IP 가 됩니다.
+///
+/// 배포(Cloudflare Pages Functions 프록시 → Render)에서는 프록시가 `x-proxy-secret` 과
+/// `x-client-ip` 를 붙입니다. 서버의 `PROXY_SHARED_SECRET` 과 일치할 때만 `x-client-ip` 를 믿습니다
+/// (그 외에는 위조 가능한 헤더이므로 무시).
 pub struct ClientIp(pub String);
+
+pub const PROXY_SECRET_HEADER: &str = "x-proxy-secret";
+pub const PROXY_CLIENT_IP_HEADER: &str = "x-client-ip";
+
+fn proxy_secret() -> Option<&'static str> {
+    static SECRET: OnceLock<Option<String>> = OnceLock::new();
+    SECRET
+        .get_or_init(|| {
+            std::env::var("PROXY_SHARED_SECRET")
+                .ok()
+                .map(|v| v.trim().to_owned())
+                .filter(|v| !v.is_empty())
+        })
+        .as_deref()
+}
+
+/// 신뢰할 수 있는 프록시가 전달한 클라이언트 IP (비밀값이 맞고 IP 형식이 올바를 때만)
+pub fn proxied_client_ip(headers: &HeaderMap, secret: Option<&str>) -> Option<String> {
+    let secret = secret?;
+    let given = headers.get(PROXY_SECRET_HEADER)?.as_bytes();
+    let expected = secret.as_bytes();
+    // 길이가 같을 때 모든 바이트를 비교 (비교 시간으로 비밀값을 추측하기 어렵게)
+    let same = given.len() == expected.len()
+        && given
+            .iter()
+            .zip(expected)
+            .fold(0u8, |acc, (a, b)| acc | (a ^ b))
+            == 0;
+    if !same {
+        return None;
+    }
+    let ip: IpAddr = headers
+        .get(PROXY_CLIENT_IP_HEADER)?
+        .to_str()
+        .ok()?
+        .trim()
+        .parse()
+        .ok()?;
+    Some(ip.to_string())
+}
 
 impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
     type Rejection = Infallible;
 
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
+        if let Some(ip) = proxied_client_ip(&parts.headers, proxy_secret()) {
+            return Ok(ClientIp(ip));
+        }
         Ok(ClientIp(
             parts
                 .extensions
@@ -145,4 +196,43 @@ pub async fn chat(
         fallback,
         disclaimer: DISCLAIMER,
     }))
+}
+
+#[cfg(test)]
+mod tests {
+    use super::*;
+    use axum::http::HeaderValue;
+
+    fn headers(secret: &str, ip: &str) -> HeaderMap {
+        let mut h = HeaderMap::new();
+        h.insert(PROXY_SECRET_HEADER, HeaderValue::from_str(secret).unwrap());
+        h.insert(PROXY_CLIENT_IP_HEADER, HeaderValue::from_str(ip).unwrap());
+        h
+    }
+
+    #[test]
+    fn proxied_ip_only_with_matching_secret() {
+        let h = headers("s3cret", "203.0.113.7");
+        assert_eq!(
+            proxied_client_ip(&h, Some("s3cret")).as_deref(),
+            Some("203.0.113.7")
+        );
+        // 서버에 비밀값이 없거나 다르면 헤더를 믿지 않음
+        assert_eq!(proxied_client_ip(&h, None), None);
+        assert_eq!(proxied_client_ip(&h, Some("other")), None);
+        assert_eq!(proxied_client_ip(&h, Some("s3cret-longer")), None);
+        assert_eq!(proxied_client_ip(&HeaderMap::new(), Some("s3cret")), None);
+    }
+
+    #[test]
+    fn proxied_ip_must_be_valid_ip() {
+        assert_eq!(
+            proxied_client_ip(&headers("k", "not-an-ip"), Some("k")),
+            None
+        );
+        assert_eq!(
+            proxied_client_ip(&headers("k", " 2001:db8::1 "), Some("k")).as_deref(),
+            Some("2001:db8::1")
+        );
+    }
 }

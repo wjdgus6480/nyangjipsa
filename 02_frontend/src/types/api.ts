@@ -300,3 +300,145 @@ export interface ShareResponse {
   card: ShareCard;
   hospital: { id: number; name: string; address: string | null; phone: string | null; business_status: string | null; lat: number; lon: number };
 }
+
+/** GET /api/route 쿼리 (routes/directions.rs RouteQuery) */
+export interface RouteQuery {
+  /** walk(도보, 기본) | transit(대중교통) */
+  mode: "walk" | "transit";
+  from_lat: number;
+  from_lon: number;
+  to_lat: number;
+  to_lon: number;
+  /** 대중교통: 앞뒤 도보를 실제 경로로 계산할 후보 번호 (기본 0) */
+  detail?: number;
+}
+
+/** 경로 좌표 [경도, 위도] */
+export type LonLat = [number, number];
+
+/** routing.rs WalkLeg — 대중교통 앞뒤 도보 */
+export interface WalkLeg {
+  distance_m: number;
+  time_s: number;
+  /** true 면 직선거리 기반 추정치 */
+  estimated: boolean;
+  guidance?: string[];
+  path: LonLat[];
+}
+
+/** routing.rs RouteStep */
+export interface RouteStep {
+  /** WALKING | BUS | SUBWAY */
+  kind: string;
+  guidance: string;
+  distance_m: number;
+  time_s: number;
+  vehicles?: string[];
+  stops?: string[];
+  path: LonLat[];
+}
+
+/** routing.rs RouteOption */
+export interface RouteOption {
+  /** WALK | BUS | SUBWAY | BUS_AND_SUBWAY */
+  kind: string;
+  time_s: number;
+  distance_m: number;
+  fare?: number;
+  transfers?: number;
+  steps: RouteStep[];
+  access_walk?: WalkLeg;
+  egress_walk?: WalkLeg;
+  /** 문 앞에서 문 앞까지 총 시간(초) */
+  total_time_s?: number;
+  /** 대중교통 후보 이름표 (가장 빠름 / 환승 없음 / 환승 있음 / 지하철) */
+  labels?: string[];
+}
+
+/** GET /api/route 응답 (routing.rs RouteResponse) */
+export interface RouteResponse {
+  mode: "walk" | "transit";
+  routes: RouteOption[];
+  landing_url?: string;
+  message?: string;
+  notices: string[];
+  detail_index?: number;
+}
+
+/** GET /api/search/places 결과 한 건 (routing.rs PlaceHit) — 길찾기 출발·도착지 검색 */
+export interface PlaceHit {
+  name: string;
+  address: string;
+  category: string;
+  lat: number;
+  lon: number;
+}
+
+/** GET /api/search/places 응답 */
+export interface PlaceSearchResponse {
+  places: PlaceHit[];
+}
+
+// ---------- 관리자 대시보드 (GET /api/admin/dashboard, 01_backend/src/routes/admin_dashboard.rs) ----------
+
+export type DashboardPeriodKey = "today" | "7d" | "30d" | "90d";
+
+export interface DashboardCompare {
+  current: number;
+  previous: number;
+}
+
+export interface DashboardMetric extends DashboardCompare {
+  /** 이벤트 이름. 일일 활성 사용자는 active_users */
+  key: string;
+  /** 그래프 날짜(dates)별 일일 고유 사용자 수 */
+  daily: number[];
+}
+
+export interface DashboardFunnelStep extends DashboardCompare {
+  key: string;
+}
+
+export interface DashboardTopHospital {
+  hospital_id: number;
+  /** 폐업 등으로 DB 에서 삭제된 병원이면 null */
+  name: string | null;
+  region: string | null;
+  clicks: number;
+}
+
+export interface AdminDashboard {
+  period: {
+    key: DashboardPeriodKey;
+    days: number;
+    start: string;
+    end: string;
+    prev_start: string;
+    prev_end: string;
+    chart_start: string;
+  };
+  /** 그래프 날짜 (YYYY-MM-DD, 한국 시간) */
+  dates: string[];
+  generated_at: string;
+  amplitude: {
+    status: "connected" | "not_configured" | "error";
+    message: string | null;
+    data: {
+      metrics: DashboardMetric[];
+      funnel: DashboardFunnelStep[];
+      /** utm_source 별 첫 화면 고유 사용자. direct = utm 없음 */
+      sources: { label: string; value: number }[];
+      top_hospitals: DashboardTopHospital[];
+    } | null;
+  };
+  db: {
+    members_total: number;
+    signups: DashboardCompare;
+    signups_daily: number[];
+    share_links: DashboardCompare;
+    share_opens_total: number;
+    hospitals: number;
+    cat_friendly: number;
+    data_updated_at: string | null;
+  };
+}
