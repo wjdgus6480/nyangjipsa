@@ -6,10 +6,11 @@ use sqlx::{PgPool, postgres::PgPoolOptions};
 ///
 /// idle_timeout: Neon 은 5분간 요청이 없으면 컴퓨트를 멈추고 연결을 끊으므로,
 /// 그보다 먼저(4분) 쉬는 연결을 정리해 끊긴 연결을 재사용하지 않게 합니다.
+/// acquire_timeout: 잠든 Neon 이 깨어나는 동안 첫 요청이 실패(500)하지 않도록 10초까지 기다립니다.
 pub async fn connect(database_url: &str) -> Result<PgPool, sqlx::Error> {
     PgPoolOptions::new()
         .max_connections(5)
-        .acquire_timeout(Duration::from_secs(5))
+        .acquire_timeout(Duration::from_secs(10))
         .idle_timeout(Duration::from_secs(240))
         .connect(database_url)
         .await

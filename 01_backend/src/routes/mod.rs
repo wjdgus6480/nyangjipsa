@@ -17,6 +17,13 @@ use axum::{
 
 use crate::AppState;
 
+/// 잘 안 바뀌는 공개 API 의 캐시 헤더: 브라우저 5분, CDN(Vercel 등) 1시간, 만료 뒤에도 하루 동안은 옛 값을 먼저 주고 뒤에서 갱신.
+/// 데이터는 공공데이터 동기화(하루 단위) 때만 바뀌어서 이 정도 늦어도 문제없습니다. 개인정보·로그인 정보가 없는 응답에만 씁니다.
+pub const PUBLIC_CACHE: (axum::http::HeaderName, &str) = (
+    axum::http::header::CACHE_CONTROL,
+    "public, max-age=300, s-maxage=3600, stale-while-revalidate=86400",
+);
+
 /// URL 경로별 라우터를 합칩니다. 새 기능은 여기에 `.merge(...)` 로 추가합니다.
 pub fn router(state: AppState) -> Router {
     Router::new()

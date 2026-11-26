@@ -78,11 +78,34 @@ pub fn proxied_client_ip(headers: &HeaderMap, secret: Option<&str>) -> Option<St
     Some(ip.to_string())
 }
 
+/// 프록시(Vercel → Render/Cloudflare)를 거치면 접속 주소가 모두 프록시 주소라
+/// 사용자별 요청 제한이 모든 사용자에게 합쳐져 걸립니다. 프록시가 붙이는 원래 주소를 씁니다:
+/// `X-Forwarded-For` 의 첫 주소(원 사용자) → `X-Real-IP`. IP 형식이 아니면 무시합니다.
+/// (직접 호출에서 헤더를 꾸며 제한을 피할 수는 있지만, 전역 호출 상한은 그대로 적용됩니다)
+pub fn forwarded_client_ip(headers: &HeaderMap) -> Option<String> {
+    let from_xff = headers
+        .get("x-forwarded-for")
+        .and_then(|v| v.to_str().ok())
+        .and_then(|v| v.split(',').next())
+        .map(str::trim)
+        .and_then(|s| s.parse::<IpAddr>().ok());
+    let ip = from_xff.or_else(|| {
+        headers
+            .get("x-real-ip")
+            .and_then(|v| v.to_str().ok())
+            .and_then(|s| s.trim().parse::<IpAddr>().ok())
+    })?;
+    Some(ip.to_string())
+}
+
 impl<S: Send + Sync> FromRequestParts<S> for ClientIp {
     type Rejection = Infallible;
 
     async fn from_request_parts(parts: &mut Parts, _: &S) -> Result<Self, Self::Rejection> {
         if let Some(ip) = proxied_client_ip(&parts.headers, proxy_secret()) {
+            return Ok(ClientIp(ip));
+        }
+        if let Some(ip) = forwarded_client_ip(&parts.headers) {
             return Ok(ClientIp(ip));
         }
         Ok(ClientIp(
@@ -202,6 +225,21 @@ pub async fn chat(
 mod tests {
     use super::*;
     use axum::http::HeaderValue;
+
+    #[test]
+    fn forwarded_client_ip_uses_first_valid_address() {
+        let mut h = HeaderMap::new();
+        assert_eq!(forwarded_client_ip(&h), None);
+        h.insert(
+            "x-forwarded-for",
+            HeaderValue::from_static("203.0.113.7, 76.76.21.9"),
+        );
+        assert_eq!(forwarded_client_ip(&h).as_deref(), Some("203.0.113.7"));
+        h.insert("x-forwarded-for", HeaderValue::from_static("not-an-ip"));
+        assert_eq!(forwarded_client_ip(&h), None);
+        h.insert("x-real-ip", HeaderValue::from_static("2001:db8::1"));
+        assert_eq!(forwarded_client_ip(&h).as_deref(), Some("2001:db8::1"));
+    }
 
     fn headers(secret: &str, ip: &str) -> HeaderMap {
         let mut h = HeaderMap::new();
