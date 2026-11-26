@@ -20,7 +20,7 @@ export interface LineLayer {
 /**
  * 경로 종류별 선 모양. 색이 비슷해도 모양으로 구분되게 여러 겹으로 그립니다 (아래 겹부터).
  * - 도보: 흰 테두리 + 회색 짧은 점선
- * - 버스: 진한 테두리 + 초록 + 가운데 흰 점선
+ * - 버스: 진한 청록 테두리 + 브랜드 하늘색(메인 색) + 가운데 흰 점선
  * - 지하철: 진한 테두리 + 파랑 + 가운데 흰 점선 (버스보다 굵게)
  */
 export const LINE_STYLE: Record<RouteLine["kind"], { label: string; swatch: string; layers: LineLayer[] }> = {
@@ -34,10 +34,10 @@ export const LINE_STYLE: Record<RouteLine["kind"], { label: string; swatch: stri
   },
   BUS: {
     label: "버스",
-    swatch: "#1f9d55",
+    swatch: "#4cc9ef",
     layers: [
-      { color: "#0f5a30", weight: 11, style: "solid", opacity: 0.95 },
-      { color: "#1f9d55", weight: 7, style: "solid", opacity: 1 },
+      { color: "#0e6e8c", weight: 11, style: "solid", opacity: 0.95 },
+      { color: "#4cc9ef", weight: 7, style: "solid", opacity: 1 },
       { color: "#ffffff", weight: 2, style: "dash", opacity: 0.95 },
     ],
   },
