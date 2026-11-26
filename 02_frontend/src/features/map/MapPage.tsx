@@ -306,8 +306,8 @@ export function MapPage() {
               <h1>냥집사</h1>
               <p>고양이 동물병원 지도</p>
             </div>
+            {/* AI 도우미는 오른쪽 아래 챗봇 아이콘으로 열 수 있어 버튼을 두지 않음 */}
             <Link className="brand-link" to={ROUTES.home}>홈</Link>
-            <a className="brand-link" href={ROUTES.chat} target="_blank" rel="noopener">AI 도우미</a>
           </header>
           <nav className="map-tabs" role="tablist" aria-label="지도 기능">
             {TABS.map((t) => (
