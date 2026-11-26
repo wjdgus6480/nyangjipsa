@@ -7,6 +7,8 @@
 //   진료비 조회 퍼널: 화면 진입(fee_menu_viewed) → 조회 조건 선택(fee_filter_selected: 종류·반경·지역·내 위치) → cost_viewed
 // - 내 위치: 버튼을 누르면 위치 권한을 묻고 파란 점 + 그 주변 검색. 길찾기 출발지로도 씀 (좌표는 저장·분석에 쓰지 않음)
 // - 길찾기: 고른 병원의 "길찾기" → RoutePanel (백엔드 /api/route, 도보·대중교통) → 지도에 경로 선
+// - 모바일(폭 760px 이하): 지도를 화면 전체에, 목록 패널은 왼쪽에 겹쳐 띄우고 접기·펼치기.
+//   데스크톱 배치는 그대로 (접기 손잡이·아래쪽 병원 카드는 CSS 에서 모바일에만 보임)
 // - 위쪽 탭: [길찾기] 가격 없이 병원·길찾기만 / [가격 조회] 가격을 보여 주고, 병원을 골라 지도에 가격표(조회하기)·비교표(비교하기)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
@@ -48,6 +50,9 @@ const TABS: { value: MapTab; label: string }[] = [
   { value: "route", label: "길찾기" },
   { value: "price", label: "가격 조회" },
 ];
+
+/** 모바일 배치(접는 패널)인지 — map.css 의 @media (max-width: 760px) 와 같은 기준 */
+const isMobileLayout = () => typeof window !== "undefined" && !!window.matchMedia?.("(max-width: 760px)").matches;
 
 const MISSING_KEY =
   "네이버 지도 키(NAVER_MAP_CLIENT_ID)가 없습니다. 저장소 루트 .env 또는 02_frontend/.env.local 의 VITE_NAVER_MAP_CLIENT_ID 에 키를 넣고 개발 서버를 다시 실행하세요.";
@@ -159,8 +164,22 @@ export function MapPage() {
     return true;
   }, []);
 
+  /** 모바일: 목록 패널 펼침 여부 (데스크톱에서는 CSS 가 무시하므로 항상 펼친 것과 같음) */
+  const [panelOpen, setPanelOpen] = useState(true);
+  /** 모바일에서만 패널을 접어 지도를 보여 줌 */
+  const showMapOnMobile = useCallback(() => {
+    if (isMobileLayout()) setPanelOpen(false);
+  }, []);
+
   const drawRoute = useCallback((lines: RouteLine[], ends?: RouteEnds) => hmRef.current?.drawRoute(lines, ends), []);
-  const focusPoint = useCallback((p: LatLon) => hmRef.current?.focusPoint(p), []);
+  // 길찾기 단계를 누르면 그 위치로 이동 (모바일은 패널을 접어 지도를 보여 줌)
+  const focusPoint = useCallback(
+    (p: LatLon) => {
+      showMapOnMobile();
+      hmRef.current?.focusPoint(p);
+    },
+    [showMapOnMobile],
+  );
 
   // 지도 생성/정리 (StrictMode 이중 실행·화면 재진입에도 인스턴스 하나만 유지)
   useEffect(() => {
@@ -265,8 +284,20 @@ export function MapPage() {
 
   return (
     <div className="map-page">
-      <div className="app">
-        <aside>
+      <div className={"app" + (panelOpen ? "" : " is-panel-closed")}>
+        <aside id="map-panel">
+          {/* 모바일 전용 접기·펼치기 손잡이 (패널 오른쪽 끝에 붙어 함께 움직임) */}
+          <button
+            type="button"
+            className="panel-toggle"
+            aria-controls="map-panel"
+            aria-expanded={panelOpen}
+            aria-label={panelOpen ? "목록 접기" : "목록 펼치기"}
+            onClick={() => setPanelOpen((v) => !v)}
+          >
+            <span aria-hidden="true">{panelOpen ? "‹" : "›"}</span>
+            <span className="panel-toggle__text">{panelOpen ? "접기" : "목록"}</span>
+          </button>
           <header className="brand">
             <Link to={ROUTES.home} title="냥집사 홈으로">
               <img className="brand-mark" src={SITE.mapLogo} alt="냥집사 홈" />
@@ -316,11 +347,13 @@ export function MapPage() {
               count={picked.length}
               onShow={() => {
                 setTagsShown(true);
+                showMapOnMobile();
                 hmRef.current?.showPriceTags(picked, { fit: true });
                 trackCostViewed(picked);
               }}
               onCompare={() => {
                 setCompareOpen(true);
+                showMapOnMobile();
                 trackCostViewed(picked);
               }}
               onClear={() => updatePicked([])}
@@ -350,7 +383,12 @@ export function MapPage() {
           <PlaceList
             items={items}
             selectedId={selectedId}
-            onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : selectPlace(id))}
+            onSelect={(id) => {
+              // 모바일 길찾기 탭: 병원을 고르면 패널을 접어 지도에서 바로 보이게 (가격 조회 탭은 여러 곳을 고르므로 그대로)
+              if (!withFees) showMapOnMobile();
+              if (hmRef.current) hmRef.current.select(id, true);
+              else selectPlace(id);
+            }}
             showFees={false}
             pick={withFees ? { ids: picked.map((p) => p.id), full: picked.length >= MAX_COMPARE, onToggle: togglePick } : undefined}
           />
@@ -385,6 +423,18 @@ export function MapPage() {
               }}
               onClear={(fitNation) => hmRef.current?.clearRegion({ fitNation })}
             />
+          )}
+          {/* 모바일: 패널을 접었을 때 고른 병원의 전화·길찾기·공유를 지도 아래쪽 카드로 (데스크톱에서는 CSS 로 숨김) */}
+          {actionHospital && !withFees && !panelOpen && (
+            <div className="mobile-card">
+              <HospitalActions
+                hospital={actionHospital}
+                onOpenRoute={() => {
+                  setRouteFor(actionKey);
+                  setPanelOpen(true);
+                }}
+              />
+            </div>
           )}
           {withFees && compareOpen && picked.length >= 2 && <PriceCompare hospitals={picked} onRemove={removePick} onClose={() => setCompareOpen(false)} />}
           <div className="rg-attr" id="rg-attr">{loaded ? REGION_CONFIG.attribution : ""}</div>

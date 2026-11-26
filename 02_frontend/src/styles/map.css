@@ -56,9 +56,29 @@
 .map-page .pin.is-sel { width:26px; height:27px; filter:drop-shadow(0 2px 4px rgba(20,120,200,.45)); }
 .map-page .pin.is-sel path { fill:#1478c8; stroke:#fff; stroke-width:7; }
 
+/* 모바일 전용 요소: 데스크톱에서는 보이지 않음 (아래 @media 안에서만 보임) */
+.map-page .panel-toggle, .map-page .mobile-card { display:none; }
+
 @media (max-width: 760px) {
-  .map-page .app { grid-template-columns: 1fr; grid-template-rows: 55% 45%; }
-  .map-page aside { order:2; border-right:0; border-top:1px solid var(--line); box-shadow: 0 -2px 12px rgba(27,42,65,.06); }
+  /* 지도는 화면 전체, 목록 패널은 왼쪽에 겹쳐 띄우고 접기·펼치기 */
+  .map-page { height:100dvh; overflow:hidden; }
+  .map-page .app { display:block; position:relative; height:100%; overflow:hidden; }
+  .map-page .app > .map-wrap { position:absolute; inset:0; z-index:0; } /* 지도 안의 정보창·표시 줄이 패널 위로 올라오지 않게 */
+  .map-page aside { position:absolute; top:0; left:0; bottom:0; width:min(86vw, 380px); z-index:60; border-right:1px solid var(--line); box-shadow: 6px 0 22px rgba(27,42,65,.18); transition: transform .28s ease, box-shadow .28s ease; will-change:transform; }
+  .map-page .app.is-panel-closed aside { transform:translateX(-100%); box-shadow:none; }
+  /* 손잡이: 패널 오른쪽 끝 가운데에 붙어 함께 움직임 (접으면 화면 왼쪽 끝에 남음) */
+  .map-page .panel-toggle { position:absolute; top:50%; left:100%; transform:translateY(-50%); display:flex; flex-direction:column; align-items:center; justify-content:center; gap:2px; width:40px; min-height:76px; padding:8px 0; border:1px solid var(--line); border-left:0; border-radius:0 14px 14px 0; background:var(--bg); color:var(--fg); font:inherit; font-size:20px; font-weight:800; line-height:1; cursor:pointer; box-shadow: 4px 2px 12px rgba(27,42,65,.16); -webkit-tap-highlight-color:transparent; touch-action:manipulation; }
+  .map-page .panel-toggle__text { font-size:11px; font-weight:700; writing-mode:vertical-rl; letter-spacing:.1em; }
+  .map-page .app.is-panel-closed .panel-toggle { background:var(--fg); color:#fff; border-color:var(--fg); }
+  .map-page .panel-toggle:focus-visible { outline:2px solid var(--primary-strong); outline-offset:2px; }
+  /* 패널을 접었을 때 고른 병원의 전화·길찾기·공유 카드 (오른쪽 아래 챗봇 버튼은 피함) */
+  .map-page .mobile-card { display:block; position:absolute; left:12px; right:84px; bottom:max(14px, env(safe-area-inset-bottom)); z-index:25; border-radius:16px; overflow:hidden; box-shadow:0 8px 24px rgba(27,42,65,.22); }
+  .map-page .mobile-card .hospital-actions { border-bottom:0; }
+  /* 아래쪽 카드가 떠 있으면 내 위치 버튼을 카드 위로 올림 */
+  .map-page .map-wrap:has(.mobile-card) .my-loc-btn { bottom:auto; top:calc(100% - 96px - 112px); }
+  /* 손가락으로 누르기 쉽게 */
+  .map-page li { padding:13px 12px; }
+  .map-page aside .map-tabs button { padding:11px 0; }
   .map-page .brand { padding:10px 14px; gap:10px; }
   .map-page .brand-mark { width:38px; height:38px; }
   .map-page .brand h1 { font-size:18px; }

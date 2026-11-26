@@ -348,3 +348,56 @@ describe("가격 비교표", () => {
     expect(onClose).toHaveBeenCalled();
   });
 });
+
+describe("모바일 지도: 왼쪽 패널 접기·펼치기", () => {
+  beforeEach(() => {
+    installFakeNaver();
+  });
+  afterEach(() => vi.unstubAllGlobals());
+
+  const mobile = (on: boolean) =>
+    vi.stubGlobal("matchMedia", (q: string) => ({ matches: on && q.includes("760px"), media: q, addEventListener() {}, removeEventListener() {} }));
+
+  test("손잡이로 접고 펼치며, 병원을 고르면 패널이 접히고 아래 카드의 길찾기로 다시 펼쳐 경로를 연다", async () => {
+    mobile(true);
+    api();
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    const app = document.querySelector(".map-page .app")!;
+    const toggle = screen.getByRole("button", { name: "목록 접기" });
+    expect(toggle).toHaveAttribute("aria-expanded", "true");
+    fireEvent.click(toggle);
+    expect(app).toHaveClass("is-panel-closed");
+    expect(screen.getByRole("button", { name: "목록 펼치기" })).toHaveAttribute("aria-expanded", "false");
+    fireEvent.click(screen.getByRole("button", { name: "목록 펼치기" }));
+    expect(app).not.toHaveClass("is-panel-closed");
+
+    // 목록에서 병원을 고르면 지도에서 보이게 패널이 접히고, 아래쪽 카드에 전화·길찾기
+    fireEvent.click(document.querySelector("#list li")!);
+    expect(app).toHaveClass("is-panel-closed");
+    const card = document.querySelector(".mobile-card") as HTMLElement;
+    expect(within(card).getByText("청담냥병원")).toBeInTheDocument();
+    fireEvent.click(within(card).getByRole("button", { name: "길찾기" }));
+    expect(app).not.toHaveClass("is-panel-closed");
+    expect(document.querySelector(".mobile-card")).toBeNull();
+    expect(screen.getByRole("button", { name: "길찾기 닫기" })).toBeInTheDocument();
+  });
+
+  test("데스크톱에서는 병원을 골라도 패널이 접히지 않고 아래쪽 카드도 없다", async () => {
+    mobile(false);
+    api();
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    fireEvent.click(document.querySelector("#list li")!);
+    expect(document.querySelector(".map-page .app")).not.toHaveClass("is-panel-closed");
+    expect(document.querySelector(".mobile-card")).toBeNull();
+  });
+});
