@@ -4,6 +4,7 @@
 //! - `GET /users?page=1&page_size=20&status=active` 회원 목록 (비밀번호 해시 제외)
 //! - `GET /dashboard?period=7d` 대시보드 숫자 (Amplitude + DB, `admin_dashboard.rs`)
 //! - `GET /growth?period=1d|7d|30d|custom&start=&end=` 성장 분석 (Amplitude, `admin_growth.rs`)
+//! - `GET /content/sheets`, `GET /content/sheet?name=` 콘텐츠 스튜디오 Google Sheets 읽기 (GAS, `admin_content.rs`)
 
 use axum::{
     Json, Router,
@@ -28,6 +29,8 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/users", get(list_users))
         .route("/dashboard", get(super::admin_dashboard::dashboard))
         .route("/growth", get(super::admin_growth::growth))
+        .route("/content/sheets", get(super::admin_content::list_sheets))
+        .route("/content/sheet", get(super::admin_content::read_sheet))
         .route_layer(from_fn_with_state(state, csrf_guard))
 }
 

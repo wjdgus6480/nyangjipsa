@@ -1,4 +1,4 @@
-// 냥집사 ADMIN 공통 틀: 왼쪽 메뉴 4개(대시보드·성장 분석·병원 관리·설정) + 본문.
+// 냥집사 ADMIN 공통 틀: 왼쪽 메뉴 5개(대시보드·성장 분석·콘텐츠 스튜디오·병원 관리·설정) + 본문.
 // 화면 접근은 role=admin 만. 실제 권한은 서버(/api/admin/*)가 매 요청 다시 확인합니다.
 import { Link, Navigate, NavLink, Outlet } from "react-router";
 import { ROUTES, SITE } from "../../services/config/site";
@@ -8,6 +8,7 @@ import "../../styles/admin.css";
 const ADMIN_MENU = [
   { to: ROUTES.admin, label: "대시보드", desc: "핵심 지표와 운영 현황", icon: "M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z" },
   { to: ROUTES.adminGrowth, label: "성장 분석", desc: "유입·퍼널·병원 이용", icon: "M3 17l6-6 4 4 8-8M15 7h6v6" },
+  { to: ROUTES.adminContent, label: "콘텐츠 스튜디오", desc: "시트 데이터·콘텐츠", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6" },
   { to: ROUTES.adminHospitals, label: "병원 관리", desc: "병원 정보 조회·관리", icon: "M4 21V7l8-4 8 4v14M9 21v-6h6v6M12 8v4M10 10h4" },
   { to: ROUTES.adminSettings, label: "설정 및 관리", desc: "권한·데이터 연동", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 2h-5l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z" },
 ] as const;

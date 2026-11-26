@@ -12,6 +12,7 @@
 //! - `share`: 병원 공유 링크·카카오톡 공유 카드
 //! - `cat_friendly`: 고양이 친화병원 인증 목록 적재·매칭
 //! - `amplitude`: 관리자 대시보드용 Amplitude 조회 (읽기 전용)
+//! - `gas`: 콘텐츠 스튜디오용 Google Apps Script 웹앱 호출 (Google Sheets 읽기 전용)
 //! - `auth`: 회원 인증 (이메일 가입·인증, 이메일/카카오 로그인, 세션, 비밀번호 재설정)
 //! - `src/bin/collect.rs`: 공공데이터 → DB 수집 실행 파일
 //! - `src/bin/create_admin.rs`: 관리자 지정 (서버 운영자 전용, 공개 API 없음)
@@ -28,6 +29,7 @@ pub mod coordinate;
 pub mod db;
 pub mod error;
 pub mod fees;
+pub mod gas;
 pub mod geocode;
 pub mod health;
 pub mod ingest;
@@ -58,6 +60,8 @@ pub struct AppState {
     pub auth: Arc<auth::AuthService>,
     /// None 이면 관리자 대시보드의 Amplitude 영역이 "연결 안 됨"
     pub amplitude: Option<Arc<amplitude::AmplitudeClient>>,
+    /// None 이면 콘텐츠 스튜디오의 Google Sheets 조회가 503 ("연결 안 됨")
+    pub gas: Option<Arc<gas::GasClient>>,
 }
 
 impl AppState {
@@ -74,6 +78,7 @@ impl AppState {
                 Vec::new(),
             )),
             amplitude: None,
+            gas: None,
         }
     }
 
@@ -94,6 +99,11 @@ impl AppState {
 
     pub fn with_amplitude(mut self, client: amplitude::AmplitudeClient) -> Self {
         self.amplitude = Some(Arc::new(client));
+        self
+    }
+
+    pub fn with_gas(mut self, client: gas::GasClient) -> Self {
+        self.gas = Some(Arc::new(client));
         self
     }
 
