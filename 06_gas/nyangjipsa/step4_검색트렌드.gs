@@ -14,13 +14,14 @@ function step4_searchTrends() {
   const top = selectedKeywords_(5);
   if (!top.length) throw new Error('2_관심도분석에서 "선정" 체크된 키워드가 없습니다.');
   const keys = top.map(t => t.keyword);
-  const days = Math.max(63, Number(getSetting('데이터랩 기간(일)', 84)) || 84);
+  const days = Math.max(63, settingNum_('데이터랩 기간(일)', 84));
+  const seasonYears = Math.min(10, Math.max(1, settingNum_('계절 지수 연도 수', 5)));
   const d = lastDays_(days);
   const daily = datalabSeries_(keys, d.startStr, d.endStr, 'date');
 
   // 계절: 지난해까지 5개 연도 (예: 2021-01-01 ~ 2025-12-31)
   const lastYear = new Date().getFullYear() - 1;
-  const monthly = datalabSeries_(keys, (lastYear - 4) + '-01-01', lastYear + '-12-31', 'month');
+  const monthly = datalabSeries_(keys, (lastYear - seasonYears + 1) + '-01-01', lastYear + '-12-31', 'month');
 
   // 주간 평균
   const startUtc = toUtc_(d.startStr);
@@ -89,7 +90,7 @@ function step4_searchTrends() {
       .build());
   }
 
-  writeTable_(sh, row, '■ 계절 지수 (' + (lastYear - 4) + '~' + lastYear + '년 월간, 1보다 크면 예년에 그 달 관심이 높았음)',
+  writeTable_(sh, row, '■ 계절 지수 (' + (lastYear - seasonYears + 1) + '~' + lastYear + '년 월간, 1보다 크면 예년에 그 달 관심이 높았음)',
     ['키워드'].concat([1, 2, 3, 4, 5, 6, 7, 8, 9, 10, 11, 12].map(m => m + '월')),
     keys.map((k, i) => [k].concat(season[i])));
   sh.setColumnWidth(1, 180);

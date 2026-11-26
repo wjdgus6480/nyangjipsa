@@ -11,11 +11,10 @@
  *   - 프롬프트에는 실제 데이터(데이터랩 흐름, 지식iN 질문 제목, 근거 발췌문)만 넣고 "근거에 없는 사실·숫자 금지"
  *   - 진료비 숫자는 넣지 않고 냥집사에서 지역별 진료비를 확인하도록 안내
  *   - 결과는 항상 "검수 대기". 자동 검사에 걸리면 "보류". 관리자가 승인하기 전에는 발행하지 않습니다
- *  한 번 실행 최대 NVIDIA 호출 수: CONTENT_MAX_CALLS (GAS 6분 실행 제한 보호)
+ *  한 번 실행 최대 NVIDIA 호출 수: 설정 '한 번 실행 최대 AI 호출' (GAS 6분 실행 제한 보호)
  * ============================================================
  */
 
-const CONTENT_MAX_CALLS = 10;
 const DISCLAIMER = '※ 이 내용은 일반 정보이며 수의사의 진료를 대신하지 않습니다. 증상이 계속되거나 심하면 가까운 동물병원에 문의하세요.';
 // 자동 검사: 이런 표현이 있으면 "보류"
 const BANNED = ['완치', '100%', '반드시 낫', '특효', '무조건', '최고의', '1위', '부작용 없', '병원 안 가도', '병원에 가지 않아도', '집에서 치료', 'mg', '밀리그램'];
@@ -29,7 +28,9 @@ const FORMAT_GUIDE = {
 };
 
 function step5_buildContent() {
-  const limit = Math.max(1, Number(getSetting('콘텐츠 키워드 수', 1)) || 1);
+  const limit = Math.max(1, settingNum_('콘텐츠 키워드 수', 1));
+  const CONTENT_MAX_CALLS = Math.max(1, settingNum_('한 번 실행 최대 AI 호출', 10));
+  const tone = String(getSetting('콘텐츠 말투', '따뜻하고 차분한 존댓말')).trim();
   const formats = String(getSetting('콘텐츠 형식', 'FAQ,카드뉴스,릴스,SNS,커뮤니티'))
     .split(',').map(s => s.trim()).filter(f => FORMAT_GUIDE[f]);
   if (!formats.length) throw new Error('설정 "콘텐츠 형식"에 FAQ, 카드뉴스, 릴스, SNS, 커뮤니티 중 하나 이상을 적어 주세요.');
@@ -52,7 +53,7 @@ function step5_buildContent() {
     formats.forEach(f => {
       if (calls >= CONTENT_MAX_CALLS) return;
       calls++;
-      const prompt = buildNyangPrompt_(k, f, intro, site, ev, questions[k.keyword] || []);
+      const prompt = buildNyangPrompt_(k, f, intro, site, ev, questions[k.keyword] || [], tone);
       const now = new Date();
       try {
         const text = plainText_(callNvidia(prompt));
@@ -91,7 +92,7 @@ function evidenceByKeyword_() {
 }
 
 /** 냥집사 콘텐츠 프롬프트 (형식 1개) */
-function buildNyangPrompt_(k, format, intro, site, evidence, questions) {
+function buildNyangPrompt_(k, format, intro, site, evidence, questions, tone) {
   const lines = [
     '당신은 고양이 보호자를 돕는 동물병원 정보 서비스 "냥집사"의 콘텐츠 에디터입니다.',
     '[서비스 소개] ' + intro,
@@ -124,6 +125,7 @@ function buildNyangPrompt_(k, format, intro, site, evidence, questions) {
     '- 구토가 반복되거나, 하루 이상 먹지 않거나, 숨쉬기 힘들어하거나, 소변을 못 보면 "바로 동물병원"이라고 안내하세요.',
     '- 진료비·가격 숫자는 쓰지 마세요.',
     '- 최고·1위·100%·완치 같은 과장 표현을 쓰지 마세요.',
+    '- 말투: ' + (tone || '따뜻하고 차분한 존댓말') + '.',
     '- 쉬운 한국어로, 형식 제목만 쓰고 다른 설명은 붙이지 마세요.'
   );
   return lines.join('\n');
