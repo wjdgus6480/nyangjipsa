@@ -378,3 +378,67 @@ export interface PlaceHit {
 export interface PlaceSearchResponse {
   places: PlaceHit[];
 }
+
+// ---------- 관리자 대시보드 (GET /api/admin/dashboard, 01_backend/src/routes/admin_dashboard.rs) ----------
+
+export type DashboardPeriodKey = "today" | "7d" | "30d" | "90d";
+
+export interface DashboardCompare {
+  current: number;
+  previous: number;
+}
+
+export interface DashboardMetric extends DashboardCompare {
+  /** 이벤트 이름. 일일 활성 사용자는 active_users */
+  key: string;
+  /** 그래프 날짜(dates)별 일일 고유 사용자 수 */
+  daily: number[];
+}
+
+export interface DashboardFunnelStep extends DashboardCompare {
+  key: string;
+}
+
+export interface DashboardTopHospital {
+  hospital_id: number;
+  /** 폐업 등으로 DB 에서 삭제된 병원이면 null */
+  name: string | null;
+  region: string | null;
+  clicks: number;
+}
+
+export interface AdminDashboard {
+  period: {
+    key: DashboardPeriodKey;
+    days: number;
+    start: string;
+    end: string;
+    prev_start: string;
+    prev_end: string;
+    chart_start: string;
+  };
+  /** 그래프 날짜 (YYYY-MM-DD, 한국 시간) */
+  dates: string[];
+  generated_at: string;
+  amplitude: {
+    status: "connected" | "not_configured" | "error";
+    message: string | null;
+    data: {
+      metrics: DashboardMetric[];
+      funnel: DashboardFunnelStep[];
+      /** utm_source 별 첫 화면 고유 사용자. direct = utm 없음 */
+      sources: { label: string; value: number }[];
+      top_hospitals: DashboardTopHospital[];
+    } | null;
+  };
+  db: {
+    members_total: number;
+    signups: DashboardCompare;
+    signups_daily: number[];
+    share_links: DashboardCompare;
+    share_opens_total: number;
+    hospitals: number;
+    cat_friendly: number;
+    data_updated_at: string | null;
+  };
+}

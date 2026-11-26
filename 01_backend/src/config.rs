@@ -28,6 +28,12 @@ pub struct Config {
     pub frontend_base_url: String,
     /// 공유 카드 이미지 주소. 없으면 `{FRONTEND_BASE_URL}/assets/logo.png`
     pub share_image_url: Option<String>,
+    /// 관리자 대시보드용 Amplitude 프로젝트 API 키 (브라우저 VITE_AMPLITUDE_API_KEY 와 같은 프로젝트)
+    pub amplitude_api_key: Option<String>,
+    /// Amplitude Secret 키 (서버 전용, 프론트에 넣지 않음)
+    pub amplitude_secret_key: Option<String>,
+    /// Amplitude 조회 주소. 비우면 미국(https://amplitude.com), EU 는 https://analytics.eu.amplitude.com
+    pub amplitude_dashboard_url: Option<String>,
     /// 회원 인증 (세션·메일·카카오 로그인)
     pub auth: AuthEnv,
 }
@@ -226,6 +232,9 @@ impl Config {
                 .or_else(|| optional("APP_BASE_URL"))
                 .unwrap_or_else(|| "http://localhost:5173".into()),
             share_image_url: optional("SHARE_IMAGE_URL"),
+            amplitude_api_key: optional("AMPLITUDE_API_KEY"),
+            amplitude_secret_key: optional("AMPLITUDE_SECRET_KEY"),
+            amplitude_dashboard_url: optional("AMPLITUDE_DASHBOARD_URL"),
             auth: AuthEnv::from_env()?,
         })
     }
@@ -263,6 +272,9 @@ impl fmt::Debug for Config {
             .field("public_base_url", &self.public_base_url)
             .field("frontend_base_url", &self.frontend_base_url)
             .field("share_image_url", &self.share_image_url)
+            .field("amplitude_api_key", &hidden(&self.amplitude_api_key))
+            .field("amplitude_secret", &hidden(&self.amplitude_secret_key))
+            .field("amplitude_dashboard_url", &self.amplitude_dashboard_url)
             .field("auth", &self.auth)
             .finish()
     }
@@ -307,6 +319,9 @@ mod tests {
             public_base_url: "http://localhost:8080".into(),
             frontend_base_url: "http://localhost:5173".into(),
             share_image_url: None,
+            amplitude_api_key: Some("amp_key_secret".into()),
+            amplitude_secret_key: Some("amp_secret_secret".into()),
+            amplitude_dashboard_url: None,
             auth: AuthEnv {
                 smtp_username: Some("smtp_user_secret".into()),
                 smtp_password: Some("smtp_pw_secret".into()),
@@ -328,5 +343,7 @@ mod tests {
         assert!(!printed.contains("kakao_login_secret"));
         assert!(!printed.contains("google_id_secret"));
         assert!(!printed.contains("google_pw_secret"));
+        assert!(!printed.contains("amp_key_secret"));
+        assert!(!printed.contains("amp_secret_secret"));
     }
 }
