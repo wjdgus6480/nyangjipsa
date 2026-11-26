@@ -50,3 +50,30 @@
 ## 테스트
 
 `02_frontend/tests/analytics.test.tsx` — 키 없으면 미전송, SDK 옵션(자동 페이지뷰 끔·IP 끔), utm 이 모든 이벤트에 붙음, 개인정보 제거, 상담 퍼널, 전화·길찾기·공유 버튼 이벤트와 공유 링크(utm) 복사
+
+## Amplitude 프로젝트 (2026-11-26 생성)
+
+- 프로젝트: **냥집사** (ID 918700, 조직 mute-credit-926944). 시간대 **Asia/Seoul**
+- 트래킹 플랜에 위 이벤트 7개(퍼널 5개는 공식 이벤트, 카테고리 `퍼널`)와 속성 11개(`hospital_id` 숫자, `click_type`·`surface`·`result_type` 값 목록, utm 3개 등)를 등록해 두었습니다
+- 키 넣는 곳 (키 값은 문서·채팅·커밋에 쓰지 않음)
+  - 프론트(Vercel 환경변수·`02_frontend/.env.local`): `VITE_AMPLITUDE_API_KEY` = 이 프로젝트 API Key
+  - 백엔드(Render 환경변수·루트 `.env`): `AMPLITUDE_API_KEY` = 같은 API Key, `AMPLITUDE_SECRET_KEY` = Secret Key (**서버 전용**)
+  - 키 위치: Amplitude → Settings → Projects → 냥집사 → API 키/비밀 키 [관리]
+
+## 관리자 대시보드 (`/admin`)
+
+관리자(`role=admin`)만 볼 수 있습니다. 화면은 `02_frontend/src/features/admin/`, API 는 `GET /api/admin/dashboard?period=today|7d|30d|90d` (`01_backend/src/routes/admin_dashboard.rs`).
+
+| 영역 | 데이터 | 비고 |
+|---|---|---|
+| 핵심 지표 카드 5개 | Amplitude 이벤트별 고유 사용자 (기간 전체) | 이전 같은 길이 기간 대비 ▲▼%. 이전 0 이면 "새로 생김". `hospital_clicked` = 노스스타 강조 |
+| 사용자 여정 퍼널 | Amplitude 순서 퍼널 (`landing_viewed` → … → `result_shared`) | 단계별 전환율·이탈률, 가장 많이 빠지는 단계 |
+| 어디서 왔나요? | `landing_viewed` 를 `utm_source` 로 나눔 | 없음 = 직접 방문, `share` = 카톡 공유 링크 |
+| 일일 활성 사용자 (막대) | Amplitude `_active` 일별 고유 사용자 | 주별·월별은 **하루 평균** (같은 사람 중복 집계 방지) |
+| 병원 연결 추세 (선) | `hospital_clicked` 일별 고유 사용자, 이전 기간 점선 | |
+| 많이 연결된 병원 TOP 5 | `hospital_clicked` 를 `hospital_id` 로 나눈 횟수 + DB 병원 이름 | 삭제(폐업)된 병원은 번호만 |
+| 운영 현황 | PostgreSQL: 회원·가입·공유 링크·병원 수 | Amplitude 없이도 항상 표시 |
+
+- Amplitude 키가 없거나 응답이 실패하면 가짜 숫자 없이 "연결 안 됨/오류" 안내와 빈 그래프를 보여 줍니다
+- 서버가 기간별 결과를 5분간 캐시합니다 (Amplitude 요청 비용·동시 요청 제한)
+- 성장 분석·병원 관리·설정 메뉴는 틀만 있고 "준비 중" 입니다

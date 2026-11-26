@@ -2,6 +2,7 @@
 //! 비로그인 401, 일반 회원 403.
 //!
 //! - `GET /users?page=1&page_size=20&status=active` 회원 목록 (비밀번호 해시 제외)
+//! - `GET /dashboard?period=7d` 대시보드 숫자 (Amplitude + DB, `admin_dashboard.rs`)
 
 use axum::{
     Json, Router,
@@ -24,6 +25,7 @@ pub const MAX_PAGE_SIZE: i64 = 100;
 pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/users", get(list_users))
+        .route("/dashboard", get(super::admin_dashboard::dashboard))
         .route_layer(from_fn_with_state(state, csrf_guard))
 }
 
