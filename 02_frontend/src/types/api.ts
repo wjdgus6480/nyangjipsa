@@ -351,6 +351,8 @@ export interface RouteOption {
   egress_walk?: WalkLeg;
   /** 문 앞에서 문 앞까지 총 시간(초) */
   total_time_s?: number;
+  /** 대중교통 후보 이름표 (가장 빠름 / 환승 없음 / 환승 있음 / 지하철) */
+  labels?: string[];
 }
 
 /** GET /api/route 응답 (routing.rs RouteResponse) */

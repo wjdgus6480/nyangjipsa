@@ -99,6 +99,20 @@ describe("길찾기 패널", () => {
     expect(routeLines(accurateOther).at(-1)?.path).toHaveLength(3);
   });
 
+  test("대중교통 후보 이름표(가장 빠름·환승 없음·지하철)를 보여 줌", async () => {
+    const tagged = [
+      { ...transit, labels: ["가장 빠름", "환승 있음", "지하철"] },
+      { ...transit, kind: "BUS", transfers: 0, total_time_s: 2700, labels: ["환승 없음"] },
+    ];
+    mockFetch((url) => (url.searchParams.get("mode") === "transit" ? { json: { mode: "transit", routes: tagged, notices: [], detail_index: 0 } } : { json: { mode: "walk", routes: [walk], notices: [] } }));
+    render(<RoutePanel hospital={h} myLocation={{ lat: 37.5665, lon: 126.978 }} onLocate={vi.fn()} onDraw={vi.fn()} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("tab", { name: "대중교통" }));
+    await waitFor(() => expect(screen.getByText("가장 빠름")).toBeInTheDocument());
+    expect(screen.getByText("환승 없음")).toBeInTheDocument();
+    expect(document.querySelector(".rp-tag--subway")?.textContent).toBe("지하철");
+    expect(document.querySelectorAll(".rp-options li")).toHaveLength(2);
+  });
+
   test("키 없음·오류(503)면 안내 + 카카오맵 링크로 대신", async () => {
     mockFetch(() => ({ status: 503, json: { error: "길찾기가 설정되지 않았습니다" } }));
     render(<RoutePanel hospital={h} myLocation={{ lat: 37.5665, lon: 126.978 }} onLocate={vi.fn()} onDraw={vi.fn()} onClose={() => {}} />);

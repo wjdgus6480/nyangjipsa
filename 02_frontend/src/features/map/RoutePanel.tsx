@@ -49,6 +49,9 @@ const errorText = (status: number) =>
       ? "출발지와 도착지를 확인할 수 없어요."
       : "지금은 길찾기를 불러올 수 없어요. 카카오맵 길찾기로 확인해 주세요.";
 
+/** 대중교통 후보 이름표 색 */
+const TAG_CLASS: Record<string, string> = { "가장 빠름": "fast", "환승 없음": "direct", "환승 있음": "transfer", 지하철: "subway" };
+
 const coordKey = (p: LatLon) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
 
 export function RoutePanel({ hospital, myLocation, onLocate, onDraw, onClose }: Props) {
@@ -195,7 +198,14 @@ export function RoutePanel({ hospital, myLocation, onLocate, onDraw, onClose }: 
               {state.data.routes.map((r, i) => (
                 <li key={i}>
                   <button type="button" className={i === picked ? "is-on" : ""} aria-pressed={i === picked} onClick={() => setPicked(i)}>
-                    {summary(r)}
+                    {!!r.labels?.length && (
+                      <span className="rp-tags">
+                        {r.labels.map((t) => (
+                          <span key={t} className={`rp-tag rp-tag--${TAG_CLASS[t] ?? "etc"}`}>{t}</span>
+                        ))}
+                      </span>
+                    )}
+                    <span className="rp-option__sum">{summary(r)}</span>
                   </button>
                 </li>
               ))}
