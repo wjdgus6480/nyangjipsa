@@ -145,7 +145,7 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
           </div>
           <div className="chat__window">
             <div className="chat__top">
-              <img src={SITE.logo} alt="" className="avatar" />
+              <img src={SITE.appIcon} alt="" className="avatar" />
               <div>
                 <strong>AI 간호사</strong>
                 <small>수의사 진단을 대신하지 않는 참고용 상담이에요</small>
@@ -161,7 +161,7 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
                   <div key={m.id} className="msg msg--user"><div className="bubble">{m.text}</div></div>
                 ) : (
                   <div key={m.id} className="msg msg--bot">
-                    <img src={SITE.logo} alt="" className="avatar avatar--sm" />
+                    <img src={SITE.appIcon} alt="" className="avatar avatar--sm" />
                     <div className="bubble">
                       {m.kind === "text" && m.content}
                       {m.kind === "typing" && <span className="typing"><i /><i /><i /></span>}

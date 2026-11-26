@@ -28,6 +28,10 @@ export const SITE = {
   brandTagline: "AI 반려묘 건강관리",
   /** 홈 로고 (기존 home/assets/logo.png, 투명 배경) */
   logo: asset("assets/logo.png"),
+  /** 브랜드 앱 아이콘 (헤더·푸터·채팅 프로필·탭 아이콘, 하늘 배경 빼꼼 고양이) */
+  appIcon: asset("assets/app-icon.png"),
+  /** 홈 히어로 배경 (하늘·구름 위 아기 고양이, 오른쪽 배치) */
+  heroImage: asset("assets/hero-cat.webp"),
   /** 지도·챗봇 로고 (기존 map-poc/assets/logo.png) */
   mapLogo: asset("assets/logo-map.png"),
 } as const;

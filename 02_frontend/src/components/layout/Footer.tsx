@@ -24,7 +24,7 @@ export function Footer() {
       <footer className="footer">
         <div className="container footer__inner">
           <div className="footer__brand">
-            <img src={SITE.logo} alt="" className="brand__logo" />
+            <img src={SITE.appIcon} alt="" className="brand__logo" />
             <div>
               <strong>{SITE.brandName}</strong>
               <p>{SITE.brandTagline}</p>
