@@ -1,7 +1,7 @@
 // 길찾기(도보·대중교통)와 내 위치: 표시 함수, 길찾기 패널, 지도 위 선·파란 점
 import { afterEach, beforeEach, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor } from "@testing-library/react";
-import { fmtDistance, fmtDuration, routeLines, stepText, summary } from "../src/features/map/routeCore";
+import { fmtDistance, fmtDuration, routeLines, stepText, summary, timeline } from "../src/features/map/routeCore";
 import { RoutePanel } from "../src/features/map/RoutePanel";
 import { HospitalActions } from "../src/features/hospital/HospitalActions";
 import { analytics } from "../src/services/analytics/analytics";
@@ -74,9 +74,12 @@ describe("길찾기 패널", () => {
     const onDraw = vi.fn();
     render(<RoutePanel hospital={h} myLocation={{ lat: 37.5665, lon: 126.978 }} onLocate={vi.fn()} onDraw={onDraw} onClose={() => {}} />);
     fireEvent.click(screen.getByRole("tab", { name: "대중교통" }));
-    await waitFor(() => expect(screen.getByText("버스+지하철 · 37분 · 7.8km · 환승 1회 · 1,500원")).toBeInTheDocument());
-    expect(screen.getByText("정류장까지 걷기 (4분)")).toBeInTheDocument();
-    expect(screen.getByText("도착지까지 걷기 (3분, 추정)")).toBeInTheDocument();
+    await waitFor(() => expect(screen.getAllByText("버스+지하철 · 37분 · 7.8km · 환승 1회 · 1,500원").length).toBeGreaterThan(0));
+    // 타임라인: 정류장까지 걷기 → 승차 → 환승 → 하차 → 도착지까지 걷기(추정치는 "약")
+    expect(screen.getByText("시청까지 걷기")).toBeInTheDocument();
+    expect(screen.getByText("4분 · 300m")).toBeInTheDocument();
+    expect(screen.getByText("누리봄동물병원까지 걷기")).toBeInTheDocument();
+    expect(screen.getByText("약 3분 · 200m")).toBeInTheDocument();
     fireEvent.click(screen.getByText(/버스 · 45분/));
     expect(onDraw).toHaveBeenLastCalledWith(routeLines(other), expect.anything());
   });
@@ -118,6 +121,36 @@ describe("길찾기 패널", () => {
     render(<RoutePanel hospital={h} myLocation={{ lat: 37.5665, lon: 126.978 }} onLocate={vi.fn()} onDraw={vi.fn()} onClose={() => {}} />);
     await waitFor(() => expect(screen.getByText(/지금은 길찾기를 불러올 수 없어요/)).toBeInTheDocument());
     expect(screen.getByText("카카오맵에서 길찾기 열기 ↗").getAttribute("href")).toContain("map.kakao.com/link/to/");
+  });
+});
+
+describe("길찾기 타임라인", () => {
+  const ends = { from: { lat: 37.566, lon: 126.978 }, to: { lat: 37.571, lon: 127.001 }, fromName: "내 위치", toName: "누리봄동물병원" };
+
+  test("대중교통: 출발 → 걷기 → 승차(노선 칩) → 환승 걷기 → 환승 → 하차 → 걷기 → 도착", () => {
+    const items = timeline(transit, ends);
+    expect(items.map((i) => i.kind)).toEqual(["start", "walk", "board", "walk", "transfer", "alight", "walk", "arrive"]);
+    expect(items[2]).toMatchObject({ title: "시청 승차", vehicle: "BUS", chips: ["708"], sub: "10분 · 2개 정류장 이동", at: { lon: 126.979, lat: 37.567 } });
+    expect(items[4]).toMatchObject({ title: "경복궁 환승", vehicle: "SUBWAY", chips: ["3호선"], sub: "14분 · 1개 역 이동" });
+    expect(items[5]).toMatchObject({ title: "안국 하차", at: { lon: 127.0, lat: 37.57 } });
+    expect(items[0].at).toEqual(ends.from);
+    expect(items.at(-1)!.at).toEqual(ends.to);
+  });
+
+  test("도보: 단계별 안내 문구 + 도착", () => {
+    const items = timeline(walk, ends);
+    expect(items.map((i) => i.title)).toEqual(["내 위치에서 출발", "122m 이동", "누리봄동물병원 도착"]);
+  });
+
+  test("단계를 누르면 지도가 그 위치로 이동하고, 누른 단계가 표시됨", async () => {
+    mockFetch((url) => (url.searchParams.get("mode") === "transit" ? { json: { mode: "transit", routes: [{ ...transit, egress_walk: { ...transit.egress_walk!, estimated: false } }], notices: [], detail_index: 0 } } : { json: { mode: "walk", routes: [walk], notices: [] } }));
+    const onFocusPoint = vi.fn();
+    render(<RoutePanel hospital={{ hospitalId: 7, name: "누리봄동물병원", phone: null, lat: 37.571, lon: 127.001 }} myLocation={{ lat: 37.566, lon: 126.978 }} onLocate={vi.fn()} onDraw={vi.fn()} onFocusPoint={onFocusPoint} onClose={() => {}} />);
+    fireEvent.click(screen.getByRole("tab", { name: "대중교통" }));
+    const board = await screen.findByText("시청 승차");
+    fireEvent.click(board.closest("button")!);
+    expect(onFocusPoint).toHaveBeenCalledWith({ lon: 126.979, lat: 37.567 });
+    expect(board.closest("li")).toHaveAttribute("aria-current", "step");
   });
 });
 

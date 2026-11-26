@@ -76,6 +76,31 @@ describe("HospitalMap (SDK 조작)", () => {
     hm.destroy();
   });
 
+  test("고른 병원 핀은 확대·이동으로 검색 결과에서 빠져도 남고, 눌러도 정보창이 열린다", async () => {
+    let zoomedIn = false;
+    mockFetch((url) => {
+      if (url.pathname.startsWith("/data/regions/")) return { json: REGION_EMPTY };
+      if (url.pathname === "/api/places/points") return { json: { count: 0, points: [] } };
+      if (url.pathname === "/api/places/nearby") return { json: zoomedIn ? { ...PLACES, count: 1, items: [PLACES.items[1]] } : PLACES };
+      return { status: 404, json: {} };
+    });
+    const hm = new HospitalMap(document.createElement("div"), { types: ["hospital", "pharmacy"], radius: "auto" }, { onItems: vi.fn(), onStatus: vi.fn(), onSelected: vi.fn(), onRegion: vi.fn() });
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    hm.select(11, false);
+    const pin = fake.markers.find((m) => m.opts.title === "청담냥병원")!;
+    expect(pin.setMap).not.toHaveBeenCalledWith(null);
+
+    // 확대해서 다시 검색 → 청담냥병원이 결과에서 빠짐
+    zoomedIn = true;
+    hm.setFilters({ types: ["hospital"], radius: 1000 });
+    await act(() => vi.advanceTimersByTimeAsync(400));
+    expect(pin.setMap).not.toHaveBeenCalledWith(null);
+    // 다른 업소(청담약국)는 보이고, 고른 핀을 다시 눌러도 정보창이 열림
+    hm.select(11, false);
+    expect(fake.markers.filter((m) => m.opts.title === "청담냥병원")).toHaveLength(1);
+    hm.destroy();
+  });
+
   test("destroy: 지도 인스턴스·이벤트 리스너·마커를 모두 정리하고 이후 요청을 무시", async () => {
     const { calls } = api();
     const hm = new HospitalMap(document.createElement("div"), { types: ["hospital"], radius: "auto" }, { onItems: vi.fn(), onStatus: vi.fn(), onSelected: vi.fn(), onRegion: vi.fn() });

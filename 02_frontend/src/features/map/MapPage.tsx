@@ -118,6 +118,7 @@ export function MapPage() {
   }, []);
 
   const drawRoute = useCallback((lines: RouteLine[], ends?: RouteEnds) => hmRef.current?.drawRoute(lines, ends), []);
+  const focusPoint = useCallback((p: LatLon) => hmRef.current?.focusPoint(p), []);
 
   // 지도 생성/정리 (StrictMode 이중 실행·화면 재진입에도 인스턴스 하나만 유지)
   useEffect(() => {
@@ -229,6 +230,7 @@ export function MapPage() {
               myLocation={myLocation}
               onLocate={() => locate(false)}
               onDraw={drawRoute}
+              onFocusPoint={focusPoint}
               onClose={() => setRouteFor(null)}
             />
           )}
