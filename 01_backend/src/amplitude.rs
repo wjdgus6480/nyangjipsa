@@ -145,10 +145,11 @@ impl AmplitudeClient {
     }
 }
 
-/// Amplitude 가 "그런 이벤트 없음"(event_type_not_found, 400)으로 답했는지.
-/// 트래킹 플랜에만 있고 아직 수집되지 않은 이벤트를 조회하면 이렇게 옵니다.
+/// Amplitude 가 "그런 이벤트·속성 없음"(400 event_type_not_found / event_property_not_found)으로 답했는지.
+/// 트래킹 플랜에만 있고 아직 수집되지 않은 이벤트나, 그 이벤트에 아직 들어온 적 없는
+/// 속성(예: hospital_id 로 나누기)을 조회하면 이렇게 옵니다. 값 0 으로 봅니다.
 fn is_event_not_found(err: &str) -> bool {
-    err.contains("event_type_not_found")
+    err.contains("event_type_not_found") || err.contains("event_property_not_found")
 }
 
 fn ymd(d: NaiveDate) -> String {
@@ -271,6 +272,9 @@ mod tests {
     fn missing_event_error_is_recognized() {
         assert!(is_event_not_found(
             r#"Amplitude 응답 400 Bad Request: {"error": {"metadata": {"reason": "event_type_not_found"}}}"#
+        ));
+        assert!(is_event_not_found(
+            r#"Amplitude 응답 400 Bad Request: {"error": {"metadata": {"reason": "event_property_not_found"}}}"#
         ));
         assert!(!is_event_not_found(
             "Amplitude 응답 401 Unauthorized: invalid api key"
