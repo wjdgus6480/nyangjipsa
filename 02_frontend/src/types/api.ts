@@ -381,7 +381,7 @@ export interface PlaceSearchResponse {
 
 // ---------- 관리자 대시보드 (GET /api/admin/dashboard, 01_backend/src/routes/admin_dashboard.rs) ----------
 
-export type DashboardPeriodKey = "today" | "7d" | "30d" | "90d";
+export type DashboardPeriodKey = "today" | "7d" | "30d";
 
 export interface DashboardCompare {
   current: number;

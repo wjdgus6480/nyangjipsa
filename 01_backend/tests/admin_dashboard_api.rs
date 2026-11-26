@@ -47,7 +47,7 @@ async fn dashboard_is_admin_only_and_uses_real_db_counts(pool: PgPool) {
 
     let r = send(
         &app,
-        Req::new("GET", "/api/admin/dashboard?period=1y").cookie(&boss),
+        Req::new("GET", "/api/admin/dashboard?period=90d").cookie(&boss),
     )
     .await;
     assert_eq!(r.status, StatusCode::BAD_REQUEST);

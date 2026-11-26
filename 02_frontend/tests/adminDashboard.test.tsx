@@ -115,6 +115,8 @@ describe("관리자 접근", () => {
     // 퍼널 인사이트: 100명 중 12명
     expect(screen.getByText(/100명 중 12명/)).toBeInTheDocument();
 
+    // 90일 보기는 없음 (Amplitude 무료 플랜 조회 비용 한도)
+    expect(screen.queryByRole("radio", { name: "90일" })).toBeNull();
     // 기간 바꾸면 다시 조회
     fireEvent.click(screen.getByRole("radio", { name: "30일" }));
     expect(calls.some((c) => c.url === "/api/admin/dashboard?period=30d")).toBe(true);

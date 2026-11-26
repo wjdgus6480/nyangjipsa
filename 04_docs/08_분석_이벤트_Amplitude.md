@@ -62,7 +62,7 @@
 
 ## 관리자 대시보드 (`/admin`)
 
-관리자(`role=admin`)만 볼 수 있습니다. 화면은 `02_frontend/src/features/admin/`, API 는 `GET /api/admin/dashboard?period=today|7d|30d|90d` (`01_backend/src/routes/admin_dashboard.rs`).
+관리자(`role=admin`)만 볼 수 있습니다. 화면은 `02_frontend/src/features/admin/`, API 는 `GET /api/admin/dashboard?period=today|7d|30d` (`01_backend/src/routes/admin_dashboard.rs`).
 
 | 영역 | 데이터 | 비고 |
 |---|---|---|
@@ -76,4 +76,6 @@
 
 - Amplitude 키가 없거나 응답이 실패하면 가짜 숫자 없이 "연결 안 됨/오류" 안내와 빈 그래프를 보여 줍니다
 - 서버가 기간별 결과를 5분간 캐시합니다 (Amplitude 요청 비용·동시 요청 제한)
+- Amplitude 조회는 동시에 보내지 않고 차례로 보내며, 429(동시 조회 비용 초과)면 잠깐 기다렸다 다시 시도합니다
+- 90일 보기는 없습니다: 무료 플랜 조회 비용 한도에 자주 걸리고 서비스 초기라 데이터도 없음. 30일 보기에서 일별·주별·월별을 고를 수 있습니다
 - 성장 분석·병원 관리·설정 메뉴는 틀만 있고 "준비 중" 입니다
