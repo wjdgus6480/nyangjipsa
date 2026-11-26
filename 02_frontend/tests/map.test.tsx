@@ -401,3 +401,19 @@ describe("모바일 지도: 왼쪽 패널 접기·펼치기", () => {
     expect(document.querySelector(".mobile-card")).toBeNull();
   });
 });
+
+describe("지도 위쪽 머리", () => {
+  test("홈 버튼만 있고 AI 도우미 버튼은 없다 (챗봇은 오른쪽 아래 아이콘으로)", async () => {
+    installFakeNaver();
+    api();
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    const brand = document.querySelector(".map-page .brand") as HTMLElement;
+    expect(within(brand).getByRole("link", { name: "홈" })).toHaveAttribute("href", "/");
+    expect(within(brand).queryByRole("link", { name: "AI 도우미" })).toBeNull();
+    expect(screen.getByRole("button", { name: "냥집사 AI 도우미 열기" })).toBeInTheDocument();
+  });
+});
