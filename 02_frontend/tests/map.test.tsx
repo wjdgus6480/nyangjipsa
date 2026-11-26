@@ -138,6 +138,35 @@ describe("MapPage (React 화면)", () => {
     expect(calls.some((c) => c.url === "/api/places/points?type=hospital%2Cgrooming")).toBe(true);
   });
 
+  test("지도를 움직여 목록이 다시 검색돼 고른 병원이 빠져도 버튼·길찾기가 사라지지 않는다", async () => {
+    let moved = false;
+    const { calls } = mockFetch((url) => {
+      if (url.pathname.startsWith("/data/regions/")) return { json: REGION_EMPTY };
+      if (url.pathname === "/api/places/points") return { json: { count: 0, points: [] } };
+      if (url.pathname === "/api/places/nearby")
+        return { json: moved ? { ...PLACES, count: 1, items: [PLACES.items[1]] } : PLACES };
+      return { status: 404, json: { error: "nf" } };
+    });
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    fireEvent.click(document.querySelector("#list li")!);
+    fireEvent.click(await screen.findByRole("button", { name: "길찾기" }));
+    expect(screen.getByRole("button", { name: "길찾기 닫기" })).toBeInTheDocument();
+
+    // 지도를 움직인 것처럼 다시 검색 → 고른 병원(청담냥병원)이 목록에서 빠짐
+    moved = true;
+    const n = calls.filter((c) => c.url.startsWith("/api/places/nearby")).length;
+    fireEvent.click(screen.getByLabelText("미용"));
+    await waitFor(() => expect(calls.filter((c) => c.url.startsWith("/api/places/nearby")).length).toBe(n + 1));
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(1));
+    expect(screen.getByText("청담냥병원", { selector: ".ha-name" })).toBeInTheDocument();
+    expect(screen.getByRole("button", { name: "길찾기 닫기" })).toBeInTheDocument();
+  });
+
   test("다른 화면으로 갔다가 다시 들어와도 지도는 하나만 살아 있다 (이전 것은 destroy)", async () => {
     api();
     let go: (to: string) => void = () => {};

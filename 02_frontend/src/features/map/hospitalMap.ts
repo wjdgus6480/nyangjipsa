@@ -316,6 +316,7 @@ export class HospitalMap implements MapBridge {
     if (this.destroyed || lines.length === 0 || !naverReady()) return;
     let minLat = 90, minLon = 180, maxLat = -90, maxLon = -180;
     // 출발·도착 표시 (선이 정류장에서 끝나도 실제 출발·도착 지점이 보이게) + 화면 맞춤에 포함
+    // 이름표는 지점의 오른쪽 위에 띄워 병원 핀(고양이)을 가리지 않고, 눌러도 아래 핀이 눌리게(pointer-events:none, clickable:false)
     if (ends) {
       for (const [p, cls, label] of [[ends.from, "from", "출발"], [ends.to, "to", "도착"]] as const) {
         this.routeEnds.push(
@@ -324,7 +325,8 @@ export class HospitalMap implements MapBridge {
             map: this.map,
             title: label,
             zIndex: 1050,
-            icon: { content: `<div class="route-end route-end--${cls}"><span>${label}</span></div>`, anchor: new naver.maps.Point(18, 34) },
+            clickable: false,
+            icon: { content: `<div class="route-end route-end--${cls}" aria-hidden="true"><span>${label}</span></div>`, anchor: new naver.maps.Point(-10, 40) },
           }),
         );
         minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);

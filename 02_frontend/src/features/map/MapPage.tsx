@@ -51,6 +51,8 @@ export function MapPage() {
   const [status, setStatus] = useState("지도 불러오는 중…");
   const [items, setItems] = useState<NearbyPlace[]>([]);
   const [selectedId, setSelectedId] = useState<number | null>(null);
+  /** 고른 업소 (고를 때 기억해 둠). 지도를 움직여 목록이 다시 검색돼 이 업소가 빠져도 버튼·길찾기가 사라지지 않게 */
+  const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
   const [region, setRegion] = useState<RegionBarState>({ level: null, here: null, sel: null });
   const [loaded, setLoaded] = useState(false);
   const [myLocation, setMyLocation] = useState<LatLon | null>(null);
@@ -67,6 +69,11 @@ export function MapPage() {
     itemsRef.current = items;
   });
 
+  const selectPlace = useCallback((id: number | null) => {
+    setSelectedId(id);
+    setSelectedPlace((prev) => (id == null ? null : (itemsRef.current.find((x) => x.id === id) ?? (prev?.id === id ? prev : null))));
+  }, []);
+
   // 병원을 고르면(목록·핀) 상세 정보창이 열림 → hospital_clicked(detail), 진료비가 보이면 cost_viewed (병원마다 한 번)
   const costSeen = useRef(new Set<number>());
   useEffect(() => {
@@ -81,7 +88,7 @@ export function MapPage() {
 
   // 행동 버튼을 보여 줄 병원: 고른 병원, 없으면 공유 링크로 받은 병원(?hospital=id)
   const actionHospital = useMemo<ActionHospital | null>(() => {
-    const p = items.find((x) => x.id === selectedId);
+    const p = selectedPlace;
     // 동물병원이면 병원 표 id 가 없어도 전화·길찾기는 보여 줌 (공유만 숨김)
     if (p && (p.hospital_id || p.type === "hospital"))
       return { hospitalId: p.hospital_id ?? null, name: p.name, phone: p.phone, lat: p.lat, lon: p.lon };
@@ -90,7 +97,7 @@ export function MapPage() {
     if (Number.isInteger(sharedId) && sharedId > 0 && focus)
       return { hospitalId: sharedId, name: focus.name, phone: focus.phone ?? null, lat: focus.lat, lon: focus.lon };
     return null;
-  }, [items, selectedId, params]);
+  }, [selectedPlace, params]);
 
   // 길찾기 패널: 지금 고른 병원에 대해 열었을 때만 보임
   const actionKey = actionHospital ? actionHospital.lat + "," + actionHospital.lon : "";
@@ -133,7 +140,7 @@ export function MapPage() {
         hm = new HospitalMap(el, filters.current, {
           onStatus: setStatus,
           onItems: setItems,
-          onSelected: setSelectedId,
+          onSelected: selectPlace,
           onRegion: setRegion,
         });
         hmRef.current = hm;
@@ -151,7 +158,7 @@ export function MapPage() {
       if (hmRef.current === hm) hmRef.current = null;
       setLoaded(false);
     };
-  }, []);
+  }, [selectPlace]);
 
   // 필터 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도)
   useEffect(() => {
@@ -225,7 +232,7 @@ export function MapPage() {
               onClose={() => setRouteFor(null)}
             />
           )}
-          <PlaceList items={items} selectedId={selectedId} onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : setSelectedId(id))} />
+          <PlaceList items={items} selectedId={selectedId} onSelect={(id) => (hmRef.current ? hmRef.current.select(id, true) : selectPlace(id))} />
         </aside>
         <div className="map-wrap">
           {/* 지도 SDK 가 이 div 안을 직접 그리므로 React 자식은 키가 없을 때의 안내뿐 */}
