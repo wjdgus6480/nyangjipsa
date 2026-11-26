@@ -71,6 +71,8 @@ export class HospitalMap implements MapBridge {
   private myMarker: naver.maps.Marker | null = null;
   /** 길찾기 경로 선 */
   private routeLines: naver.maps.Polyline[] = [];
+  /** 길찾기 출발(파랑)·도착(빨강) 표시 */
+  private routeEnds: naver.maps.Marker[] = [];
   private destroyed = false;
 
   constructor(
@@ -308,25 +310,46 @@ export class HospitalMap implements MapBridge {
     }
   }
 
-  /** 길찾기 경로를 선으로 그리고 전체가 보이게 맞춤 (도보 점선·버스 초록·지하철 파랑) */
-  drawRoute(lines: RouteLine[]) {
+  /** 길찾기 경로를 선으로 그리고 전체가 보이게 맞춤. 종류마다 여러 겹(테두리·바탕·가운데 흰 점선, routeCore LINE_STYLE) */
+  drawRoute(lines: RouteLine[], ends?: { from: LatLon; to: LatLon }) {
     this.clearRoute();
     if (this.destroyed || lines.length === 0 || !naverReady()) return;
     let minLat = 90, minLon = 180, maxLat = -90, maxLon = -180;
+    // 출발·도착 표시 (선이 정류장에서 끝나도 실제 출발·도착 지점이 보이게) + 화면 맞춤에 포함
+    if (ends) {
+      for (const [p, cls, label] of [[ends.from, "from", "출발"], [ends.to, "to", "도착"]] as const) {
+        this.routeEnds.push(
+          new naver.maps.Marker({
+            position: toLatLng(p),
+            map: this.map,
+            title: label,
+            zIndex: 1050,
+            icon: { content: `<div class="route-end route-end--${cls}"><span>${label}</span></div>`, anchor: new naver.maps.Point(18, 34) },
+          }),
+        );
+        minLat = Math.min(minLat, p.lat); maxLat = Math.max(maxLat, p.lat);
+        minLon = Math.min(minLon, p.lon); maxLon = Math.max(maxLon, p.lon);
+      }
+    }
     for (const l of lines) {
-      const style = LINE_STYLE[l.kind];
-      this.routeLines.push(
-        new naver.maps.Polyline({
-          map: this.map,
-          path: l.path.map(([lon, lat]) => new naver.maps.LatLng(lat, lon)),
-          strokeColor: style.color,
-          strokeWeight: l.kind === "WALKING" ? 4 : 6,
-          strokeOpacity: 0.9,
-          strokeStyle: style.dashed ? "shortdash" : "solid",
-          strokeLineCap: "round",
-          zIndex: 900,
-        }),
-      );
+      const path = l.path.map(([lon, lat]) => new naver.maps.LatLng(lat, lon));
+      // 대중교통은 도보 위에 보이게 (같은 종류 안에서는 테두리 → 바탕 → 가운데 점선 순서)
+      const base = l.kind === "WALKING" ? 900 : 910;
+      LINE_STYLE[l.kind].layers.forEach((layer, i) => {
+        this.routeLines.push(
+          new naver.maps.Polyline({
+            map: this.map,
+            path,
+            strokeColor: layer.color,
+            strokeWeight: layer.weight,
+            strokeOpacity: layer.opacity,
+            strokeStyle: layer.style,
+            strokeLineCap: "round",
+            strokeLineJoin: "round",
+            zIndex: base + i,
+          }),
+        );
+      });
       for (const [lon, lat] of l.path) {
         minLat = Math.min(minLat, lat); maxLat = Math.max(maxLat, lat);
         minLon = Math.min(minLon, lon); maxLon = Math.max(maxLon, lon);
@@ -338,6 +361,8 @@ export class HospitalMap implements MapBridge {
   clearRoute() {
     for (const l of this.routeLines) l.setMap(null);
     this.routeLines = [];
+    for (const m of this.routeEnds) m.setMap(null);
+    this.routeEnds = [];
   }
 
   /** 화면을 떠날 때: 타이머·요청·이벤트·오버레이·지도 인스턴스 정리 (재진입 시 중복 생성 방지) */
@@ -357,6 +382,7 @@ export class HospitalMap implements MapBridge {
       this.listeners.length = 0;
       this.markers.clear();
       this.routeLines = [];
+      this.routeEnds = [];
       return;
     }
     naver.maps.Event.removeListener(this.listeners);
