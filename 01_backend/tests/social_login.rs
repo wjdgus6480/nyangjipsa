@@ -539,7 +539,7 @@ async fn email_signup_user_cannot_use_social_complete(pool: PgPool) {
 // ---------- 반려묘 정보 (이메일 가입과 같은 저장 흐름) ----------
 
 async fn cat_rows(pool: &PgPool) -> Vec<(String, Option<String>)> {
-    sqlx::query_as("SELECT name, allergy FROM cats ORDER BY created_at")
+    sqlx::query_as("SELECT name, allergy FROM user_cats ORDER BY created_at")
         .fetch_all(pool)
         .await
         .unwrap()

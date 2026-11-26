@@ -226,7 +226,7 @@ async fn withdraw(
         "user_sessions",
         "email_verifications",
         "password_reset_tokens",
-        "cats",
+        "user_cats",
     ] {
         // table 은 위 배열의 고정 문자열 (사용자 입력 아님)
         sqlx::query(sqlx::AssertSqlSafe(format!(

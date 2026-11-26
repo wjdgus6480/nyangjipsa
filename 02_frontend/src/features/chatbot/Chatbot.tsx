@@ -16,6 +16,8 @@ import { CloseIcon, PhoneIcon, PinIcon, ResetIcon, SendIcon } from "./icons";
 import { requestMyLocation } from "./geolocation";
 import { SourceList } from "./SourceList";
 import { createConsultTracker } from "../../services/analytics/consult";
+import { ChatCatPicker } from "../cats/ChatCatPicker";
+import { useChatCat } from "../cats/useChatCat";
 
 const SEARCH_RADIUS_M = 3000; // 백엔드 CHAT_RADIUS_M 과 동일
 const FALLBACK_LIMIT = 5;
@@ -37,6 +39,8 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
   const [myLocation, setMyLocation] = useState<LatLon | null>(null);
   const [input, setInput] = useState("");
   const [myLocBtn, setMyLocBtn] = useState({ disabled: false, text: "내 위치 사용" });
+  // 로그인 회원의 "내 고양이 기준 답변" (고양이가 없으면 아무것도 안 함)
+  const chatCat = useChatCat();
 
   const rootRef = useRef<HTMLDivElement>(null);
   const panelRef = useRef<HTMLElement>(null);
@@ -131,7 +135,7 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
     const controller = (controllerRef.current = new AbortController());
     setBusy(true);
     try {
-      const data = await postChat(req, controller.signal);
+      const data = await postChat(chatCat.withCat(req), controller.signal);
       const msg: AssistantMessage = C.toAssistantMessage(data);
       if (C.needsHospitalFallback(data) && req.lat != null && req.lon != null) {
         const extra = await searchHospitalsFallback({ lat: req.lat, lon: req.lon }, controller.signal);
@@ -318,6 +322,7 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
       </div>
 
       <footer className="nj-foot">
+        <ChatCatPicker chatCat={chatCat} />
         <form className="nj-form" onSubmit={(e: FormEvent) => { e.preventDefault(); sendFromInput(); }}>
           <textarea
             ref={inputRef}

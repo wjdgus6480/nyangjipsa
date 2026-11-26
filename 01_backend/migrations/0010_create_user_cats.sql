@@ -1,9 +1,10 @@
 -- 반려묘 건강 프로필 (회원 1명에 여러 마리)
 --
--- 기존 테이블은 건드리지 않고 cats 테이블만 추가한다.
+-- 기존 테이블은 건드리지 않고 user_cats 테이블만 추가한다.
 -- 값의 뜻: NULL = 미입력, 'none' = 해당 없음, 'unknown' = 모름 (서로 다른 상태로 저장)
+-- 테이블 이름은 팀원의 고양이 건강 자료(health_*) 등과 헷갈리지 않게 user_cats.
 -- 회원 탈퇴 시 행을 삭제한다 (routes/users.rs withdraw). 회원 행이 지워져도 CASCADE 로 함께 삭제.
-CREATE TABLE cats (
+CREATE TABLE user_cats (
     id                    UUID PRIMARY KEY DEFAULT gen_random_uuid(),
     user_id               UUID NOT NULL REFERENCES users (id) ON DELETE CASCADE,
     -- 가입 화면에서 등록한 고양이 (가입 마무리를 다시 제출하면 이 행을 교체해 중복 저장을 막음)
@@ -54,6 +55,6 @@ CREATE TABLE cats (
     updated_at            TIMESTAMPTZ NOT NULL DEFAULT now()
 );
 
-CREATE INDEX cats_user_idx ON cats (user_id, created_at);
+CREATE INDEX user_cats_user_idx ON user_cats (user_id, created_at);
 -- 가입 화면 고양이는 회원당 한 마리
-CREATE UNIQUE INDEX cats_signup_per_user_key ON cats (user_id) WHERE from_signup;
+CREATE UNIQUE INDEX user_cats_signup_per_user_key ON user_cats (user_id) WHERE from_signup;

@@ -6,7 +6,7 @@ import { MemoryRouter, useLocation } from "react-router";
 import { App } from "../src/app/App";
 import { catFormToInput, catToForm, emptyCatForm, isCatFormBlank, signupCat, toggleExclusive } from "../src/features/cats/catProfile";
 import type { Cat } from "../src/types/api";
-import { mockFetch } from "./helpers/fetch";
+import { chatReply, mockFetch } from "./helpers/fetch";
 
 function Where() {
   const l = useLocation();
@@ -289,5 +289,44 @@ describe("내 정보 — 우리 고양이", () => {
     await waitFor(() => expect(screen.queryByRole("article", { name: "나비" })).toBeNull());
     expect(calls.some((c) => c.method === "DELETE")).toBe(true);
     expect(screen.getByRole("button", { name: "고양이 등록" })).toBeInTheDocument();
+  });
+});
+
+describe("챗봇 — 내 고양이 기준 답변", () => {
+  const chatHandler = (cats: Cat[]) => (url: URL) => {
+    if (url.pathname === "/api/auth/me") return { json: { user: user() } };
+    if (url.pathname === "/api/users/me/cats") return { json: { cats } };
+    return { json: chatReply() };
+  };
+  const ask = async (text: string) => {
+    const box = await screen.findByPlaceholderText("고양이 병원, 궁금한 걸 물어보세요");
+    fireEvent.change(box, { target: { value: text } });
+    fireEvent.submit(box.closest("form")!);
+  };
+
+  test("로그인 회원은 첫 고양이가 기본 선택되어 cat_id 를 함께 보냄, '사용 안 함'이면 빼고 보냄", async () => {
+    document.cookie = "nj_auth=1; Path=/";
+    const { calls } = mockFetch(chatHandler([savedCat(), savedCat({ id: "c0ffee00-2222-4222-8333-944455556666", name: "치즈" })]));
+    at("/chat");
+    const picker = (await screen.findByRole("combobox", { name: "내 고양이 기준 답변" })) as HTMLSelectElement;
+    expect(picker.value).toBe(savedCat().id);
+    await ask("밥을 안 먹어요");
+    await waitFor(() => expect(calls.some((c) => c.url === "/api/chat")).toBe(true));
+    expect(calls.find((c) => c.url === "/api/chat")?.body).toMatchObject({ message: "밥을 안 먹어요", cat_id: savedCat().id });
+
+    fireEvent.change(picker, { target: { value: "" } });
+    await ask("털이 빠져요");
+    await waitFor(() => expect(calls.filter((c) => c.url === "/api/chat")).toHaveLength(2));
+    expect(calls.filter((c) => c.url === "/api/chat")[1].body).not.toHaveProperty("cat_id");
+  });
+
+  test("로그인하지 않았거나 고양이가 없으면 선택 칸이 없고 cat_id 도 없음", async () => {
+    const { calls } = mockFetch(chatHandler([]));
+    at("/chat");
+    await ask("구토를 해요");
+    await waitFor(() => expect(calls.some((c) => c.url === "/api/chat")).toBe(true));
+    expect(screen.queryByRole("combobox", { name: "내 고양이 기준 답변" })).toBeNull();
+    expect(calls.find((c) => c.url === "/api/chat")?.body).not.toHaveProperty("cat_id");
+    expect(calls.some((c) => c.url === "/api/users/me/cats")).toBe(false);
   });
 });

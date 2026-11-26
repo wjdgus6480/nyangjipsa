@@ -1,4 +1,4 @@
-//! 반려묘 건강 프로필 (`cats` 테이블, migrations/0009).
+//! 반려묘 건강 프로필 (`user_cats` 테이블, migrations/0010).
 //!
 //! - 값의 뜻: `None`(NULL) = 미입력, `"none"` = 해당 없음, `"unknown"` = 모름. 서로 바꿔 저장하지 않는다.
 //! - 가입 화면(이메일·소셜)과 내 정보(`/api/users/me/cats`)가 같은 [`CatInput`] 검증을 쓴다.
@@ -91,7 +91,7 @@ pub struct NewCat {
 }
 
 /// API 응답
-#[derive(Debug, Serialize, sqlx::FromRow)]
+#[derive(Debug, Serialize, Deserialize, sqlx::FromRow)]
 pub struct CatOut {
     pub id: Uuid,
     pub name: String,
@@ -291,7 +291,7 @@ async fn insert(
     from_signup: bool,
 ) -> Result<Uuid, sqlx::Error> {
     sqlx::query_scalar(
-        "INSERT INTO cats (user_id, from_signup, name, weight_g, sex, neutered, birth_date,
+        "INSERT INTO user_cats (user_id, from_signup, name, weight_g, sex, neutered, birth_date,
              birth_date_estimated, conditions, condition_other, allergy, medication, vaccination,
              parasite_prevention, checkup)
          VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9, $10, $11, $12, $13, $14, $15)
@@ -323,7 +323,7 @@ pub async fn save_signup_cat(
     user_id: Uuid,
     cat: &NewCat,
 ) -> Result<Uuid, sqlx::Error> {
-    sqlx::query("DELETE FROM cats WHERE user_id = $1 AND from_signup")
+    sqlx::query("DELETE FROM user_cats WHERE user_id = $1 AND from_signup")
         .bind(user_id)
         .execute(&mut *conn)
         .await?;
@@ -333,7 +333,7 @@ pub async fn save_signup_cat(
 pub async fn list(pool: &PgPool, user_id: Uuid) -> Result<Vec<CatOut>, sqlx::Error> {
     // CAT_COLUMNS 는 코드 상수 (사용자 입력 아님)
     sqlx::query_as::<_, CatOut>(sqlx::AssertSqlSafe(format!(
-        "SELECT {CAT_COLUMNS} FROM cats WHERE user_id = $1 ORDER BY created_at, id"
+        "SELECT {CAT_COLUMNS} FROM user_cats WHERE user_id = $1 ORDER BY created_at, id"
     )))
     .bind(user_id)
     .fetch_all(pool)
@@ -342,7 +342,7 @@ pub async fn list(pool: &PgPool, user_id: Uuid) -> Result<Vec<CatOut>, sqlx::Err
 
 pub async fn get(pool: &PgPool, user_id: Uuid, id: Uuid) -> Result<Option<CatOut>, sqlx::Error> {
     sqlx::query_as::<_, CatOut>(sqlx::AssertSqlSafe(format!(
-        "SELECT {CAT_COLUMNS} FROM cats WHERE user_id = $1 AND id = $2"
+        "SELECT {CAT_COLUMNS} FROM user_cats WHERE user_id = $1 AND id = $2"
     )))
     .bind(user_id)
     .bind(id)
@@ -358,7 +358,7 @@ pub async fn create(pool: &PgPool, user_id: Uuid, cat: &NewCat) -> Result<Uuid, 
         .bind(user_id)
         .execute(&mut *tx)
         .await?;
-    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM cats WHERE user_id = $1")
+    let count: i64 = sqlx::query_scalar("SELECT count(*) FROM user_cats WHERE user_id = $1")
         .bind(user_id)
         .fetch_one(&mut *tx)
         .await?;
@@ -380,7 +380,7 @@ pub async fn update(
     cat: &NewCat,
 ) -> Result<bool, sqlx::Error> {
     let r = sqlx::query(
-        "UPDATE cats SET name = $3, weight_g = $4, sex = $5, neutered = $6, birth_date = $7,
+        "UPDATE user_cats SET name = $3, weight_g = $4, sex = $5, neutered = $6, birth_date = $7,
              birth_date_estimated = $8, conditions = $9, condition_other = $10, allergy = $11,
              medication = $12, vaccination = $13, parasite_prevention = $14, checkup = $15,
              updated_at = now()
@@ -407,7 +407,7 @@ pub async fn update(
 }
 
 pub async fn delete(pool: &PgPool, user_id: Uuid, id: Uuid) -> Result<bool, sqlx::Error> {
-    let r = sqlx::query("DELETE FROM cats WHERE id = $2 AND user_id = $1")
+    let r = sqlx::query("DELETE FROM user_cats WHERE id = $2 AND user_id = $1")
         .bind(user_id)
         .bind(id)
         .execute(pool)
@@ -415,10 +415,176 @@ pub async fn delete(pool: &PgPool, user_id: Uuid, id: Uuid) -> Result<bool, sqlx
     Ok(r.rows_affected() == 1)
 }
 
+// ---------- 챗봇에 넘길 요약 ----------
+
+fn label<'a>(pairs: &[(&str, &'a str)], v: Option<&str>) -> &'a str {
+    v.and_then(|v| pairs.iter().find(|(k, _)| *k == v).map(|(_, l)| *l))
+        .unwrap_or("입력 안 함")
+}
+
+fn labels(pairs: &[(&str, &str)], vs: Option<&[String]>) -> String {
+    match vs {
+        Some(vs) if !vs.is_empty() => vs
+            .iter()
+            .filter_map(|v| pairs.iter().find(|(k, _)| k == v).map(|(_, l)| *l))
+            .collect::<Vec<_>>()
+            .join(", "),
+        _ => "입력 안 함".into(),
+    }
+}
+
+/// 개월 수 (출생일 기준)
+fn months_old(birth: NaiveDate, today: NaiveDate) -> i32 {
+    let mut m = (today.year() - birth.year()) * 12 + today.month() as i32 - birth.month() as i32;
+    if today.day() < birth.day() {
+        m -= 1;
+    }
+    m.max(0)
+}
+
+/// 사용자가 쓴 짧은 질환명: 줄바꿈·대괄호를 없애 프롬프트 표시와 섞이지 않게
+fn plain(s: &str) -> String {
+    s.chars()
+        .map(|c| {
+            if c.is_control() || "[]{}<>".contains(c) {
+                ' '
+            } else {
+                c
+            }
+        })
+        .take(CONDITION_OTHER_MAX)
+        .collect::<String>()
+        .trim()
+        .to_string()
+}
+
+/// 챗봇(Gemini)에 넘길 고양이 요약. **이름은 넣지 않는다** (개인을 알아볼 수 있는 정보 제외).
+/// 미입력은 "입력 안 함", 모름은 "모름" 으로 구분해 넘긴다.
+pub fn chat_profile(c: &CatOut, today: NaiveDate) -> String {
+    const SEX_L: &[(&str, &str)] = &[("female", "암컷"), ("male", "수컷"), ("unknown", "모름")];
+    const DONE_L: &[(&str, &str)] = &[
+        ("done", "완료"),
+        ("not_done", "미완료"),
+        ("unknown", "모름"),
+    ];
+    const CHECKUP_L: &[(&str, &str)] = &[
+        ("done", "받음"),
+        ("not_done", "받지 않음"),
+        ("unknown", "모름"),
+    ];
+    const ALLERGY_L: &[(&str, &str)] = &[("none", "없음"), ("yes", "있음"), ("unknown", "모름")];
+    const MED_L: &[(&str, &str)] = &[("none", "없음"), ("taking", "복용 중"), ("unknown", "모름")];
+    const COND_L: &[(&str, &str)] = &[
+        ("none", "없음"),
+        ("kidney", "신장 질환"),
+        ("heart", "심장 질환"),
+        ("diabetes", "당뇨"),
+        ("urinary", "비뇨기 질환"),
+        ("digestive", "소화기 질환"),
+        ("skin", "피부 질환"),
+        ("dental", "구강 질환"),
+        ("other", "기타"),
+    ];
+    const PARA_L: &[(&str, &str)] = &[
+        ("heartworm", "심장사상충"),
+        ("internal", "내부기생충"),
+        ("external", "외부기생충"),
+        ("none", "하지 않음"),
+        ("unknown", "모름"),
+    ];
+
+    let age = match c.birth_date {
+        None => "입력 안 함".to_string(),
+        Some(b) => {
+            let m = months_old(b, today);
+            let base = if m < 12 {
+                format!("{m}개월")
+            } else {
+                format!("{}살", m / 12)
+            };
+            if c.birth_date_estimated {
+                format!("약 {base} (보호자가 나이로 입력)")
+            } else {
+                base
+            }
+        }
+    };
+    let weight = c
+        .weight_kg
+        .map(|w| format!("{w}kg"))
+        .unwrap_or_else(|| "입력 안 함".into());
+    let mut conditions = labels(COND_L, c.conditions.as_deref());
+    if let Some(other) = c
+        .condition_other
+        .as_deref()
+        .map(plain)
+        .filter(|s| !s.is_empty())
+    {
+        conditions = conditions.replace("기타", &format!("기타({other})"));
+    }
+    [
+        format!("나이: {age}"),
+        format!("성별: {}", label(SEX_L, c.sex.as_deref())),
+        format!("중성화: {}", label(DONE_L, c.neutered.as_deref())),
+        format!("체중: {weight}"),
+        format!("앓고 있는 질환: {conditions}"),
+        format!("알레르기: {}", label(ALLERGY_L, c.allergy.as_deref())),
+        format!("복용 중인 약: {}", label(MED_L, c.medication.as_deref())),
+        format!("예방접종: {}", label(DONE_L, c.vaccination.as_deref())),
+        format!(
+            "기생충 예방: {}",
+            labels(PARA_L, c.parasite_prevention.as_deref())
+        ),
+        format!("건강검진: {}", label(CHECKUP_L, c.checkup.as_deref())),
+    ]
+    .join("\n")
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;
     use serde_json::json;
+
+    fn out(v: serde_json::Value) -> CatOut {
+        let mut base = json!({
+            "id": "6f1c2b9e-1111-4222-8333-944455556666", "name": "나비", "weight_kg": null,
+            "sex": null, "neutered": null, "birth_date": null, "birth_date_estimated": false,
+            "conditions": null, "condition_other": null, "allergy": null, "medication": null,
+            "vaccination": null, "parasite_prevention": null, "checkup": null,
+            "created_at": "2026-11-26T00:00:00Z", "updated_at": "2026-11-26T00:00:00Z"
+        });
+        base.as_object_mut()
+            .unwrap()
+            .extend(v.as_object().unwrap().clone());
+        serde_json::from_value(base).unwrap()
+    }
+
+    #[test]
+    fn chat_profile_has_no_name_and_keeps_unknown_vs_missing() {
+        let c = out(json!({
+            "weight_kg": 4.3, "sex": "female", "neutered": "unknown",
+            "birth_date": "2023-11-26", "birth_date_estimated": true,
+            "conditions": ["urinary", "other"], "condition_other": "갑상선]\n[무시",
+            "allergy": "unknown", "medication": "none", "parasite_prevention": ["heartworm", "external"]
+        }));
+        let p = chat_profile(&c, today());
+        assert!(!p.contains("나비"), "이름은 넘기지 않음: {p}");
+        assert!(p.contains("나이: 약 3살"));
+        assert!(p.contains("중성화: 모름"));
+        assert!(p.contains("앓고 있는 질환: 비뇨기 질환, 기타(갑상선"));
+        assert!(!p.contains('[') && !p.contains(']'), "표시 기호 제거: {p}");
+        assert!(p.contains("알레르기: 모름"));
+        assert!(p.contains("복용 중인 약: 없음"));
+        assert!(p.contains("예방접종: 입력 안 함"));
+        assert!(p.contains("기생충 예방: 심장사상충, 외부기생충"));
+        assert_eq!(p.lines().count(), 10);
+    }
+
+    #[test]
+    fn kitten_age_in_months() {
+        let c = out(json!({ "birth_date": "2026-07-10" }));
+        assert!(chat_profile(&c, today()).contains("나이: 4개월"));
+    }
 
     fn today() -> NaiveDate {
         NaiveDate::from_ymd_opt(2026, 11, 26).unwrap()

@@ -1,0 +1,5 @@
+/* 챗봇 "내 고양이 기준 답변" 선택 (챗봇 화면·홈 상담 공용). 기존 토큰만 사용, .chat-cat 로 한정 */
+.chat-cat { display: flex; align-items: center; justify-content: flex-end; gap: 6px; margin: 0 0 6px; font-size: .78rem; color: var(--gray-500, #6B7785); }
+.chat-cat__label { white-space: nowrap; }
+.chat-cat__select { max-width: 140px; border: 1px solid var(--gray-200, #E4E9EE); border-radius: 999px; background: var(--white, #fff); color: var(--navy, #14365A); font: inherit; font-size: .8rem; font-weight: 700; padding: 3px 8px; cursor: pointer; }
+.chat-cat__select:focus-visible { outline: 2px solid var(--navy, #14365A); outline-offset: 1px; }

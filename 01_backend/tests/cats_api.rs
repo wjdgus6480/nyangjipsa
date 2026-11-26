@@ -24,7 +24,7 @@ fn full_cat() -> Value {
 }
 
 async fn cat_count(pool: &PgPool) -> i64 {
-    sqlx::query_scalar("SELECT count(*) FROM cats")
+    sqlx::query_scalar("SELECT count(*) FROM user_cats")
         .fetch_one(pool)
         .await
         .unwrap()
@@ -78,7 +78,7 @@ async fn cat_saved_with_signup_survives_pending_and_verification(pool: PgPool) {
 
     // 인증 대기(pending) 상태에서 이미 회원 id 에 연결되어 저장됨
     let (status, name): (String, String) = sqlx::query_as(
-        "SELECT u.status, c.name FROM cats c JOIN users u ON u.id = c.user_id
+        "SELECT u.status, c.name FROM user_cats c JOIN users u ON u.id = c.user_id
          WHERE u.email = 'nabi@nyang.com'",
     )
     .fetch_one(&pool)
@@ -297,7 +297,7 @@ async fn withdrawal_deletes_cat_health_data(pool: PgPool) {
     .await;
     assert_eq!(r.status, StatusCode::OK, "{:?}", r.body);
 
-    let left: Vec<String> = sqlx::query_scalar("SELECT name FROM cats")
+    let left: Vec<String> = sqlx::query_scalar("SELECT name FROM user_cats")
         .fetch_all(&pool)
         .await
         .unwrap();
@@ -333,7 +333,7 @@ async fn db_rejects_none_with_other_values(pool: PgPool) {
         ("conditions", vec![]),
     ] {
         let sql = format!(
-            "INSERT INTO cats (user_id, name, {col})
+            "INSERT INTO user_cats (user_id, name, {col})
              SELECT id, '나비', $1 FROM users WHERE email = 'db@nyang.com'"
         );
         let r = sqlx::query(sqlx::AssertSqlSafe(sql))

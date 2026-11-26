@@ -137,6 +137,8 @@ export interface ChatRequest {
   lat?: number;
   lon?: number;
   choice_keyword?: string;
+  /** 답변 기준으로 쓸 내 고양이 (user_cats.id). 서버가 본인 고양이일 때만 사용 */
+  cat_id?: string;
 }
 
 export interface ChatKeyword {
