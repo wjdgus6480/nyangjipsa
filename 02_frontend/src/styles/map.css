@@ -103,10 +103,10 @@
   .map-page .app .ha-btn { display:flex; align-items:center; justify-content:center; min-width:0; height:38px; padding:0 4px; margin:0; font-size:12px; line-height:1; letter-spacing:-.02em; white-space:nowrap; overflow:hidden; text-overflow:ellipsis; box-sizing:border-box; }
 
   /* 패널을 접었을 때 고른 병원의 카드 (오른쪽 아래 챗봇 버튼은 피함, 출처 문구보다 위) */
-  .map-page .mobile-card { display:block; position:absolute; left:10px; right:80px; bottom:max(12px, env(safe-area-inset-bottom)); z-index:55; border-radius:14px; overflow:hidden; box-shadow:0 8px 24px rgba(27,42,65,.22); }
+  .map-page .mobile-card { display:block; position:absolute; left:10px; right:80px; bottom:calc(36px + env(safe-area-inset-bottom)); /* 지도 맨 아래 © NAVER Corp.·로고·축척을 가리지 않게 */ z-index:55; border-radius:14px; overflow:hidden; box-shadow:0 8px 24px rgba(27,42,65,.22); }
   .map-page .app .mobile-card .hospital-actions { border-bottom:0; padding:10px 12px 12px; }
   /* 아래쪽 카드가 떠 있으면 내 위치 버튼을 카드 위로 올림 */
-  .map-page .map-wrap:has(.mobile-card) .my-loc-btn { bottom:auto; top:calc(100% - 96px - 104px); }
+  .map-page .map-wrap:has(.mobile-card) .my-loc-btn { bottom:auto; top:calc(100% - 176px - env(safe-area-inset-bottom)); }
 
   /* 지도를 가리는 반투명 표시 줄이기 */
   /* 행정구역 출처: 아주 작게 한 줄, 아래쪽 카드가 떠 있으면 숨김 (카드를 닫으면 다시 보임) */
@@ -119,7 +119,9 @@
   .map-page .map-wrap .rg-here { min-width:0; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; padding-right:4px; }
   .map-page .map-wrap .rg-clear { font-size:11px; padding:3px 8px; flex:none; }
   /* 내 위치 버튼도 조금 작게 */
-  .map-page .app .my-loc-btn { padding:7px 10px; font-size:12px; right:10px; }
+  .map-page .app .my-loc-btn { padding:7px 10px; font-size:12px; right:10px; bottom:calc(108px + env(safe-area-inset-bottom)); }
+  /* 챗봇 아이콘(지도 화면에서만): 지도 맨 아래 NAVER 로고·축척을 가리지 않게 위로 */
+  .map-page .nj-root .nj-fab { bottom:calc(40px + env(safe-area-inset-bottom)); }
 }
   
 /* 고른 병원의 행동 버튼 (전화·길찾기·공유) — HospitalActions.tsx */
