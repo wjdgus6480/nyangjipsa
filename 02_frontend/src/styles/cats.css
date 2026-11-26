@@ -1,0 +1,57 @@
+/* ===== 반려묘 건강 프로필 (회원가입·내 정보) =====
+   기존 토큰(tokens.css)·입력 칸(.field)·버튼(.btn)만 사용. 다른 화면에 영향이 없도록 .site .cat-* 로 한정 */
+.site .cat-section { border-top: 1px solid var(--gray-200); padding-top: 18px; margin-top: 4px; }
+.site .cat-section__title { font-size: 1.1rem; color: var(--navy); margin: 0 0 12px; }
+
+.site .cat-profile { display: flex; flex-direction: column; gap: 12px; }
+.site .cat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
+.site .cat-subtitle { font-size: 1rem; color: var(--navy); margin: 10px 0 -2px; }
+.site .cat-subtitle__hint { font-size: .8rem; font-weight: 500; color: var(--gray-500); margin-left: 6px; }
+
+/* 한 개 선택 (다시 누르면 해제) */
+.site .cat-choice { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
+.site .cat-choice--wide { grid-column: 1 / -1; }
+.site .cat-label { font-size: .9rem; font-weight: 700; color: var(--ink); padding: 0; }
+.site .cat-label__sub { font-weight: 500; font-size: .82rem; color: var(--gray-500); }
+.site .cat-seg { display: flex; gap: 6px; }
+.site .cat-seg__btn { flex: 1 1 0; min-width: 0; border: 1.5px solid var(--gray-200); background: var(--white); color: var(--ink); border-radius: var(--radius-sm); padding: 10px 4px; font: inherit; font-size: .88rem; cursor: pointer; white-space: nowrap; transition: border-color .2s, background .2s; }
+.site .cat-seg__btn:hover { border-color: var(--sky-deep); }
+.site .cat-seg__btn[aria-pressed="true"] { border-color: var(--navy); background: var(--sky-soft); color: var(--navy); font-weight: 700; }
+.site .cat-seg__btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 1px; }
+
+/* 여러 개 선택 칩 */
+.site .cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
+.site .cat-chip { position: relative; display: inline-flex; }
+.site .cat-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
+.site .cat-chip span { display: inline-block; border: 1.5px solid var(--gray-200); border-radius: 999px; padding: 7px 12px; font-size: .86rem; color: var(--ink); background: var(--white); transition: border-color .2s, background .2s; }
+.site .cat-chip:hover span { border-color: var(--sky-deep); }
+.site .cat-chip input:checked + span { border-color: var(--navy); background: var(--sky-soft); color: var(--navy); font-weight: 700; }
+.site .cat-chip input:focus-visible + span { outline: 3px solid var(--navy); outline-offset: 2px; }
+.site .cat-other { margin-top: 8px; }
+
+/* kg·살 단위 */
+.site .cat-suffix { position: relative; }
+.site .cat-suffix input { padding-right: 40px; }
+.site .cat-suffix span { position: absolute; right: 14px; top: 50%; transform: translateY(-50%); color: var(--gray-500); font-size: .9rem; pointer-events: none; }
+
+/* 출생일 / 나이 전환 */
+.site .cat-label-row { display: flex; align-items: center; justify-content: space-between; gap: 8px; }
+.site .cat-toggle { display: inline-flex; background: var(--gray-50); border-radius: 999px; padding: 2px; }
+.site .cat-toggle button { border: 0; background: transparent; font: inherit; font-size: .76rem; padding: 3px 10px; border-radius: 999px; color: var(--gray-500); cursor: pointer; }
+.site .cat-toggle button[aria-pressed="true"] { background: var(--white); color: var(--navy); font-weight: 700; box-shadow: 0 1px 3px rgba(20, 54, 90, .14); }
+.site .cat-toggle button:focus-visible { outline: 2px solid var(--navy); outline-offset: 1px; }
+
+/* 내 정보: 고양이 목록 */
+.site .cat-list { display: flex; flex-direction: column; gap: 12px; }
+.site .cat-item { border: 1px solid var(--gray-200); border-radius: var(--radius-sm); padding: 14px 16px; }
+.site .cat-item__head { display: flex; align-items: center; justify-content: space-between; gap: 8px; margin-bottom: 8px; }
+.site .cat-item__name { font-size: 1rem; font-weight: 800; color: var(--navy); margin: 0; }
+.site .cat-item .profile { grid-template-columns: 96px 1fr; gap: 6px 12px; font-size: .9rem; }
+.site .cat-item .profile dd.is-empty { color: var(--gray-500); }
+.site .cat-editor { border: 1px solid var(--gray-200); border-radius: var(--radius-sm); padding: 16px; }
+
+@media (max-width: 480px) {
+  /* 좁은 화면: 이름·체중 칸은 2열 유지, 선택 버튼 묶음과 출생일은 한 줄 전체 */
+  .site .cat-grid > .cat-choice, .site .cat-grid > .cat-birth { grid-column: 1 / -1; }
+  .site .cat-editor { padding: 12px; }
+}

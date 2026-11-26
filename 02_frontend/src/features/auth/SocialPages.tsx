@@ -1,12 +1,14 @@
 // 소셜 로그인 후 화면
 // - /auth/social/done?provider= : 기존 회원 로그인 완료 → 상태 확인 후 홈으로
-// - /signup/social?provider=    : 신규 가입 마무리 (약관 동의 + 필요하면 이메일 인증)
+// - /signup/social?provider=    : 신규 가입 마무리 (약관 동의 + 필요하면 이메일 인증 + 반려묘 정보 선택)
 import { useEffect, useRef, useState, type FormEvent } from "react";
 import { Link, Navigate, useNavigate, useSearchParams } from "react-router";
 import { completeSocialSignup } from "../../services/api/auth";
 import { analytics } from "../../services/analytics/analytics";
 import { ROUTES } from "../../services/config/site";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
+import { CatSignupSection } from "../cats/CatProfileFields";
+import { emptyCatForm, hasCatErrors, signupCat, type CatForm, type CatFormErrors } from "../cats/catProfile";
 import { useAuth } from "./authContext";
 import { errorMessage, parseProvider, SOCIAL_LABEL, validateEmail, validateNickname, type Notice } from "./authForm";
 import { AuthLayout, ConsentChecks, Field, FormNotice, SubmitButton, type Consents } from "./AuthUi";
@@ -53,6 +55,8 @@ export function SocialCompletePage() {
   const [email, setEmail] = useState("");
   const [nickname, setNickname] = useState<string | null>(null);
   const [consents, setConsents] = useState<Consents>({ terms: false, privacy: false });
+  const [cat, setCat] = useState<CatForm>(emptyCatForm);
+  const [catErrors, setCatErrors] = useState<CatFormErrors>({});
   const [errors, setErrors] = useState<{ email?: string | null; nickname?: string | null; consents?: string | null }>({});
   const [notice, setNotice] = useState<Notice | null>(null);
   const [sentTo, setSentTo] = useState<string | null>(null);
@@ -79,9 +83,12 @@ export function SocialCompletePage() {
       nickname: validateNickname(nicknameValue),
       consents: consents.terms && consents.privacy ? null : "이용약관과 개인정보 처리방침에 동의해 주세요",
     };
+    // 이메일 가입과 같은 규칙: 비워 두면 보내지 않음 (이미 저장한 고양이는 그대로), 입력하면 가입 고양이를 교체 저장
+    const catResult = signupCat(cat);
     setErrors(errs);
-    setNotice(null);
-    if (errs.email || errs.nickname || errs.consents) return;
+    setCatErrors(catResult.errors);
+    setNotice(hasCatErrors(catResult.errors) ? { kind: "error", text: "반려묘 정보를 확인해 주세요. 비워 두고 가입할 수도 있어요." } : null);
+    if (errs.email || errs.nickname || errs.consents || hasCatErrors(catResult.errors)) return;
     setBusy(true);
     try {
       const res = await completeSocialSignup({
@@ -89,6 +96,7 @@ export function SocialCompletePage() {
         nickname: nicknameValue.trim() || undefined,
         agree_terms: consents.terms,
         agree_privacy: consents.privacy,
+        ...(catResult.input ? { cat: catResult.input } : {}),
       });
       if (res.status === "active") {
         setUser(res.user);
@@ -110,7 +118,7 @@ export function SocialCompletePage() {
   };
 
   return (
-    <AuthLayout title="가입을 마무리해 주세요" lead={`${name} 계정으로 시작했어요. 약관에 동의하고 연락받을 이메일을 확인해 주세요.`}>
+    <AuthLayout title="가입을 마무리해 주세요" lead={`${name} 계정으로 시작했어요. 약관에 동의하고 연락받을 이메일을 확인해 주세요.`} wide>
       {user.pending_step === "email_verification" && !sentTo && (
         <FormNotice notice={{ kind: "info", text: "보내 드린 인증 메일의 링크를 눌러 주세요. 메일을 다시 받으려면 아래에서 다시 보내 주세요." }} />
       )}
@@ -128,6 +136,7 @@ export function SocialCompletePage() {
           hint={verifiedEmail && emailValue === verifiedEmail ? `${name}에서 인증된 이메일이에요. 그대로 쓰면 바로 가입이 완료돼요.` : "입력한 이메일로 인증 메일을 보내 드려요."}
         />
         <Field label="닉네임" optional name="nickname" maxLength={20} value={nicknameValue} onChange={(e) => setNickname(e.target.value)} error={errors.nickname} />
+        <CatSignupSection value={cat} onChange={setCat} errors={catErrors} />
         <ConsentChecks value={consents} onChange={setConsents} error={errors.consents} />
         <SubmitButton busy={busy} busyText="처리 중…">{sentTo ? "인증 메일 다시 보내기" : "가입 완료"}</SubmitButton>
       </form>

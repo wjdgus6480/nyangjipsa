@@ -2,17 +2,22 @@
 //!
 //! - `PATCH  /me` 닉네임 수정 (정상 회원)
 //! - `PATCH  /me/password` 비밀번호 변경 → 다른 기기 세션 폐기 (정상 회원)
-//! - `DELETE /me` 회원 탈퇴 → 개인정보 컬럼 삭제, 로그인 수단·세션·토큰 삭제
+//! - `DELETE /me` 회원 탈퇴 → 개인정보 컬럼 삭제, 로그인 수단·세션·토큰·반려묘 정보 삭제
+//! - `GET    /me/cats` 내 반려묘 목록, `POST /me/cats` 추가 (정상 회원)
+//! - `PUT    /me/cats/{id}` 전체 수정, `DELETE /me/cats/{id}` 삭제 (본인 고양이만)
 
 use axum::{
     Json, Router,
-    extract::State,
+    extract::{Path, State},
+    http::StatusCode,
     middleware::from_fn_with_state,
     response::{AppendHeaders, IntoResponse, Response},
-    routing::patch,
+    routing::{get, patch, put},
 };
+use chrono::Utc;
 use serde::Deserialize;
 use serde_json::{Value, json};
+use uuid::Uuid;
 
 use crate::{
     AppState,
@@ -20,6 +25,7 @@ use crate::{
         extract::{CurrentUser, SessionUser, csrf_guard},
         password, session, users,
     },
+    cats::{self, CatInput},
     error::{ApiJson, AppError},
     routes::auth::clear_session_cookies,
 };
@@ -28,7 +34,64 @@ pub fn router(state: AppState) -> Router<AppState> {
     Router::new()
         .route("/me", patch(update_me).delete(withdraw))
         .route("/me/password", patch(change_password))
+        .route("/me/cats", get(list_cats).post(create_cat))
+        .route("/me/cats/{id}", put(update_cat).delete(delete_cat))
         .route_layer(from_fn_with_state(state, csrf_guard))
+}
+
+// ---------- 반려묘 ----------
+
+const CAT_NOT_FOUND: &str = "고양이 정보를 찾을 수 없어요";
+
+/// 잘못된 id 형식도 "없음"으로 (다른 회원 고양이 존재 여부를 드러내지 않음)
+fn cat_id(raw: &str) -> Result<Uuid, AppError> {
+    Uuid::parse_str(raw).map_err(|_| AppError::NotFound(CAT_NOT_FOUND.into()))
+}
+
+async fn list_cats(
+    State(state): State<AppState>,
+    CurrentUser(s): CurrentUser,
+) -> Result<Json<Value>, AppError> {
+    let cats = cats::list(&state.pool, s.user.id).await?;
+    Ok(Json(json!({ "cats": cats })))
+}
+
+async fn create_cat(
+    State(state): State<AppState>,
+    CurrentUser(s): CurrentUser,
+    ApiJson(req): ApiJson<CatInput>,
+) -> Result<(StatusCode, Json<Value>), AppError> {
+    let cat = req.validate(Utc::now().date_naive())?;
+    let id = cats::create(&state.pool, s.user.id, &cat).await?;
+    let out = cats::get(&state.pool, s.user.id, id).await?;
+    Ok((StatusCode::CREATED, Json(json!({ "cat": out }))))
+}
+
+async fn update_cat(
+    State(state): State<AppState>,
+    CurrentUser(s): CurrentUser,
+    Path(id): Path<String>,
+    ApiJson(req): ApiJson<CatInput>,
+) -> Result<Json<Value>, AppError> {
+    let id = cat_id(&id)?;
+    let cat = req.validate(Utc::now().date_naive())?;
+    if !cats::update(&state.pool, s.user.id, id, &cat).await? {
+        return Err(AppError::NotFound(CAT_NOT_FOUND.into()));
+    }
+    let out = cats::get(&state.pool, s.user.id, id).await?;
+    Ok(Json(json!({ "cat": out })))
+}
+
+async fn delete_cat(
+    State(state): State<AppState>,
+    CurrentUser(s): CurrentUser,
+    Path(id): Path<String>,
+) -> Result<Json<Value>, AppError> {
+    let id = cat_id(&id)?;
+    if !cats::delete(&state.pool, s.user.id, id).await? {
+        return Err(AppError::NotFound(CAT_NOT_FOUND.into()));
+    }
+    Ok(Json(json!({ "ok": true })))
 }
 
 #[derive(Deserialize)]
@@ -157,11 +220,13 @@ async fn withdraw(
     .bind(s.user.id)
     .execute(&mut *tx)
     .await?;
+    // 반려묘 건강 정보도 개인정보로 보고 함께 삭제 (되돌릴 수 없음)
     for table in [
         "user_auth_identities",
         "user_sessions",
         "email_verifications",
         "password_reset_tokens",
+        "cats",
     ] {
         // table 은 위 배열의 고정 문자열 (사용자 입력 아님)
         sqlx::query(sqlx::AssertSqlSafe(format!(

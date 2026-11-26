@@ -262,6 +262,57 @@ export interface RegisterRequest {
   nickname?: string;
   agree_terms: boolean;
   agree_privacy: boolean;
+  /** 반려묘 정보 (선택). 비워 두면 보내지 않음 */
+  cat?: CatInput;
+}
+
+// ---------- 반려묘 건강 프로필 (01_backend/src/cats.rs) ----------
+// 값의 뜻: null/없음 = 미입력, "none" = 해당 없음, "unknown" = 모름
+
+export type CatSex = "female" | "male" | "unknown";
+export type CatDoneStatus = "done" | "not_done" | "unknown";
+export type CatAllergy = "none" | "yes" | "unknown";
+export type CatMedication = "none" | "taking" | "unknown";
+export type CatCondition = "none" | "kidney" | "heart" | "diabetes" | "urinary" | "digestive" | "skin" | "dental" | "other";
+export type CatParasite = "heartworm" | "internal" | "external" | "none" | "unknown";
+
+/** 가입·추가·수정 요청 (cats.rs CatInput). 출생일과 나이 중 하나만 */
+export interface CatInput {
+  name?: string;
+  weight_kg?: number;
+  sex?: CatSex;
+  neutered?: CatDoneStatus;
+  birth_date?: string;
+  age_years?: number;
+  conditions?: CatCondition[];
+  condition_other?: string;
+  allergy?: CatAllergy;
+  medication?: CatMedication;
+  vaccination?: CatDoneStatus;
+  parasite_prevention?: CatParasite[];
+  checkup?: CatDoneStatus;
+}
+
+/** 저장된 고양이 (cats.rs CatOut) */
+export interface Cat {
+  id: string;
+  name: string;
+  weight_kg: number | null;
+  sex: CatSex | null;
+  neutered: CatDoneStatus | null;
+  /** YYYY-MM-DD */
+  birth_date: string | null;
+  /** 나이로 입력해 추정한 출생일 */
+  birth_date_estimated: boolean;
+  conditions: CatCondition[] | null;
+  condition_other: string | null;
+  allergy: CatAllergy | null;
+  medication: CatMedication | null;
+  vaccination: CatDoneStatus | null;
+  parasite_prevention: CatParasite[] | null;
+  checkup: CatDoneStatus | null;
+  created_at: string;
+  updated_at: string;
 }
 
 export interface RegisterResponse {
@@ -294,6 +345,8 @@ export interface SocialCompleteRequest {
   nickname?: string;
   agree_terms: boolean;
   agree_privacy: boolean;
+  /** 반려묘 정보 (선택). 다시 제출하면 가입 때 등록한 고양이를 교체 */
+  cat?: CatInput;
 }
 
 export type SocialCompleteResponse =

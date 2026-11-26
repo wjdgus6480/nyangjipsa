@@ -20,6 +20,7 @@ pub mod amplitude;
 pub mod animal_business;
 pub mod auth;
 pub mod cat_friendly;
+pub mod cats;
 pub mod chat;
 pub mod collector;
 pub mod config;
