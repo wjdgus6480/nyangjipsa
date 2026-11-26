@@ -54,7 +54,7 @@ export function Header() {
       <header className={"header" + (scrolled ? " scrolled" : "")}>
         <div className="container header__inner">
           <a href="#hero" className="brand" onClick={(e) => goSection(e, "hero")}>
-            <img src={SITE.logo} alt={`${SITE.brandName} 로고`} className="brand__logo" />
+            <img src={SITE.appIcon} alt={`${SITE.brandName} 로고`} className="brand__logo" />
             <span className="brand__text">
               <strong>{SITE.brandName}</strong>
               <small>{SITE.brandTagline}</small>
