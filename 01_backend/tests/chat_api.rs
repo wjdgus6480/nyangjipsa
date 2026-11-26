@@ -61,7 +61,10 @@ async fn mock_handler(
     if !code.is_success() {
         return (code, "{}".into());
     }
-    let resp = json!({ "candidates": [{ "content": { "parts": [{ "text": m.text }] } }] });
+    let resp = json!({
+        "candidates": [{ "content": { "parts": [{ "text": m.text }] } }],
+        "usageMetadata": { "promptTokenCount": 120, "candidatesTokenCount": 40 }
+    });
     (code, resp.to_string())
 }
 
@@ -593,4 +596,127 @@ async fn unknown_compare_item_from_ai_is_ignored(pool: PgPool) {
     )
     .await;
     assert!(j.get("price_comparison").is_none());
+}
+
+// ---------- 건강 자료 검색(RAG)·질문 분류·응급 안전 규칙·호출 기록 ----------
+
+async fn seed_health(pool: &PgPool) {
+    use nyangjipsa_api::health;
+    let bytes = std::fs::read(health::urogenital::DEFAULT_PATH).unwrap();
+    let docs = health::urogenital::parse(std::str::from_utf8(&bytes).unwrap()).unwrap();
+    let r = health::import(
+        pool,
+        &health::urogenital::SOURCE,
+        &health::file_sha256(&bytes),
+        &docs,
+    )
+    .await
+    .unwrap();
+    assert_eq!(r.inserted, 17);
+    // 다시 적재해도 중복되지 않음
+    let again = health::import(pool, &health::urogenital::SOURCE, "x", &docs)
+        .await
+        .unwrap();
+    assert_eq!((again.inserted, again.skipped), (0, 17));
+}
+
+/// 백그라운드 기록이 끝날 때까지 잠깐 기다린 뒤 (outcome, docs_used, prompt_tokens) 목록
+async fn api_logs(pool: &PgPool, expected: usize) -> Vec<(String, i32, Option<i32>)> {
+    for _ in 0..50 {
+        let rows: Vec<(String, i32, Option<i32>)> = sqlx::query_as(
+            "SELECT outcome, docs_used, prompt_tokens FROM chat_api_log ORDER BY id",
+        )
+        .fetch_all(pool)
+        .await
+        .unwrap();
+        if rows.len() >= expected {
+            return rows;
+        }
+        tokio::time::sleep(std::time::Duration::from_millis(20)).await;
+    }
+    panic!("호출 기록이 {expected}건 쌓이지 않았습니다");
+}
+
+#[sqlx::test]
+async fn urine_blockage_is_emergency_with_clinical_references(pool: PgPool) {
+    seed_health(&pool).await;
+    // AI 가 병원 안내 없이 intake 로 답해도 서버가 응급 안내를 강제해야 함
+    let (url, mock) = start_mock(200, &llm_json(false)).await;
+    let router = chat_app(pool.clone(), &url, 10, 10);
+    let (s, j) = post_chat(
+        &router,
+        json!({ "message": "소변을 보려고 하는데 나오지 않아요" }),
+    )
+    .await;
+    assert_eq!(s, StatusCode::OK);
+    assert_eq!(j["question_type"], "emergency");
+    assert_eq!(j["emergency"], true);
+    assert_eq!(j["mode"], "answer");
+    assert!(
+        j["answer"]
+            .as_str()
+            .unwrap()
+            .starts_with("지금 바로 동물병원 진료가 필요할 수 있어요.")
+    );
+    // 위치가 없으니 병원 검색 대신 위치 요청
+    assert_eq!(j["needs_location"], true);
+    assert_eq!(j["sources"][0]["license"], "CC BY 4.0");
+    assert_eq!(j["sources"][0]["kind"], "실제 임상 사례");
+
+    // Gemini 에는 분류·응급 신호·고양이 사례 요약만 짧게 (개 사례는 보내지 않음)
+    let body = mock.last_body.lock().unwrap().clone();
+    assert!(body.contains("[질문 유형: 응급 상황]"));
+    assert!(body.contains("[응급 신호 감지: 소변을 못 봄]"));
+    assert!(body.contains("1) [실제 임상 사례]"));
+    assert!(body.contains("요도 폐쇄"));
+    assert!(!body.contains("개·"));
+
+    let logs = api_logs(&pool, 1).await;
+    assert_eq!(logs[0], ("ok".to_string(), 2, Some(120)));
+}
+
+#[sqlx::test]
+async fn unrelated_question_gets_no_references_and_cache_is_logged(pool: PgPool) {
+    seed_health(&pool).await;
+    let (url, mock) = start_mock(200, &llm_json(false)).await;
+    let router = chat_app(pool.clone(), &url, 10, 10);
+    let msg = json!({ "message": "처음 고양이를 데려왔는데 예방접종은 어떻게 해야 하나요?" });
+    let (_, j) = post_chat(&router, msg.clone()).await;
+    assert_eq!(j["question_type"], "vaccine_checkup");
+    assert_eq!(j["emergency"], false);
+    assert!(j.get("sources").is_none());
+    assert!(
+        !mock
+            .last_body
+            .lock()
+            .unwrap()
+            .contains("1) [실제 임상 사례]")
+    );
+
+    // 같은 질문은 캐시 (Gemini 재호출 없음)
+    let (_, j2) = post_chat(&router, msg).await;
+    assert_eq!(j2["answer"], j["answer"]);
+    assert_eq!(mock.calls.load(Ordering::SeqCst), 1);
+    let logs = api_logs(&pool, 2).await;
+    assert_eq!(logs[0].0, "ok");
+    assert_eq!(logs[1], ("cache".to_string(), 0, None));
+}
+
+#[sqlx::test]
+async fn emergency_fallback_when_gemini_fails(pool: PgPool) {
+    seed_health(&pool).await;
+    let (url, _mock) = start_mock(400, "{}").await;
+    let router = chat_app(pool.clone(), &url, 10, 10);
+    let (_, j) = post_chat(
+        &router,
+        json!({ "message": "갑자기 경련을 해요", "lat": 37.5665, "lon": 126.9780 }),
+    )
+    .await;
+    assert_eq!(j["fallback"], true);
+    assert_eq!(j["emergency"], true);
+    assert!(j["answer"].as_str().unwrap().contains("경련·발작"));
+    // 대체 응답에는 출처를 붙이지 않음
+    assert!(j.get("sources").is_none());
+    let logs = api_logs(&pool, 1).await;
+    assert_eq!(logs[0].0, "error");
 }

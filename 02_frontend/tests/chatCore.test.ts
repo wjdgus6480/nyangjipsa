@@ -107,3 +107,19 @@ describe("chatCore (기존 chat-core.test.js)", () => {
     expect(C.toComparison({ item_name: "입원비", condition: "-", rows: [] })!.condition).toBe("");
   });
 });
+
+describe("답변 출처", () => {
+  test("이름 있는 출처만, 링크는 http(s) 만 남김", () => {
+    const s = C.toSources([
+      { name: "임상 사례 자료", url: "https://data.mendeley.com/datasets/6cjnjmtv2h/1", license: "CC BY 4.0", kind: "실제 임상 사례" },
+      { name: "위험한 링크", url: "javascript:alert(1)", license: null, kind: "일반 Q&A" },
+      { name: "", url: null, license: null, kind: "x" },
+      null,
+    ]);
+    expect(s).toHaveLength(2);
+    expect(s[0].url).toBe("https://data.mendeley.com/datasets/6cjnjmtv2h/1");
+    expect(s[1].url).toBe(null);
+    expect(C.toSources(undefined)).toEqual([]);
+    expect(C.toAssistantMessage({ answer: "x" }).sources).toEqual([]);
+  });
+});

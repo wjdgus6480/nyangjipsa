@@ -16,11 +16,12 @@ use crate::{
     AppState,
     animal_business::{self, BusinessType},
     chat::{
-        ChatPlace, ChatRequest, ChatResponse, DISCLAIMER, MAX_MESSAGE_CHARS,
+        ChatContext, ChatPlace, ChatRequest, ChatResponse, DISCLAIMER, MAX_MESSAGE_CHARS,
         build_price_comparison, ensure_compare_fee,
     },
     coordinate::Coordinate,
     error::AppError,
+    health,
     routes::hospitals::find_nearby,
 };
 
@@ -153,7 +154,55 @@ pub async fn chat(
         return Err(AppError::TooManyRequests);
     }
 
-    let (mut reply, fallback) = service.reply(&req).await;
+    // 질문 분류·응급 판단·검색 태그는 서버 규칙으로 (Gemini 호출 없음). 짧은 후속 답("어제부터요")도
+    // 맥락을 잃지 않도록 선택 키워드와 최근 사용자 발화 2개를 뒤에 붙여 분석합니다.
+    let mut analysis_text = message.to_owned();
+    if let Some(k) = &req.choice_keyword {
+        analysis_text.push(' ');
+        analysis_text.push_str(k);
+    }
+    for h in req
+        .history
+        .iter()
+        .rev()
+        .filter(|h| h.role == "user")
+        .take(2)
+    {
+        analysis_text.push(' ');
+        analysis_text.extend(h.text.chars().take(MAX_MESSAGE_CHARS));
+    }
+    let analysis = health::analyze(&analysis_text);
+    // 참고 자료는 DB 에서 읽기만. 검색이 실패해도 답변은 계속합니다.
+    let docs = health::search(&state.pool, &analysis.tags, health::MAX_CONTEXT_DOCS)
+        .await
+        .unwrap_or_else(|e| {
+            tracing::warn!("건강 자료 검색 실패(자료 없이 답변): {e}");
+            Vec::new()
+        });
+    let ctx = ChatContext {
+        question_type: analysis.question_type,
+        emergency_signs: analysis.emergency_signs.clone(),
+        references: health::context_block(&docs),
+        sources: health::sources_of(&docs),
+        docs_used: docs.len(),
+    };
+
+    let outcome = service.reply_with_context(&req, &ctx).await;
+    health::spawn_log(
+        state.pool.clone(),
+        health::ApiLog {
+            question_type: ctx.question_type,
+            emergency: ctx.emergency(),
+            outcome: outcome.outcome,
+            model: outcome.usage.as_ref().map(|u| u.model.clone()),
+            prompt_tokens: outcome.usage.as_ref().and_then(|u| u.prompt_tokens),
+            output_tokens: outcome.usage.as_ref().and_then(|u| u.output_tokens),
+            docs_used: i32::try_from(ctx.docs_used).unwrap_or(i32::MAX),
+            error: outcome.error.clone(),
+        },
+    );
+    let fallback = outcome.fallback;
+    let mut reply = outcome.reply;
     // AI 가 비교 항목을 놓쳐도 "초진 진찰료 비교" 처럼 분명한 질문이면 서버가 채움
     ensure_compare_fee(&mut reply, &req.message);
 
@@ -217,6 +266,10 @@ pub async fn chat(
         price_comparison,
         needs_location,
         fallback,
+        question_type: ctx.question_type.as_str(),
+        emergency: ctx.emergency(),
+        // 대체 응답은 자료를 쓰지 않았으므로 출처를 붙이지 않음
+        sources: if fallback { Vec::new() } else { ctx.sources },
         disclaimer: DISCLAIMER,
     }))
 }

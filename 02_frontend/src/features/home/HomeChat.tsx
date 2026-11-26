@@ -6,6 +6,7 @@ import { ROUTES, SITE, mapFocusUrl } from "../../services/config/site";
 import { postChat } from "../../services/api/endpoints";
 import type { ChatHistoryItem, ChatRequest, ChatResponse, PriceComparison } from "../../types/api";
 import { requestMyLocation } from "../chatbot/geolocation";
+import { SourceList } from "../chatbot/SourceList";
 import type { LatLon } from "../chatbot/chatCore";
 import { createConsultTracker } from "../../services/analytics/consult";
 
@@ -301,6 +302,7 @@ function Reply({ r, onChoice, onShareLocation }: { r: ChatResponse; onChoice(lab
           ))}
         </div>
       )}
+      <SourceList sources={r.sources} className="reply__note reply__sources" />
       <p className="reply__note">
         {r.fallback ? "AI 연결이 원활하지 않아 기본 안내를 보여드려요. " : ""}
         {r.disclaimer || ""}

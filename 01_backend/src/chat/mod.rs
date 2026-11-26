@@ -17,9 +17,10 @@ use serde::{Deserialize, Serialize};
 
 use crate::{
     animal_business::{BusinessType, NearbyPlace},
+    health::{QuestionType, SourceRef},
     routes::hospitals::HospitalOut,
 };
-use gemini::{GeminiClient, Turn};
+use gemini::{GeminiClient, Turn, Usage};
 use limiter::RateLimiter;
 
 pub const MAX_MESSAGE_CHARS: usize = 500;
@@ -188,6 +189,46 @@ pub struct ChatRequest {
     pub choice_keyword: Option<String>,
 }
 
+/// 서버가 Gemini 호출 전에 준비한 것: 질문 유형·응급 신호(자체 규칙)와 DB 에서 찾은 참고 자료
+#[derive(Debug, Clone)]
+pub struct ChatContext {
+    pub question_type: QuestionType,
+    pub emergency_signs: Vec<&'static str>,
+    /// Gemini 에 넘길 참고 자료 (없으면 None)
+    pub references: Option<String>,
+    pub sources: Vec<SourceRef>,
+    pub docs_used: usize,
+}
+
+impl Default for ChatContext {
+    fn default() -> Self {
+        Self {
+            question_type: QuestionType::Care,
+            emergency_signs: Vec::new(),
+            references: None,
+            sources: Vec::new(),
+            docs_used: 0,
+        }
+    }
+}
+
+impl ChatContext {
+    pub fn emergency(&self) -> bool {
+        !self.emergency_signs.is_empty()
+    }
+}
+
+/// 응답 하나와 그 응답이 어떻게 만들어졌는지 (호출 기록용)
+#[derive(Debug)]
+pub struct ReplyOutcome {
+    pub reply: LlmReply,
+    pub fallback: bool,
+    /// ok / cache / limited / error (chat_api_log.outcome)
+    pub outcome: &'static str,
+    pub usage: Option<Usage>,
+    pub error: Option<String>,
+}
+
 #[derive(Debug, Serialize)]
 pub struct ChatResponse {
     pub mode: String,
@@ -208,6 +249,13 @@ pub struct ChatResponse {
     pub needs_location: bool,
     /// true 면 Gemini 가 아니라 서버의 대체 응답
     pub fallback: bool,
+    /// 서버 규칙으로 분류한 질문 유형 (emergency / symptom / disease / vaccine_checkup / nutrition / behavior / care)
+    pub question_type: &'static str,
+    /// 즉시 진료가 필요할 수 있는 신호가 있으면 true
+    pub emergency: bool,
+    /// 답변에 참고한 자료의 출처 (DB 에서 찾은 것만)
+    #[serde(skip_serializing_if = "Vec::is_empty")]
+    pub sources: Vec<SourceRef>,
     pub disclaimer: &'static str,
 }
 
@@ -235,36 +283,71 @@ impl ChatService {
 
     /// (응답, 대체응답 여부). Gemini 가 실패해도 항상 사용 가능한 응답을 돌려줍니다.
     pub async fn reply(&self, req: &ChatRequest) -> (LlmReply, bool) {
+        let o = self.reply_with_context(req, &ChatContext::default()).await;
+        (o.reply, o.fallback)
+    }
+
+    /// 서버가 준비한 질문 유형·참고 자료를 함께 넘겨 답변을 받습니다.
+    /// 캐시·호출 상한·대체 응답은 그대로이고, 응급 신호가 있으면 서버가 안전 규칙을 강제합니다.
+    pub async fn reply_with_context(&self, req: &ChatRequest, ctx: &ChatContext) -> ReplyOutcome {
+        let done = |reply: LlmReply,
+                    fallback: bool,
+                    outcome: &'static str,
+                    usage: Option<Usage>,
+                    error: Option<String>| ReplyOutcome {
+            reply: enforce_safety(reply, ctx),
+            fallback,
+            outcome,
+            usage,
+            error,
+        };
         let cacheable = req.history.is_empty() && req.choice_keyword.is_none();
-        // 위치 공유 여부에 따라 답변이 달라지므로(안내 문구) 캐시 키에 포함
+        // 위치 공유 여부에 따라 답변이 달라지므로(안내 문구) 캐시 키에 포함.
+        // 질문 유형·참고 자료는 같은 메시지면 같게 나오므로 키에 넣지 않음
         let key = format!("{}|{}", has_location(req), normalize(&req.message));
         if cacheable && let Some(r) = self.cache_get(&key) {
-            return (r, false);
+            return done(r, false, "cache", None, None);
         }
         // 무료 한도 보호: 전체 호출이 상한을 넘으면 Gemini 를 부르지 않고 대체 응답
         if !self.global.allow("*") {
             tracing::warn!("챗봇 전역 호출 상한 도달 → 대체 응답");
-            return (fallback_reply(&req.message), true);
+            return done(fallback_for(req, ctx), true, "limited", None, None);
         }
-        let turns = build_turns(req);
+        let turns = build_turns(req, ctx);
         match self
             .gemini
-            .generate_json::<LlmReply>(prompt::SYSTEM_PROMPT, &turns, prompt::reply_schema())
+            .generate_json_with_usage::<LlmReply>(
+                prompt::SYSTEM_PROMPT,
+                &turns,
+                prompt::reply_schema(),
+            )
             .await
         {
-            Ok(r) => {
+            Ok((r, usage)) => {
                 let r = sanitize(r);
                 if r.answer.trim().is_empty() {
-                    return (fallback_reply(&req.message), true);
+                    return done(
+                        fallback_for(req, ctx),
+                        true,
+                        "error",
+                        Some(usage),
+                        Some("빈 답변".into()),
+                    );
                 }
                 if cacheable {
                     self.cache_put(key, r.clone());
                 }
-                (r, false)
+                done(r, false, "ok", Some(usage), None)
             }
             Err(e) => {
                 tracing::warn!("Gemini 호출 실패 → 대체 응답: {e}");
-                (fallback_reply(&req.message), true)
+                done(
+                    fallback_for(req, ctx),
+                    true,
+                    "error",
+                    None,
+                    Some(e.to_string()),
+                )
             }
         }
     }
@@ -303,7 +386,7 @@ fn truncate_chars(s: &str, max: usize) -> String {
     s.trim().chars().take(max).collect()
 }
 
-fn build_turns(req: &ChatRequest) -> Vec<Turn> {
+fn build_turns(req: &ChatRequest, ctx: &ChatContext) -> Vec<Turn> {
     let start = req.history.len().saturating_sub(MAX_HISTORY_TURNS);
     let mut turns: Vec<Turn> = req.history[start..]
         .iter()
@@ -336,6 +419,18 @@ fn build_turns(req: &ChatRequest) -> Vec<Turn> {
     } else {
         "\n[위치 공유: 없음]"
     });
+    // 서버 규칙으로 분류한 질문 유형·응급 신호와 DB 참고 자료 (관련 있을 때만, 짧게)
+    last.push_str(&format!("\n[질문 유형: {}]", ctx.question_type.label()));
+    if ctx.emergency() {
+        last.push_str(&format!(
+            "\n[응급 신호 감지: {}]",
+            ctx.emergency_signs.join(", ")
+        ));
+    }
+    if let Some(refs) = &ctx.references {
+        last.push_str("\n[참고 자료]\n");
+        last.push_str(refs);
+    }
     turns.push(Turn {
         role: "user",
         text: last,
@@ -397,6 +492,55 @@ pub fn ensure_compare_fee(r: &mut LlmReply, message: &str) {
     }
     if !r.compare_fee.is_empty() {
         r.search_hospitals = true;
+    }
+}
+
+pub const EMERGENCY_LEAD: &str = "지금 바로 동물병원 진료가 필요할 수 있어요.";
+
+/// 응급 신호가 있으면 AI 답변과 상관없이 병원 안내를 보장합니다.
+fn enforce_safety(mut r: LlmReply, ctx: &ChatContext) -> LlmReply {
+    if !ctx.emergency() {
+        return r;
+    }
+    r.mode = "answer".into();
+    r.search_hospitals = true;
+    let head: String = r.answer.chars().take(80).collect();
+    if !head.contains("병원") {
+        r.answer = truncate_chars(&format!("{EMERGENCY_LEAD} {}", r.answer), 600);
+    }
+    r
+}
+
+fn fallback_for(req: &ChatRequest, ctx: &ChatContext) -> LlmReply {
+    if ctx.emergency() {
+        emergency_fallback(&ctx.emergency_signs)
+    } else {
+        fallback_reply(&req.message)
+    }
+}
+
+/// 응급 신호가 있는데 AI 를 쓸 수 없을 때의 고정 응답
+pub fn emergency_fallback(signs: &[&str]) -> LlmReply {
+    let choice = |label: &str, keyword: &str| Choice {
+        label: label.into(),
+        keyword: keyword.into(),
+        kind: "core".into(),
+    };
+    LlmReply {
+        mode: "answer".into(),
+        answer: format!(
+            "{EMERGENCY_LEAD} ({}) 가까운 동물병원, 가능하면 24시 병원에 먼저 전화하고 바로 방문하세요. 이동하는 동안 약을 임의로 먹이지 말고, 아이를 이동장에 넣어 조용히 안정시켜 주세요.",
+            signs.join(", ")
+        ),
+        keywords: vec![],
+        question: String::new(),
+        choices: vec![
+            choice("근처 병원 찾기", "병원 찾기"),
+            choice("24시 병원이 필요해요", "24시"),
+        ],
+        search_hospitals: true,
+        search_places: vec![],
+        compare_fee: String::new(),
     }
 }
 
@@ -465,10 +609,50 @@ mod tests {
             },
         ];
         r.choice_keyword = Some("구토".into());
-        let t = build_turns(&r);
+        let t = build_turns(&r, &ChatContext::default());
         assert_eq!(t[0].role, "user");
         assert_eq!(t.len(), 2);
         assert!(t[1].text.contains("선택한 키워드: 구토"));
+    }
+
+    #[test]
+    fn turns_carry_question_type_emergency_and_references() {
+        let ctx = ChatContext {
+            question_type: QuestionType::Emergency,
+            emergency_signs: vec!["소변을 못 봄"],
+            references: Some("1) [실제 임상 사례] 요도 폐쇄".into()),
+            sources: vec![],
+            docs_used: 1,
+        };
+        let t = build_turns(&req("소변이 안 나와요"), &ctx);
+        let last = &t.last().unwrap().text;
+        assert!(last.contains("[질문 유형: 응급 상황]"));
+        assert!(last.contains("[응급 신호 감지: 소변을 못 봄]"));
+        assert!(last.contains("[참고 자료]\n1) [실제 임상 사례] 요도 폐쇄"));
+        // 일반 질문에는 응급·참고 자료 표시가 없음
+        let plain = build_turns(&req("스크래처 추천"), &ChatContext::default());
+        assert!(!plain[0].text.contains("응급") && !plain[0].text.contains("참고 자료"));
+    }
+
+    #[test]
+    fn emergency_forces_hospital_guidance() {
+        let ctx = ChatContext {
+            emergency_signs: vec!["경련·발작"],
+            ..ChatContext::default()
+        };
+        let mut r = fallback_reply("x");
+        r.mode = "intake".into();
+        r.answer = "많이 놀라셨죠.".into();
+        r.search_hospitals = false;
+        let r = enforce_safety(r, &ctx);
+        assert_eq!(r.mode, "answer");
+        assert!(r.search_hospitals);
+        assert!(r.answer.starts_with(EMERGENCY_LEAD));
+        // 응급이 아니면 그대로
+        let calm = enforce_safety(fallback_reply("x"), &ChatContext::default());
+        assert_eq!(calm.mode, "intake");
+        let fb = emergency_fallback(&["소변을 못 봄"]);
+        assert!(fb.search_hospitals && fb.answer.contains("소변을 못 봄"));
     }
 
     #[test]
