@@ -1,6 +1,7 @@
 // 백엔드 API 경로별 함수. 경로·파라미터 이름은 기존 화면과 같습니다.
 import { request } from "./client";
 import type {
+  EmergencyResponse,
   ChatRequest,
   ChatResponse,
   HospitalDetail,
@@ -33,6 +34,10 @@ export const getNearbyHospitals = (
   q: { lat: number; lon: number; radius?: number; limit?: number; include_fees?: boolean; cat_friendly?: boolean },
   signal?: AbortSignal,
 ) => request<HospitalsNearbyResponse>("/api/hospitals/nearby", { query: q, signal });
+
+/** GET /api/hospitals/emergency — 가까운 24시·응급·야간 병원 (이름 기준 추정, 반경 기본 10km·최대 30km) */
+export const getEmergencyHospitals = (q: { lat: number; lon: number; radius?: number; limit?: number }, signal?: AbortSignal) =>
+  request<EmergencyResponse>("/api/hospitals/emergency", { query: q, signal });
 
 /** GET /api/hospitals/{id} — 병원 한 곳과 진료비 (지도 항목의 hospital_id 로 조회) */
 export const getHospital = (id: number, signal?: AbortSignal) =>

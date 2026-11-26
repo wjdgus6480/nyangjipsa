@@ -3,7 +3,7 @@
 //! - `GET /api/hospitals/nearby?lat=37.5665&lon=126.9780&radius=1000&limit=50&include_fees=true`
 //!   반경 안의 영업 중인 병원을 가까운 순으로 (진료비 포함)
 //!   `cat_friendly=true` 면 고양이 친화병원 인증(ISFM 등)이 있는 병원만
-//! - `GET /api/hospitals/emergency?lat=…&lon=…` 응급 버튼용: 가까운 24시 병원 (이름 기준 추정)
+//! - `GET /api/hospitals/emergency?lat=…&lon=…` 응급 버튼용: 가까운 24시·응급·야간 진료 병원 (이름 기준 추정)
 //! - `GET /api/hospitals/{id}` 병원 한 곳과 진료비.
 //!   지도 API(`/api/places/nearby`)가 병원에 붙여 주는 `hospital_id` 로 조회합니다.
 
@@ -162,7 +162,7 @@ pub async fn find_nearby(
 pub struct HospitalFilter {
     /// 고양이 친화병원 인증 병원만
     pub cat_friendly_only: bool,
-    /// 이름에 "24시" 등이 들어간 병원만 (응급 버튼)
+    /// 이름에 "24시"·"응급"·"야간"이 들어간 병원만 (응급 버튼)
     pub open_24h_only: bool,
 }
 
@@ -187,7 +187,7 @@ pub async fn find_nearby_filtered(
          WHERE h.business_status LIKE '영업%'
            AND ST_DWithin(h.location, q.p, $3::float8)
            AND (NOT $5::bool OR EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id))
-           AND (NOT $6::bool OR h.name ~* '24[[:space:]]*(시|hr|h|hour)')
+           AND (NOT $6::bool OR h.name ~* '(24[[:space:]]*(시|hr|h|hour)|응급|야간)')
          ORDER BY distance_m, h.id
          LIMIT $4",
     )
@@ -351,7 +351,7 @@ async fn detail(
 /// 응급 버튼 검색 반경 기본값·최대값 (밤에는 24시 병원이 멀 수 있어 일반 검색보다 넓게)
 pub const EMERGENCY_DEFAULT_RADIUS_M: f64 = 10_000.0;
 pub const EMERGENCY_MAX_RADIUS_M: f64 = 30_000.0;
-pub const EMERGENCY_NOTICE: &str = "이름에 '24시'가 들어간 병원을 가까운 순으로 보여줍니다. 실제 야간·응급 진료 여부는 방문 전에 꼭 전화로 확인하세요.";
+pub const EMERGENCY_NOTICE: &str = "이름에 '24시'·'응급'·'야간'이 들어간 병원을 가까운 순으로 보여줍니다. 실제 야간·응급 진료 여부는 방문 전에 꼭 전화로 확인하세요.";
 
 #[derive(Debug, Deserialize)]
 pub struct EmergencyParams {
@@ -372,8 +372,8 @@ pub struct EmergencyResponse {
     hospitals: Vec<HospitalOut>,
 }
 
-/// 응급 버튼: "지금 진료 가능한 24시 병원" — 친화병원 필터와 별개로, 가까운 24시 병원을 찾습니다.
-/// 진료 시간 데이터가 없어서 이름("24시", "24hr" 등)으로 추정합니다.
+/// 응급 버튼: "지금 진료 가능한 24시·응급 병원" — 친화병원 필터와 별개로, 가까운 병원을 찾습니다.
+/// 진료 시간 데이터가 없어서 이름("24시", "24hr", "응급", "야간")으로 추정합니다.
 async fn emergency(
     State(state): State<AppState>,
     Query(p): Query<EmergencyParams>,

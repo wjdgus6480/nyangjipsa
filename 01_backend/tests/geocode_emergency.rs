@@ -198,6 +198,8 @@ async fn emergency_returns_24h_hospitals_with_notice(pool: PgPool) {
     add_hospital(&pool, "h2", "24시 서울동물의료센터", 126.9900).await;
     add_hospital(&pool, "h3", "서울 24HR 동물병원", 127.0000).await;
     add_hospital(&pool, "h4", "강남24시동물병원", 127.0100).await;
+    // 이름에 "응급"이 들어간 병원도 응급 버튼 결과에 포함 (24시 표시는 아님)
+    add_hospital(&pool, "h5", "하이응급동물메디칼센터", 127.0200).await;
 
     let res = app(AppState::new(pool.clone()), false)
         .oneshot(
@@ -221,10 +223,12 @@ async fn emergency_returns_24h_hospitals_with_notice(pool: PgPool) {
         vec![
             "24시 서울동물의료센터",
             "서울 24HR 동물병원",
-            "강남24시동물병원"
+            "강남24시동물병원",
+            "하이응급동물메디칼센터"
         ]
     );
     assert!(v["hospitals"][0]["open_24h"].as_bool().unwrap());
+    assert_eq!(v["hospitals"][3]["open_24h"], false);
     assert!(v["notice"].as_str().unwrap().contains("전화로 확인"));
     assert_eq!(v["radius_m"], 10000.0);
 
