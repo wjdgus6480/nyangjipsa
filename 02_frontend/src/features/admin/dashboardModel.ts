@@ -17,15 +17,13 @@ export const PERIODS: { key: DashboardPeriodKey; label: string; compare: string 
   { key: "today", label: "오늘", compare: "어제" },
   { key: "7d", label: "7일", compare: "이전 7일" },
   { key: "30d", label: "30일", compare: "이전 30일" },
-  { key: "90d", label: "90일", compare: "이전 90일" },
 ];
 
 export const INTERVAL_LABEL: Record<Interval, string> = { day: "일별", week: "주별", month: "월별" };
 
-/** 기간이 짧으면 주별·월별은 막대가 1~2개라 의미가 없어 끔 */
+/** 기간이 짧으면 주별·월별은 막대가 1개라 의미가 없어 끔 (30일만 주별·월별) */
 export function allowedIntervals(period: DashboardPeriodKey): Interval[] {
-  if (period === "90d") return ["day", "week", "month"];
-  if (period === "30d") return ["day", "week"];
+  if (period === "30d") return ["day", "week", "month"];
   return ["day"];
 }
 

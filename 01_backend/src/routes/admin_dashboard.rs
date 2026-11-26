@@ -1,4 +1,6 @@
-//! `GET /api/admin/dashboard?period=today|7d|30d|90d` — 관리자 대시보드 숫자 (관리자만)
+//! `GET /api/admin/dashboard?period=today|7d|30d` — 관리자 대시보드 숫자 (관리자만)
+//!
+//! 90일 보기는 뺐습니다: Amplitude 무료 플랜의 동시 조회 비용 한도에 자주 걸리고(429), 서비스 초기라 데이터도 없음
 //!
 //! - Amplitude: 핵심 이벤트 5개(+ 활성 사용자)의 고유 사용자 수·일별 추이·퍼널·유입 경로·병원 순위
 //!   (`AMPLITUDE_API_KEY`·`AMPLITUDE_SECRET_KEY` 가 없으면 `status = not_configured` 로 비워서 보냄)
@@ -65,10 +67,9 @@ impl PeriodInfo {
             "today" => ("today", 1),
             "7d" => ("7d", 7),
             "30d" => ("30d", 30),
-            "90d" => ("90d", 90),
             _ => {
                 return Err(AppError::Validation(
-                    "period 는 today, 7d, 30d, 90d 중 하나여야 합니다".into(),
+                    "period 는 today, 7d, 30d 중 하나여야 합니다".into(),
                 ));
             }
         };
@@ -345,7 +346,7 @@ async fn load_amplitude(
     let empty = Segmentation::default();
     let mut metrics = Vec::new();
     // 이벤트마다 현재·이전 기간(+ 오늘 보기일 때 그래프용 앞 기간)을 차례로 요청.
-    // 무료 플랜은 동시 조회 "비용" 상한이 낮아(90일 조회 하나가 수백) 동시에 보내면 429 가 남
+    // 무료 플랜은 동시 조회 "비용" 상한이 낮아(기간이 긴 조회 하나가 수백) 동시에 보내면 429 가 남
     for event in std::iter::once(ACTIVE_EVENT).chain(FUNNEL_EVENTS) {
         let cur = client
             .segmentation(event, Metric::Uniques, p.start, p.end, None)
@@ -522,8 +523,10 @@ mod tests {
         // 오늘 보기도 그래프는 최근 14일
         assert_eq!(t.chart_start, d("2026-11-13"));
 
-        let q = PeriodInfo::new("90d", d("2026-11-26")).unwrap();
-        assert_eq!(q.chart_dates().len(), 180);
+        let m = PeriodInfo::new("30d", d("2026-11-26")).unwrap();
+        assert_eq!(m.chart_dates().len(), 60);
+        // 90일 보기는 뺐음
+        assert!(PeriodInfo::new("90d", d("2026-11-26")).is_err());
         assert!(PeriodInfo::new("1y", d("2026-11-26")).is_err());
     }
 
