@@ -5,29 +5,41 @@
 
 .site .cat-profile { display: flex; flex-direction: column; gap: 12px; }
 .site .cat-grid { display: grid; grid-template-columns: repeat(2, minmax(0, 1fr)); gap: 12px 14px; }
-.site .cat-subtitle { font-size: 1rem; color: var(--navy); margin: 10px 0 -2px; }
+.site .cat-conditions { grid-column: 1 / -1; display: flex; flex-direction: column; gap: 8px; }
+.site .cat-subtitle { font-size: 1rem; color: var(--navy); margin: 6px 0 -4px; }
 .site .cat-subtitle__hint { font-size: .8rem; font-weight: 500; color: var(--gray-500); margin-left: 6px; }
+.site .cat-label { font-size: .9rem; font-weight: 700; color: var(--ink); }
 
-/* 한 개 선택 (다시 누르면 해제) */
-.site .cat-choice { border: 0; margin: 0; padding: 0; min-width: 0; display: flex; flex-direction: column; gap: 6px; }
-.site .cat-choice--wide { grid-column: 1 / -1; }
-.site .cat-label { font-size: .9rem; font-weight: 700; color: var(--ink); padding: 0; }
-.site .cat-label__sub { font-weight: 500; font-size: .82rem; color: var(--gray-500); }
-.site .cat-seg { display: flex; gap: 6px; }
-.site .cat-seg__btn { flex: 1 1 0; min-width: 0; border: 1.5px solid var(--gray-200); background: var(--white); color: var(--ink); border-radius: var(--radius-sm); padding: 10px 4px; font: inherit; font-size: .88rem; cursor: pointer; white-space: nowrap; transition: border-color .2s, background .2s; }
-.site .cat-seg__btn:hover { border-color: var(--sky-deep); }
-.site .cat-seg__btn[aria-pressed="true"] { border-color: var(--navy); background: var(--sky-soft); color: var(--navy); font-weight: 700; }
-.site .cat-seg__btn:focus-visible { outline: 3px solid var(--navy); outline-offset: 1px; }
+/* 드롭다운 */
+.site .cat-select { display: flex; flex-direction: column; gap: 6px; min-width: 0; }
+.site .cat-select__btn { display: flex; align-items: center; justify-content: space-between; gap: 6px; width: 100%; min-width: 0; border: 1.5px solid var(--gray-200); border-radius: var(--radius-sm); background: var(--white); padding: 11px 12px; font: inherit; font-size: .92rem; color: var(--ink); cursor: pointer; text-align: left; transition: border-color .2s, box-shadow .2s; }
+.site .cat-select__btn:hover { border-color: var(--sky-deep); }
+.site .cat-select__btn[aria-expanded="true"], .site .cat-select__btn:focus-visible { outline: none; border-color: var(--sky-deep); box-shadow: 0 0 0 3px rgba(63, 184, 222, .2); }
+.site .cat-select__value { overflow: hidden; text-overflow: ellipsis; white-space: nowrap; min-width: 0; }
+.site .cat-select__value.is-empty { color: var(--gray-500); }
+.site .cat-select__arrow { flex-shrink: 0; color: var(--gray-500); transition: transform .2s; }
+.site .cat-select__btn[aria-expanded="true"] .cat-select__arrow { transform: rotate(180deg); }
+.site .cat-select__panel { z-index: 50; background: var(--white); border: 1px solid var(--gray-200); border-radius: var(--radius-sm); box-shadow: var(--shadow-hover); padding: 6px; max-height: 320px; overflow-y: auto; }
+.site .cat-select__hint { margin: 2px 6px 6px; font-size: .78rem; color: var(--gray-500); }
+.site .cat-select__opt { display: flex; align-items: center; gap: 8px; min-height: 38px; padding: 6px 10px; border-radius: 8px; font-size: .9rem; color: var(--ink); cursor: pointer; }
+.site .cat-select__opt:hover { background: var(--sky-soft); }
+.site .cat-select__opt input { width: 16px; height: 16px; margin: 0; accent-color: var(--navy); flex-shrink: 0; }
+.site .cat-select__opt input:checked + span { color: var(--navy); font-weight: 700; }
+.site .cat-select__opt--clear { color: var(--gray-500); border-bottom: 1px solid var(--gray-200); border-radius: 8px 8px 0 0; margin-bottom: 2px; }
+.site .cat-select__opt input:focus-visible { outline: 2px solid var(--navy); outline-offset: 2px; }
+.site .cat-other { margin: 0; }
 
-/* 여러 개 선택 칩 */
-.site .cat-chips { display: flex; flex-wrap: wrap; gap: 6px; }
-.site .cat-chip { position: relative; display: inline-flex; }
-.site .cat-chip input { position: absolute; inset: 0; opacity: 0; margin: 0; cursor: pointer; }
-.site .cat-chip span { display: inline-block; border: 1.5px solid var(--gray-200); border-radius: 999px; padding: 7px 12px; font-size: .86rem; color: var(--ink); background: var(--white); transition: border-color .2s, background .2s; }
-.site .cat-chip:hover span { border-color: var(--sky-deep); }
-.site .cat-chip input:checked + span { border-color: var(--navy); background: var(--sky-soft); color: var(--navy); font-weight: 700; }
-.site .cat-chip input:focus-visible + span { outline: 3px solid var(--navy); outline-offset: 2px; }
-.site .cat-other { margin-top: 8px; }
+/* 건강관리 한 줄 (넘치면 ‹ › 로 이동) */
+.site .cat-row { display: flex; align-items: flex-end; gap: 4px; min-width: 0; }
+.site .cat-row__track { flex: 1; min-width: 0; display: flex; gap: 8px; overflow-x: auto; scroll-snap-type: x mandatory; scrollbar-width: none; }
+.site .cat-row__track::-webkit-scrollbar { display: none; }
+.site .cat-row__track > .cat-select { flex: 1 1 0; min-width: 96px; scroll-snap-align: start; }
+.site .cat-row__track .cat-select__btn { padding: 10px 8px 10px 10px; font-size: .86rem; }
+.site .cat-row__track .cat-label { font-size: .84rem; white-space: nowrap; }
+.site .cat-row__nav { flex-shrink: 0; width: 28px; height: 44px; border: 1.5px solid var(--gray-200); border-radius: 10px; background: var(--white); color: var(--navy); font-size: 1.2rem; font-weight: 700; line-height: 1; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+.site .cat-row__nav[hidden] { display: none; }
+.site .cat-row__nav:disabled { color: var(--gray-200); cursor: default; }
+.site .cat-row__nav:focus-visible { outline: 3px solid var(--navy); outline-offset: 1px; }
 
 /* kg·살 단위 */
 .site .cat-suffix { position: relative; }
@@ -51,7 +63,8 @@
 .site .cat-editor { border: 1px solid var(--gray-200); border-radius: var(--radius-sm); padding: 16px; }
 
 @media (max-width: 480px) {
-  /* 좁은 화면: 이름·체중 칸은 2열 유지, 선택 버튼 묶음과 출생일은 한 줄 전체 */
-  .site .cat-grid > .cat-choice, .site .cat-grid > .cat-birth { grid-column: 1 / -1; }
+  .site .cat-grid > .cat-birth { grid-column: 1 / -1; }
+  /* 좁은 화면: 건강관리는 2개 반씩 보이고 ‹ › 로 이동 */
+  .site .cat-row__track > .cat-select { flex: 0 0 calc((100% - 8px) / 2); min-width: 0; }
   .site .cat-editor { padding: 12px; }
 }

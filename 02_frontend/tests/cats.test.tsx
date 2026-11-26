@@ -25,12 +25,17 @@ const at = (path: string) =>
 
 const where = () => screen.getByTestId("where").textContent;
 const type = (label: string | RegExp, value: string) => fireEvent.change(screen.getByLabelText(label), { target: { value } });
-const group = (name: string | RegExp) => screen.getByRole("group", { name });
-const pick = (groupName: string | RegExp, option: string) => fireEvent.click(within(group(groupName)).getByRole("button", { name: option }));
-const check = (groupName: string | RegExp, option: string) => fireEvent.click(within(group(groupName)).getByRole("checkbox", { name: option }));
-const isChecked = (groupName: string | RegExp, option: string) => (within(group(groupName)).getByRole("checkbox", { name: option }) as HTMLInputElement).checked;
-const CONDITIONS = /^건강 상태/;
-const PARASITES = /^기생충 예방/;
+// 드롭다운: 버튼 이름은 "라벨 + 현재 값", 열린 목록은 라벨 이름의 group
+const trigger = (label: string, root: HTMLElement = document.body) => within(root).getByRole("button", { name: new RegExp(`^${label} `) });
+const panel = (label: string, root: HTMLElement = document.body) => {
+  if (!screen.queryByRole("group", { name: label })) fireEvent.click(trigger(label, root));
+  return screen.getByRole("group", { name: label });
+};
+const pick = (label: string, option: string, root?: HTMLElement) => fireEvent.click(within(panel(label, root)).getByRole("radio", { name: option }));
+const check = (label: string, option: string) => fireEvent.click(within(panel(label)).getByRole("checkbox", { name: option }));
+const isChecked = (label: string, option: string) => (within(panel(label)).getByRole("checkbox", { name: option }) as HTMLInputElement).checked;
+const CONDITIONS = "건강 상태";
+const PARASITES = "기생충 예방";
 
 const user = (over: Record<string, unknown> = {}) => ({
   id: "6f1c2b9e-1111-4222-8333-944455556666",
@@ -138,9 +143,16 @@ describe("회원가입 반려묘 정보", () => {
     expect(screen.getByText("진료 후 기입해 주셔도 됩니다.")).toBeInTheDocument();
     pick("알레르기", "모름");
     pick("약 복용", "해당 없음");
+    expect(trigger("알레르기")).toHaveAccessibleName("알레르기 모름");
     pick("예방접종", "완료");
-    pick("예방접종", "완료"); // 다시 누르면 해제 → 미입력
-    expect(within(group("예방접종")).getByRole("button", { name: "완료" })).toHaveAttribute("aria-pressed", "false");
+    expect(screen.queryByRole("group", { name: "예방접종" })).toBeNull(); // 하나 고르면 목록이 닫힘
+    pick("예방접종", "선택 안 함"); // 미입력으로 되돌림 ("모름"과 다름)
+    expect(trigger("예방접종")).toHaveAccessibleName("예방접종 선택");
+
+    // 건강관리 5개 항목은 한 줄 (넘치지 않으면 ‹ › 버튼 숨김)
+    const row = screen.getByRole("group", { name: "건강관리 항목" });
+    expect(within(row).getAllByRole("button", { name: /^(알레르기|약 복용|예방접종|기생충 예방|건강검진) / })).toHaveLength(5);
+    expect(row.querySelector('[aria-label="다음 항목 보기"]')).toHaveAttribute("hidden");
 
     // 기생충: 세부 항목은 복수, 해당 없음은 단독
     check(PARASITES, "심장사상충");
@@ -150,6 +162,7 @@ describe("회원가입 반려묘 정보", () => {
     check(PARASITES, "심장사상충");
     check(PARASITES, "모름");
     expect(isChecked(PARASITES, "해당 없음")).toBe(false);
+    expect(trigger(PARASITES)).toHaveAccessibleName("기생충 예방 2개 선택"); // 좁은 칸은 개수로
 
     fireEvent.click(signupButton());
     await waitFor(() => expect(where()).toBe("/signup/check-email"));
@@ -263,7 +276,8 @@ describe("내 정보 — 우리 고양이", () => {
     at("/me");
     fireEvent.click(await screen.findByRole("button", { name: "수정" }));
     const form = screen.getByRole("form", { name: "나비 정보 수정" });
-    fireEvent.click(within(within(form).getByRole("group", { name: "알레르기" })).getByRole("button", { name: "있음" }));
+    expect(trigger("알레르기", form)).toHaveAccessibleName("알레르기 해당 없음"); // 저장된 값이 드롭다운에 보임
+    pick("알레르기", "있음", form);
     fireEvent.click(within(form).getByRole("button", { name: "저장" }));
     await screen.findByRole("article", { name: "나비" });
     const put = calls.find((c) => c.method === "PUT");
