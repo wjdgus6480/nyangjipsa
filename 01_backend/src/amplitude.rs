@@ -272,6 +272,13 @@ fn find_key<'a>(v: &'a Value, key: &str) -> Option<&'a Value> {
 /// 퍼널 응답에서 단계별 누적 사용자 수(`cumulativeRaw`)를 꺼냄.
 /// 응답 모양(`data` 가 배열/객체, 그룹별 2차원 배열)에 덜 민감하게 어디에 있든 찾습니다.
 pub fn parse_funnel(v: &Value, steps: usize) -> Result<Vec<f64>, String> {
+    // 그 기간에 퍼널에 들어온 사용자가 없으면 Amplitude 는 "data": [] 로 답함 → 모두 0
+    if v.get("data")
+        .and_then(Value::as_array)
+        .is_some_and(Vec::is_empty)
+    {
+        return Ok(vec![0.0; steps]);
+    }
     let raw = find_key(v, "cumulativeRaw")
         .and_then(Value::as_array)
         .ok_or_else(|| {
@@ -341,5 +348,8 @@ mod tests {
         assert_eq!(parse_funnel(&obj, 2).unwrap(), vec![5.0, 2.0]);
         let nested = json!({"data": [{"meta": {}, "cumulativeRaw": [[7, 3]]}]});
         assert_eq!(parse_funnel(&nested, 3).unwrap(), vec![7.0, 3.0, 0.0]);
+        // 실제 운영에서 본 응답: 그 기간 퍼널 사용자가 없으면 data 가 빈 배열
+        let empty = json!({"allQueriesCached": true, "backend": "novaV2", "data": []});
+        assert_eq!(parse_funnel(&empty, 3).unwrap(), vec![0.0, 0.0, 0.0]);
     }
 }
