@@ -89,6 +89,15 @@ export interface HospitalsNearbyResponse {
   hospitals: HospitalOut[];
 }
 
+/** GET /api/hospitals/emergency 응답 (routes/hospitals.rs EmergencyResponse) — 응급 호출 */
+export interface EmergencyResponse {
+  count: number;
+  radius_m: number;
+  /** 이름 기준 추정이라 전화로 확인하라는 안내 */
+  notice: string;
+  hospitals: HospitalOut[];
+}
+
 /** GET /api/stats 응답 (routes/stats.rs ServiceStats) — 랜딩 페이지 숫자 */
 export interface ServiceStats {
   hospitals: number;

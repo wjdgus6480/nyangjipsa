@@ -259,3 +259,30 @@ html { scroll-behavior: smooth; }
 
 /* 홈 챗봇: 답변에 참고한 자료 출처 */
 .site .reply__sources a { color: inherit; text-decoration: underline; }
+
+/* 응급 호출 (헤더 "홈" 오른쪽) — features/emergency/EmergencyCall.tsx */
+.site .nav__item { display: contents; }
+.site .nav__emergency { display: inline-flex; align-items: center; gap: 4px; padding: 7px 14px; border: 0; border-radius: 999px; background: #e5484d; color: #fff; font: inherit; font-weight: 700; cursor: pointer; box-shadow: 0 4px 12px rgba(229, 72, 77, .28); transition: background .2s, transform .1s; }
+.site .nav__emergency:hover { background: #cf3238; }
+.site .nav__emergency:active { transform: scale(.97); }
+.site .nav__emergency:focus-visible { outline: 3px solid var(--navy); outline-offset: 2px; }
+.site .emergency .modal__panel h3 { color: #c62a2f; }
+.site .emergency__tip { margin: 6px 0 14px; padding: 10px 12px; border-radius: var(--radius-sm); background: #fff1f1; color: #8a1f23; font-size: .88rem; }
+.site .emergency__status { color: var(--navy); }
+.site .emergency__status p { margin: 0 0 12px; }
+.site .emergency__card { border: 1px solid var(--gray-100, #e7edf3); border-radius: 16px; padding: 14px 16px; }
+.site .emergency__card.is-main { border: 2px solid #e5484d; background: #fffafa; }
+.site .emergency__label { display: inline-block; margin-bottom: 6px; padding: 2px 10px; border-radius: 999px; background: #e5484d; color: #fff; font-size: .75rem; font-weight: 700; }
+.site .emergency__name { display: flex; flex-wrap: wrap; align-items: center; gap: 6px; }
+.site .emergency__name strong { font-size: 1.08rem; color: var(--navy); }
+.site .emergency__card.is-main .emergency__name strong { font-size: 1.22rem; }
+.site .emergency__badge { padding: 1px 8px; border-radius: 999px; background: var(--sky-soft); color: var(--navy); font-size: .74rem; font-weight: 700; }
+.site .emergency__meta { margin-top: 3px; font-size: .88rem; color: var(--gray-500, #5b6b80); }
+.site .emergency__actions { display: flex; gap: 8px; margin-top: 10px; flex-wrap: wrap; }
+.site .btn--emergency { background: #e5484d; color: #fff; }
+.site .btn--emergency:hover { background: #cf3238; }
+.site .emergency__list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.site .emergency__notice { margin: 14px 0 0; font-size: .78rem; color: var(--gray-500, #5b6b80); }
+@media (max-width: 860px) {
+  .site .nav__emergency { justify-content: center; margin: 4px 0; }
+}

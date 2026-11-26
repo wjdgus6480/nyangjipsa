@@ -5,6 +5,7 @@ import { ROUTES, SITE } from "../../services/config/site";
 import { useAuth } from "../../features/auth/authContext";
 import { scrollToSection } from "../common/scroll";
 import { useToast } from "../ui/Toast";
+import { EmergencyCall } from "../../features/emergency/EmergencyCall";
 
 type MenuItem = { label: string; target: string } | { label: string; to: string };
 
@@ -64,13 +65,17 @@ export function Header() {
             <span /><span /><span />
           </button>
           <nav className={"nav" + (open ? " open" : "")} aria-label="주요 메뉴">
-            {MENU.map((m) =>
-              "to" in m ? (
-                <Link key={m.label} className="nav__link" to={m.to}>{m.label}</Link>
-              ) : (
-                <a key={m.label} className="nav__link" href={`#${m.target}`} onClick={(e) => goSection(e, m.target)}>{m.label}</a>
-              ),
-            )}
+            {MENU.map((m, i) => (
+              <span key={m.label} className="nav__item">
+                {"to" in m ? (
+                  <Link className="nav__link" to={m.to}>{m.label}</Link>
+                ) : (
+                  <a className="nav__link" href={`#${m.target}`} onClick={(e) => goSection(e, m.target)}>{m.label}</a>
+                )}
+                {/* 응급 호출: "홈" 바로 오른쪽 */}
+                {i === 0 && <EmergencyCall onOpen={() => setOpen(false)} />}
+              </span>
+            ))}
             {user?.status === "active" ? (
               <>
                 {user.role === "admin" && (

@@ -9,7 +9,7 @@
 // - 길찾기: 고른 병원의 "길찾기" → RoutePanel (백엔드 /api/route, 도보·대중교통) → 지도에 경로 선
 // - 위쪽 탭: [길찾기] 가격 없이 병원·길찾기만 / [가격 조회] 가격을 보여 주고, 병원을 골라 지도에 가격표(조회하기)·비교표(비교하기)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
-import { Link, useSearchParams } from "react-router";
+import { Link, useLocation, useSearchParams } from "react-router";
 import "../../styles/map.css";
 import "../../styles/chatbot.css";
 import "../../styles/region-layer.css";
@@ -34,6 +34,7 @@ import { MAX_COMPARE } from "./priceCompareCore";
 import type { RouteLine } from "./routeCore";
 import { requestMyLocation } from "../chatbot/geolocation";
 import type { LatLon } from "../chatbot/chatCore";
+import type { EmergencyRouteState } from "../emergency/EmergencyCall";
 
 const RADIUS_OPTIONS: { value: RadiusOption; label: string }[] = [
   { value: "auto", label: "지도 화면 기준" },
@@ -54,6 +55,10 @@ const MISSING_KEY =
 export function MapPage() {
   useDocumentTitle("냥집사 · 고양이 동물병원 지도");
   const [params] = useSearchParams();
+  // 응급 호출에서 "길찾기 보기"로 왔으면: 내 위치(화면 이동 상태로만 받음)와 함께 바로 길찾기
+  const navState = useLocation().state as Partial<EmergencyRouteState> | null;
+  // 화면에 들어올 때 한 번만 읽음 (이후 바뀌지 않음)
+  const [fromEmergency] = useState<LatLon | null>(() => (navState?.emergencyRoute ? (navState.myLocation ?? null) : null));
   const mapEl = useRef<HTMLDivElement>(null);
   const hmRef = useRef<HospitalMap | null>(null);
 
@@ -66,10 +71,13 @@ export function MapPage() {
   const [selectedPlace, setSelectedPlace] = useState<NearbyPlace | null>(null);
   const [region, setRegion] = useState<RegionBarState>({ level: null, here: null, sel: null });
   const [loaded, setLoaded] = useState(false);
-  const [myLocation, setMyLocation] = useState<LatLon | null>(null);
+  const [myLocation, setMyLocation] = useState<LatLon | null>(fromEmergency);
   const [locating, setLocating] = useState(false);
   /** 길찾기 패널이 열린 병원 (actionKey). 다른 병원을 고르면 자동으로 닫힘 */
-  const [routeFor, setRouteFor] = useState<string | null>(null);
+  const [routeFor, setRouteFor] = useState<string | null>(() => {
+    const focus = parseMapFocus(params);
+    return fromEmergency && focus ? focus.lat + "," + focus.lon : null;
+  });
   const [authFailed, setAuthFailed] = useState(false);
   /** 위쪽 탭. 가격은 가격 조회 탭에서만 받고 보여 줌 */
   const [tab, setTab] = useState<MapTab>("route");
@@ -182,6 +190,8 @@ export function MapPage() {
         setLoaded(true);
         const focus = parseMapFocus(paramsRef.current);
         if (focus) hm.focus(focus);
+        // 응급 호출에서 왔으면 내 위치 점도 (경로는 길찾기 패널이 그리며 화면을 맞춤)
+        if (fromEmergency) hm.showMyLocation(fromEmergency, { move: false });
       })
       .catch((e: Error) => {
         if (!cancelled) setStatus(e.message);
@@ -193,7 +203,7 @@ export function MapPage() {
       if (hmRef.current === hm) hmRef.current = null;
       setLoaded(false);
     };
-  }, [selectPlace]);
+  }, [selectPlace, fromEmergency]);
 
   // 필터·탭 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도, 탭이 바뀌면 가격 포함 여부도)
   useEffect(() => {
@@ -327,7 +337,7 @@ export function MapPage() {
               }}
             />
           )}
-          {actionHospital && routeOpen && !withFees && (
+          {actionHospital && routeOpen && !withFees && (loaded || authFailed || !NAVER_MAP_CLIENT_ID) && (
             <RoutePanel
               hospital={actionHospital}
               myLocation={myLocation}
