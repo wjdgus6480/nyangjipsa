@@ -132,8 +132,10 @@ pub struct TopHospital {
 #[derive(Debug, Clone, Serialize)]
 pub struct AmplitudeData {
     pub metrics: Vec<MetricSeries>,
-    /// 퍼널 단계별 누적 사용자 (FUNNEL_EVENTS 순서)
+    /// 퍼널 단계별 누적 사용자 (FUNNEL_EVENTS 순서). 퍼널 조회만 실패하면 비어 있고 funnel_error 에 이유
     pub funnel: Vec<FunnelStep>,
+    /// 퍼널 조회 실패 (나머지 대시보드는 그대로 보여 줌)
+    pub funnel_error: Option<String>,
     /// 첫 화면(landing_viewed) 사용자의 utm_source 별 고유 사용자 (현재 기간). `(none)` → `direct`
     pub sources: Vec<LabeledValue>,
     /// 병원 연결(hospital_clicked) 횟수 상위 병원 (현재 기간)
@@ -389,17 +391,29 @@ async fn load_amplitude(
                 .is_some_and(|m| m.current > 0.0 || m.previous > 0.0)
         })
         .count();
-    let (mut fun_cur, mut fun_prev) = if reach == 0 {
-        (Vec::new(), Vec::new())
+    // 퍼널 조회가 실패해도 대시보드 전체를 오류로 만들지 않고 퍼널 칸만 비움
+    let funnels = if reach == 0 {
+        Ok((Vec::new(), Vec::new()))
     } else {
         let steps = &FUNNEL_EVENTS[..reach];
-        (
-            client.funnel(steps, p.start, p.end).await?,
-            client.funnel(steps, p.prev_start, p.prev_end).await?,
-        )
+        async {
+            Ok::<_, String>((
+                client.funnel(steps, p.start, p.end).await?,
+                client.funnel(steps, p.prev_start, p.prev_end).await?,
+            ))
+        }
+        .await
     };
-    fun_cur.resize(FUNNEL_EVENTS.len(), 0.0);
-    fun_prev.resize(FUNNEL_EVENTS.len(), 0.0);
+    let (funnel_ok, funnel_error) = match funnels {
+        Ok(f) => (Some(f), None),
+        Err(detail) => {
+            tracing::warn!(%detail, "Amplitude 퍼널 조회 실패 (나머지는 표시)");
+            (
+                None,
+                Some("퍼널 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요".to_string()),
+            )
+        }
+    };
     let hospitals = client
         .segmentation(
             "hospital_clicked",
@@ -418,15 +432,22 @@ async fn load_amplitude(
             Some("utm_source"),
         )
         .await;
-    let funnel = FUNNEL_EVENTS
-        .iter()
-        .enumerate()
-        .map(|(i, key)| FunnelStep {
-            key,
-            current: fun_cur[i],
-            previous: fun_prev[i],
-        })
-        .collect();
+    let funnel = match funnel_ok {
+        None => Vec::new(),
+        Some((mut fun_cur, mut fun_prev)) => {
+            fun_cur.resize(FUNNEL_EVENTS.len(), 0.0);
+            fun_prev.resize(FUNNEL_EVENTS.len(), 0.0);
+            FUNNEL_EVENTS
+                .iter()
+                .enumerate()
+                .map(|(i, key)| FunnelStep {
+                    key,
+                    current: fun_cur[i],
+                    previous: fun_prev[i],
+                })
+                .collect()
+        }
+    };
 
     let sources = group_values(&sources?)
         .into_iter()
@@ -478,6 +499,7 @@ async fn load_amplitude(
     Ok(AmplitudeData {
         metrics,
         funnel,
+        funnel_error,
         sources,
         top_hospitals,
     })

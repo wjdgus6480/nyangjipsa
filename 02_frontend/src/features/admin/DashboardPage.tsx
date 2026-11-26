@@ -270,6 +270,8 @@ function FunnelCard({ d }: { d: AdminDashboard }) {
     <Card title="사용자 여정 퍼널" desc="방문부터 공유까지, 순서대로 진행한 사람 수와 단계별 전환율">
       {!d.amplitude.data ? (
         <EmptyChart>{notConnectedText(d)}</EmptyChart>
+      ) : d.amplitude.data.funnel_error ? (
+        <EmptyChart>{d.amplitude.data.funnel_error}</EmptyChart>
       ) : first === 0 ? (
         <EmptyChart>이 기간에 방문 기록이 없어요</EmptyChart>
       ) : (

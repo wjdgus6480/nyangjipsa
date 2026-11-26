@@ -122,6 +122,20 @@ describe("관리자 접근", () => {
     expect(calls.some((c) => c.url === "/api/admin/dashboard?period=30d")).toBe(true);
   });
 
+  test("퍼널만 실패하면 퍼널 칸에만 안내, 나머지 지표는 그대로", async () => {
+    document.cookie = "nj_auth=1; Path=/";
+    const d = dashboard(true);
+    d.amplitude.data!.funnel = [];
+    d.amplitude.data!.funnel_error = "퍼널 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요";
+    mockFetch((url) =>
+      url.pathname === "/api/auth/me" ? { json: { user: user("admin") } } : url.pathname === "/api/admin/dashboard" ? { json: d } : { json: {} },
+    );
+    at("/admin");
+    expect(await screen.findByText("퍼널 데이터를 가져오지 못했습니다. 잠시 후 다시 시도해 주세요")).toBeInTheDocument();
+    expect(screen.queryByText(/Amplitude 데이터를 가져오지 못했어요/)).toBeNull();
+    expect(screen.getByText("냥냥동물병원")).toBeInTheDocument();
+  });
+
   test("Amplitude 미연결이면 가짜 숫자 없이 안내 + DB 숫자만", async () => {
     login("admin", false);
     at("/admin");
