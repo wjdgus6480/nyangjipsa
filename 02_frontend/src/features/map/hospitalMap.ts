@@ -61,6 +61,8 @@ export class HospitalMap implements MapBridge {
   private readonly listeners: naver.maps.MapEventListener[] = [];
   private places: NearbyPlace[] = [];
   private selectedId: number | null = null;
+  /** 고른 업소. 확대·축소나 이동으로 검색 결과에서 빠져도 핀을 지우지 않고 남겨 둠 (길찾기 도착지를 계속 보이게) */
+  private selectedPlace: NearbyPlace | null = null;
   private regions: RegionLayer | null = null;
   private region: RegionBarState = { level: null, here: null, sel: null };
   private timer: ReturnType<typeof setTimeout> | undefined;
@@ -218,12 +220,16 @@ export class HospitalMap implements MapBridge {
   private render(items: NearbyPlace[], { pins = true } = {}) {
     this.places = items;
     const keep = new Set(pins ? items.map((p) => p.id) : []);
+    // 고른 업소 핀은 검색 결과·배율과 상관없이 남김
+    const sel = this.selectedPlace;
+    if (sel) keep.add(sel.id);
     for (const [id, m] of this.markers)
       if (!keep.has(id)) {
         m.setMap(null);
         this.markers.delete(id);
       }
-    for (const p of pins ? items : []) {
+    const show = pins ? items : [];
+    for (const p of sel && !show.some((x) => x.id === sel.id) ? [...show, sel] : show) {
       if (this.markers.has(p.id)) continue;
       const m = new naver.maps.Marker({ position: toLatLng(p), map: this.map, title: p.name, icon: pinIcon(p.id === this.selectedId) });
       this.listeners.push(naver.maps.Event.addListener(m, "click", () => this.select(p.id, false)));
@@ -233,9 +239,11 @@ export class HospitalMap implements MapBridge {
   }
 
   select(id: number, pan: boolean) {
-    const p = this.places.find((x) => x.id === id),
+    // 목록에서 빠진 고른 업소의 핀을 눌러도 정보창이 열리게 기억해 둔 업소도 찾음
+    const p = this.places.find((x) => x.id === id) ?? (this.selectedPlace?.id === id ? this.selectedPlace : undefined),
       m = this.markers.get(id);
     if (!p) return;
+    this.selectedPlace = p;
     // 핀을 숨긴 배율(시도·시군구)에서 목록을 누르면 그 업소로 확대 → 핀이 보이면 선택 표시
     if (!m) {
       this.selectedId = id;
@@ -358,6 +366,13 @@ export class HospitalMap implements MapBridge {
       }
     }
     this.map.fitBounds(new naver.maps.LatLngBounds(new naver.maps.LatLng(minLat, minLon), new naver.maps.LatLng(maxLat, maxLon)), { top: 60, right: 60, bottom: 60, left: 60 });
+  }
+
+  /** 길찾기 단계 위치로 확대해서 이동 (길을 자세히 보도록) */
+  focusPoint(p: LatLon) {
+    if (this.destroyed || !naverReady()) return;
+    this.map.setZoom(Math.max(this.map.getZoom(), 17), false);
+    this.map.panTo(toLatLng(p));
   }
 
   clearRoute() {

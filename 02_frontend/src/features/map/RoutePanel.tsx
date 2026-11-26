@@ -10,13 +10,14 @@ import type { RouteOption, RouteResponse } from "../../types/api";
 import type { ActionHospital } from "../hospital/HospitalActions";
 import { routeUrl } from "../hospital/hospitalLinks";
 import { RouteEndpoints } from "./RouteEndpoints";
+import { RouteTimeline } from "./RouteTimeline";
 import {
   LINE_STYLE,
   endpointLabel,
   resolveEndpoint,
   routeLines,
-  stepText,
   summary,
+  timeline,
   type Endpoint,
   type RouteLine,
 } from "./routeCore";
@@ -35,6 +36,8 @@ interface Props {
   /** 내 위치 권한 요청 (성공하면 true) */
   onLocate(): Promise<boolean>;
   onDraw(lines: RouteLine[], ends?: RouteEnds): void;
+  /** 타임라인 단계를 누르면 지도를 그 위치로 */
+  onFocusPoint?(p: LatLon): void;
   onClose(): void;
 }
 
@@ -54,7 +57,7 @@ const TAG_CLASS: Record<string, string> = { "가장 빠름": "fast", "환승 없
 
 const coordKey = (p: LatLon) => `${p.lat.toFixed(6)},${p.lon.toFixed(6)}`;
 
-export function RoutePanel({ hospital, myLocation, onLocate, onDraw, onClose }: Props) {
+export function RoutePanel({ hospital, myLocation, onLocate, onDraw, onFocusPoint, onClose }: Props) {
   const [mode, setMode] = useState<Mode>("walk");
   const [from, setFrom] = useState<Endpoint>({ kind: "me" });
   const [to, setTo] = useState<Endpoint>({ kind: "hospital" });
@@ -62,6 +65,8 @@ export function RoutePanel({ hospital, myLocation, onLocate, onDraw, onClose }: 
   const [pick, setPick] = useState({ key: "", index: 0 });
   const [locating, setLocating] = useState(false);
   const [locateError, setLocateError] = useState<string | null>(null);
+  /** 타임라인에서 고른 단계 (어느 경로의 몇 번째인지) */
+  const [activeStep, setActiveStep] = useState<{ key: string; index: number } | null>(null);
 
   const ctx = useMemo(() => ({ me: myLocation, hospital: { lat: hospital.lat, lon: hospital.lon } }), [myLocation, hospital.lat, hospital.lon]);
   const fromPt = resolveEndpoint(from, ctx);
@@ -214,17 +219,16 @@ export function RoutePanel({ hospital, myLocation, onLocate, onDraw, onClose }: 
           {route && (
             <>
               {state.data.routes.length === 1 && <p className="rp-summary">{summary(route)}</p>}
-              <ol className="rp-steps">
-                {route.access_walk && route.access_walk.distance_m > 0 && (
-                  <li>{`정류장까지 걷기 (${Math.round(route.access_walk.time_s / 60)}분${route.access_walk.estimated ? ", 추정" : ""})`}</li>
-                )}
-                {route.steps.map((s, i) => (
-                  <li key={i}>{stepText(s)}</li>
-                ))}
-                {route.egress_walk && route.egress_walk.distance_m > 0 && (
-                  <li>{`도착지까지 걷기 (${Math.round(route.egress_walk.time_s / 60)}분${route.egress_walk.estimated ? ", 추정" : ""})`}</li>
-                )}
-              </ol>
+              {fromPt && toPt && (
+                <RouteTimeline
+                  items={timeline(route, { from: fromPt, to: toPt, fromName: endpointLabel(from, hospital.name), toName })}
+                  activeIndex={activeStep?.key === detailKey ? activeStep.index : null}
+                  onFocus={(index, at) => {
+                    setActiveStep({ key: detailKey, index });
+                    onFocusPoint?.(at);
+                  }}
+                />
+              )}
             </>
           )}
           <ul className="rp-legend" aria-label="지도 선 모양">
