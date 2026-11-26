@@ -28,6 +28,7 @@ pub mod db;
 pub mod error;
 pub mod fees;
 pub mod geocode;
+pub mod health;
 pub mod ingest;
 pub mod public_data;
 pub mod region;

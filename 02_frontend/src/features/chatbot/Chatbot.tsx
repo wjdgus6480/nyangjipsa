@@ -14,6 +14,7 @@ import type { AssistantMessage, ChatMessage, Comparison, LatLon, PlaceCard } fro
 import type { FocusCard, MapBridge } from "./mapBridge";
 import { CloseIcon, PhoneIcon, PinIcon, ResetIcon, SendIcon } from "./icons";
 import { requestMyLocation } from "./geolocation";
+import { SourceList } from "./SourceList";
 import { createConsultTracker } from "../../services/analytics/consult";
 
 const SEARCH_RADIUS_M = 3000; // 백엔드 CHAT_RADIUS_M 과 동일
@@ -415,6 +416,8 @@ function AiMessage({ m, isLast, busy, logo, canFocus, hasMapCenter, onChoice, on
             ))}
           </div>
         )}
+
+        <SourceList sources={m.sources} className="nj-note nj-sources" />
 
         {m.disclaimer && (m.cards.length > 0 || isLast) && <div className="nj-note">{m.disclaimer}</div>}
       </div>

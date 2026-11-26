@@ -256,3 +256,6 @@ html { scroll-behavior: smooth; }
   .site .section__mascot { animation: none; }
   .site .map-art__pin { animation: none; }
 }
+
+/* 홈 챗봇: 답변에 참고한 자료 출처 */
+.site .reply__sources a { color: inherit; text-decoration: underline; }

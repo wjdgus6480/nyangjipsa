@@ -2,6 +2,7 @@
 // - 백엔드 호출 형식 만들기, 응답 정리, 병원 결과 보정, 표시용 포맷
 // - 병원·장소 정보는 항상 서버(DB) 응답만 사용합니다. 여기서 만들어 내지 않습니다.
 import type {
+  ChatSource,
   ChatChoice,
   ChatHistoryItem,
   ChatKeyword,
@@ -92,7 +93,22 @@ export interface AssistantMessage {
   cards: PlaceCard[];
   needsLocation: boolean;
   fallback: boolean;
+  /** 답변에 참고한 자료 출처 */
+  sources: ChatSource[];
   disclaimer: string | null;
+}
+
+/** 출처 목록 정리: 이름이 있는 것만, 링크는 http(s) 만 남김 */
+export function toSources(raw: unknown): ChatSource[] {
+  if (!Array.isArray(raw)) return [];
+  return raw
+    .filter((s): s is ChatSource => !!s && typeof s.name === "string" && s.name.length > 0)
+    .map((s) => ({
+      name: s.name,
+      url: typeof s.url === "string" && /^https?:\/\//.test(s.url) ? s.url : null,
+      license: typeof s.license === "string" ? s.license : null,
+      kind: typeof s.kind === "string" ? s.kind : "참고 자료",
+    }));
 }
 
 export type ChatMessage = UserMessage | AssistantMessage;
@@ -230,6 +246,7 @@ export function toAssistantMessage(resp: Partial<ChatResponse>): AssistantMessag
     cards: comparison ? toCards({ places: resp.places }) : toCards(resp),
     needsLocation: !!resp.needs_location,
     fallback: !!resp.fallback,
+    sources: toSources(resp.sources),
     disclaimer: resp.disclaimer || null,
   };
 }

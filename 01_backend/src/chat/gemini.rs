@@ -28,6 +28,15 @@ pub enum GeminiError {
     Parse(String),
 }
 
+/// 호출 한 번의 사용량 (기록용). 토큰 수는 Gemini 가 알려줄 때만 채워집니다.
+#[derive(Debug, Clone, Default)]
+pub struct Usage {
+    /// 실제로 답한 모델 (보조 모델로 넘어갔으면 보조 모델)
+    pub model: String,
+    pub prompt_tokens: Option<i32>,
+    pub output_tokens: Option<i32>,
+}
+
 /// 대화 한 턴. role 은 "user" 또는 "model"
 #[derive(Debug, Clone)]
 pub struct Turn {
@@ -79,6 +88,18 @@ impl GeminiClient {
         turns: &[Turn],
         schema: Value,
     ) -> Result<T, GeminiError> {
+        self.generate_json_with_usage(system, turns, schema)
+            .await
+            .map(|(v, _)| v)
+    }
+
+    /// generate_json + 사용량(모델·토큰 수)
+    pub async fn generate_json_with_usage<T: DeserializeOwned>(
+        &self,
+        system: &str,
+        turns: &[Turn],
+        schema: Value,
+    ) -> Result<(T, Usage), GeminiError> {
         let contents: Vec<Value> = turns
             .iter()
             .map(|t| json!({ "role": t.role, "parts": [{ "text": t.text }] }))
@@ -94,7 +115,7 @@ impl GeminiClient {
             }
         });
 
-        let text = match self.try_model(&self.model, &body).await {
+        let (text, usage) = match self.try_model(&self.model, &body).await {
             Ok(t) => t,
             Err(primary_err) => match &self.fallback_model {
                 Some(fb) => {
@@ -104,11 +125,12 @@ impl GeminiClient {
                 None => return Err(primary_err),
             },
         };
-        serde_json::from_str(&text).map_err(|e| GeminiError::Parse(e.to_string()))
+        let value = serde_json::from_str(&text).map_err(|e| GeminiError::Parse(e.to_string()))?;
+        Ok((value, usage))
     }
 
     /// 한 모델에 요청. 일시 오류(5xx)면 한 번만 재시도합니다.
-    async fn try_model(&self, model: &str, body: &Value) -> Result<String, GeminiError> {
+    async fn try_model(&self, model: &str, body: &Value) -> Result<(String, Usage), GeminiError> {
         match self.send(model, body).await {
             Err(GeminiError::Unavailable(e)) => {
                 tracing::warn!("Gemini({model}) 일시 오류, 1회 재시도: {e}");
@@ -119,8 +141,8 @@ impl GeminiClient {
         }
     }
 
-    /// 요청 1회. 성공하면 모델이 만든 텍스트(JSON 문자열)를 돌려줍니다.
-    async fn send(&self, model: &str, body: &Value) -> Result<String, GeminiError> {
+    /// 요청 1회. 성공하면 모델이 만든 텍스트(JSON 문자열)와 사용량을 돌려줍니다.
+    async fn send(&self, model: &str, body: &Value) -> Result<(String, Usage), GeminiError> {
         let url = format!("{}/v1beta/models/{}:generateContent", self.base_url, model);
         let resp = self
             .http
@@ -146,9 +168,19 @@ impl GeminiClient {
             .json()
             .await
             .map_err(|e| GeminiError::Parse(e.without_url().to_string()))?;
+        let tokens = |k: &str| {
+            v["usageMetadata"][k]
+                .as_i64()
+                .and_then(|n| i32::try_from(n).ok())
+        };
+        let usage = Usage {
+            model: model.to_owned(),
+            prompt_tokens: tokens("promptTokenCount"),
+            output_tokens: tokens("candidatesTokenCount"),
+        };
         v["candidates"][0]["content"]["parts"][0]["text"]
             .as_str()
-            .map(String::from)
+            .map(|t| (t.to_owned(), usage))
             .ok_or_else(|| {
                 GeminiError::Parse("응답에 텍스트가 없습니다(차단되었거나 비어 있음)".into())
             })

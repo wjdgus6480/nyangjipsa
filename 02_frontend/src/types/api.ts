@@ -191,7 +191,22 @@ export interface ChatResponse {
   price_comparison?: PriceComparison;
   needs_location: boolean;
   fallback: boolean;
+  /** 서버 규칙으로 분류한 질문 유형 (emergency / symptom / disease / vaccine_checkup / nutrition / behavior / care) */
+  question_type?: string;
+  /** 즉시 진료가 필요할 수 있는 신호가 있으면 true */
+  emergency?: boolean;
+  /** 답변에 참고한 자료 출처 (DB 에서 찾은 것만, 없으면 생략) */
+  sources?: ChatSource[];
   disclaimer: string;
+}
+
+/** health::SourceRef */
+export interface ChatSource {
+  name: string;
+  url: string | null;
+  license: string | null;
+  /** 실제 임상 사례 / 일반 Q&A / 공식 지침 */
+  kind: string;
 }
 
 /** error.rs AppError → { "error": "…" } */
