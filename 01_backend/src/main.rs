@@ -111,6 +111,17 @@ async fn main() -> anyhow::Result<()> {
         ),
     }
 
+    // 콘텐츠 스튜디오 Google Sheets 조회 (GAS 웹앱 주소 + 비밀값이 모두 있을 때만). 주소·비밀값은 로그에 남기지 않음
+    match (&config.gas_webapp_url, &config.gas_webapp_secret) {
+        (Some(url), Some(secret)) => {
+            state = state.with_gas(nyangjipsa_api::gas::GasClient::new(url, secret)?);
+            tracing::info!("콘텐츠 스튜디오 Google Sheets 연동 켜짐");
+        }
+        _ => tracing::info!(
+            "콘텐츠 스튜디오 Google Sheets 연동 꺼짐 (GAS_WEBAPP_URL·GAS_WEBAPP_SECRET 없음)"
+        ),
+    }
+
     // 회원 인증 (운영에서 위험한 설정 — APP_BASE_URL 없음, MAIL_MODE=log 등 — 이면 시작하지 않음)
     let auth = nyangjipsa_api::auth::AuthService::from_env(&config.auth, config.is_development())
         .map_err(anyhow::Error::msg)

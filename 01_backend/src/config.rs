@@ -34,6 +34,10 @@ pub struct Config {
     pub amplitude_secret_key: Option<String>,
     /// Amplitude 조회 주소. 비우면 미국(https://amplitude.com), EU 는 https://analytics.eu.amplitude.com
     pub amplitude_dashboard_url: Option<String>,
+    /// 콘텐츠 스튜디오가 부르는 Google Apps Script 웹앱 주소 (`.../exec`). 서버 전용
+    pub gas_webapp_url: Option<String>,
+    /// GAS 웹앱과 나눠 가진 비밀값 (GAS 스크립트 속성 `CONTENT_STUDIO_SECRET` 과 같은 값). 서버 전용
+    pub gas_webapp_secret: Option<String>,
     /// 회원 인증 (세션·메일·카카오 로그인)
     pub auth: AuthEnv,
 }
@@ -235,6 +239,8 @@ impl Config {
             amplitude_api_key: optional("AMPLITUDE_API_KEY"),
             amplitude_secret_key: optional("AMPLITUDE_SECRET_KEY"),
             amplitude_dashboard_url: optional("AMPLITUDE_DASHBOARD_URL"),
+            gas_webapp_url: optional("GAS_WEBAPP_URL"),
+            gas_webapp_secret: optional("GAS_WEBAPP_SECRET"),
             auth: AuthEnv::from_env()?,
         })
     }
@@ -275,6 +281,9 @@ impl fmt::Debug for Config {
             .field("amplitude_api_key", &hidden(&self.amplitude_api_key))
             .field("amplitude_secret", &hidden(&self.amplitude_secret_key))
             .field("amplitude_dashboard_url", &self.amplitude_dashboard_url)
+            // 웹앱 주소도 아는 사람만 호출할 수 있어야 하므로 숨김
+            .field("gas_webapp_url", &hidden(&self.gas_webapp_url))
+            .field("gas_webapp_secret", &hidden(&self.gas_webapp_secret))
             .field("auth", &self.auth)
             .finish()
     }
@@ -322,6 +331,8 @@ mod tests {
             amplitude_api_key: Some("amp_key_secret".into()),
             amplitude_secret_key: Some("amp_secret_secret".into()),
             amplitude_dashboard_url: None,
+            gas_webapp_url: Some("https://script.google.com/macros/s/gas_url_secret/exec".into()),
+            gas_webapp_secret: Some("gas_shared_secret".into()),
             auth: AuthEnv {
                 smtp_username: Some("smtp_user_secret".into()),
                 smtp_password: Some("smtp_pw_secret".into()),
@@ -345,5 +356,7 @@ mod tests {
         assert!(!printed.contains("google_pw_secret"));
         assert!(!printed.contains("amp_key_secret"));
         assert!(!printed.contains("amp_secret_secret"));
+        assert!(!printed.contains("gas_url_secret"));
+        assert!(!printed.contains("gas_shared_secret"));
     }
 }

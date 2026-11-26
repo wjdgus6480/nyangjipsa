@@ -587,3 +587,30 @@ export interface AdminGrowth {
     retention: { cohorts: { date: string; new: CohortCells; returning: CohortCells }[]; error: string | null };
   } | null;
 }
+
+// ---------- 콘텐츠 스튜디오 Google Sheets (GET /api/admin/content/*, 01_backend/src/routes/admin_content.rs) ----------
+export interface SheetInfo {
+  name: string;
+  rows: number;
+  cols: number;
+}
+
+export interface AdminSheetList {
+  sheets: SheetInfo[];
+  /** 서버가 GAS 에서 받아 온 시각 (UTC ISO) */
+  fetched_at: string;
+}
+
+/** 시트 탭 내용 — 화면에 보이는 문자열 그대로 (최대 500행 × 30열, 셀 2000자) */
+export interface SheetTable {
+  name: string;
+  total_rows: number;
+  total_cols: number;
+  rows: string[][];
+  truncated: boolean;
+}
+
+export interface AdminSheet {
+  sheet: SheetTable;
+  fetched_at: string;
+}
