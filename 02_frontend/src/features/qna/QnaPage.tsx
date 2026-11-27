@@ -1,9 +1,9 @@
 // QnA 페이지 (임시 틀): 자주 묻는 질문 · 건강관리 가이드 · 1:1 문의
-// - 위쪽 탭으로 세 칸 사이를 이동 (같은 페이지 안 스크롤)
+// - 위쪽 탭을 누르면 그 칸의 내용만 보임 (스크롤 이동 없음). 고른 탭은 주소(?tab=faq|guide|inquiry)에 남아 새로고침·공유해도 유지
 // - 건강관리 가이드는 메인 화면과 같은 내용·상세 창을 씀
 // - 1:1 문의는 아직 보내지지 않음 (칸만 준비, "준비 중" 안내). 입력값은 어디에도 보내지 않음
-import { Fragment, useState, type FormEvent } from "react";
-import { useNavigate } from "react-router";
+import { Fragment, type FormEvent } from "react";
+import { useNavigate, useSearchParams } from "react-router";
 import "../../styles/qna.css";
 import { SiteLayout } from "../../components/layout/SiteLayout";
 import { useModal } from "../../components/ui/Modal";
@@ -14,10 +14,11 @@ import { GUIDES } from "../home/content";
 import { HEALTH_QUESTIONS, INQUIRY_TYPES, SERVICE_FAQ } from "./qnaContent";
 
 const SECTIONS = [
-  { id: "qna-faq", label: "자주 묻는 질문" },
-  { id: "qna-guide", label: "건강관리 가이드" },
-  { id: "qna-inquiry", label: "1:1 문의" },
+  { tab: "faq", id: "qna-faq", label: "자주 묻는 질문" },
+  { tab: "guide", id: "qna-guide", label: "건강관리 가이드" },
+  { tab: "inquiry", id: "qna-inquiry", label: "1:1 문의" },
 ] as const;
+type QnaTab = (typeof SECTIONS)[number]["tab"];
 
 export function QnaPage() {
   useDocumentTitle("QnA · 냥집사");
@@ -29,11 +30,10 @@ export function QnaPage() {
 }
 
 function QnaSections() {
-  const [active, setActive] = useState<string>(SECTIONS[0].id);
-  const go = (id: string) => {
-    setActive(id);
-    document.getElementById(id)?.scrollIntoView({ behavior: "smooth", block: "start" });
-  };
+  const [params, setParams] = useSearchParams();
+  const active: QnaTab = SECTIONS.find((s) => s.tab === params.get("tab"))?.tab ?? "faq";
+  // 탭 바꾸기: 주소만 바꿈 (뒤로 가기 기록을 쌓지 않음)
+  const go = (tab: QnaTab) => setParams(tab === "faq" ? {} : { tab }, { replace: true });
   return (
     <div className="qna">
       <section className="qna__hero">
@@ -42,18 +42,28 @@ function QnaSections() {
           <span className="eyebrow">QnA</span>
           <h1>무엇을 도와드릴까요?</h1>
           <p>자주 묻는 질문과 건강관리 가이드를 먼저 확인해 보세요. 해결되지 않으면 1:1 문의를 남겨 주세요.</p>
-          <nav className="qna__tabs" aria-label="QnA 메뉴">
+          <div className="qna__tabs" role="tablist" aria-label="QnA 메뉴">
             {SECTIONS.map((s) => (
-              <button key={s.id} type="button" className={active === s.id ? "is-on" : undefined} aria-current={active === s.id ? "true" : undefined} onClick={() => go(s.id)}>
+              <button
+                key={s.tab}
+                type="button"
+                role="tab"
+                id={`${s.id}-tab`}
+                aria-controls={s.id}
+                aria-selected={active === s.tab}
+                className={active === s.tab ? "is-on" : undefined}
+                onClick={() => go(s.tab)}
+              >
                 {s.label}
               </button>
             ))}
-          </nav>
+          </div>
         </div>
       </section>
-      <FaqSection />
-      <GuideSection />
-      <InquirySection />
+      {/* 고른 탭의 내용만 */}
+      {active === "faq" && <FaqSection />}
+      {active === "guide" && <GuideSection />}
+      {active === "inquiry" && <InquirySection />}
     </div>
   );
 }
@@ -61,7 +71,7 @@ function QnaSections() {
 function FaqSection() {
   const navigate = useNavigate();
   return (
-    <section id="qna-faq" className="section qna__section">
+    <section id="qna-faq" className="section qna__section" role="tabpanel" aria-labelledby="qna-faq-tab">
       <div className="container qna__narrow">
         <h2 className="qna__title">자주 묻는 질문</h2>
         <h3 className="qna__sub">서비스 이용</h3>
@@ -124,7 +134,7 @@ function GuideSection() {
     );
   };
   return (
-    <section id="qna-guide" className="section section--soft qna__section">
+    <section id="qna-guide" className="section qna__section" role="tabpanel" aria-labelledby="qna-guide-tab">
       <div className="container">
         <h2 className="qna__title">건강관리 가이드</h2>
         <p className="qna__lead">초보 집사들이 가장 많이 궁금해하는 내용을 모았어요.</p>
@@ -153,7 +163,7 @@ function InquirySection() {
     toast("1:1 문의는 준비 중이에요. 조금만 기다려 주세요.");
   };
   return (
-    <section id="qna-inquiry" className="section qna__section">
+    <section id="qna-inquiry" className="section qna__section" role="tabpanel" aria-labelledby="qna-inquiry-tab">
       <div className="container qna__narrow">
         <h2 className="qna__title">1:1 문의</h2>
         <p className="notice qna__notice">1:1 문의는 준비 중이에요. 곧 문의를 남기고 답변을 받아 볼 수 있게 할게요.</p>

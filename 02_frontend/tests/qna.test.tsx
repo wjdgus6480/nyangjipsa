@@ -23,11 +23,16 @@ describe("QnA", () => {
     expect(within(nav).getByRole("link", { name: "QnA" })).toHaveAttribute("href", "/qna");
   });
 
-  test("세 칸(자주 묻는 질문·건강관리 가이드·1:1 문의)이 있고, 1:1 문의는 준비 중", async () => {
+  test("탭을 누르면 그 칸의 내용만 보인다 (자주 묻는 질문 → 건강관리 가이드 → 1:1 문의)", async () => {
     renderAt("/qna");
     expect(await screen.findByRole("heading", { level: 1, name: "무엇을 도와드릴까요?" })).toBeInTheDocument();
-    const tabs = screen.getByRole("navigation", { name: "QnA 메뉴" });
-    expect(within(tabs).getAllByRole("button").map((b) => b.textContent)).toEqual(["자주 묻는 질문", "건강관리 가이드", "1:1 문의"]);
+    const tabs = screen.getByRole("tablist", { name: "QnA 메뉴" });
+    expect(within(tabs).getAllByRole("tab").map((b) => b.textContent)).toEqual(["자주 묻는 질문", "건강관리 가이드", "1:1 문의"]);
+    const panels = () => screen.getAllByRole("tabpanel").map((p) => p.id);
+
+    // 처음에는 자주 묻는 질문만
+    expect(panels()).toEqual(["qna-faq"]);
+    expect(screen.getByRole("tab", { name: "자주 묻는 질문" })).toHaveAttribute("aria-selected", "true");
 
     // 자주 묻는 질문: 펼치면 답이 보임
     const faq = screen.getByText("진료비는 정확한 가격인가요?").closest("details")!;
@@ -35,15 +40,27 @@ describe("QnA", () => {
     expect(faq).toHaveTextContent("참고 가격(추정치)");
     expect(screen.getByText("고양이가 토를 너무 자주 해요.")).toBeInTheDocument();
 
-    // 건강관리 가이드: 카드를 누르면 상세 창
+    // 건강관리 가이드 탭: 가이드만 (자주 묻는 질문은 사라짐), 카드를 누르면 상세 창
+    fireEvent.click(screen.getByRole("tab", { name: "건강관리 가이드" }));
+    expect(panels()).toEqual(["qna-guide"]);
+    expect(screen.queryByText("진료비는 정확한 가격인가요?")).toBeNull();
     fireEvent.click(screen.getByText("고양이를 처음 데려왔다면 해야 할 일"));
     expect(screen.getByRole("dialog")).toHaveTextContent("첫 며칠");
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
 
-    // 1:1 문의: 칸은 있지만 입력은 막혀 있고, 보내면 준비 중 안내
+    // 1:1 문의 탭: 문의만. 칸은 있지만 입력은 막혀 있고, 보내면 준비 중 안내
+    fireEvent.click(screen.getByRole("tab", { name: "1:1 문의" }));
+    expect(panels()).toEqual(["qna-inquiry"]);
+    expect(screen.queryByText("고양이를 처음 데려왔다면 해야 할 일")).toBeNull();
     const form = screen.getByRole("form", { name: "1:1 문의 (준비 중)" });
     expect(within(form).getByPlaceholderText("문의 제목을 적어 주세요")).toBeDisabled();
     fireEvent.click(within(form).getByRole("button", { name: "문의 보내기 (준비 중)" }));
     expect(await screen.findByText("1:1 문의는 준비 중이에요. 조금만 기다려 주세요.")).toBeInTheDocument();
   });
+});
+
+test("주소에 ?tab=guide 가 있으면 건강관리 가이드 탭으로 열린다", async () => {
+  renderAt("/qna?tab=guide");
+  expect(await screen.findByRole("tab", { name: "건강관리 가이드" })).toHaveAttribute("aria-selected", "true");
+  expect(screen.getAllByRole("tabpanel").map((p) => p.id)).toEqual(["qna-guide"]);
 });
