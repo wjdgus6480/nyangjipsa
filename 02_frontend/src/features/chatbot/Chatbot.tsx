@@ -7,6 +7,7 @@
 // - 병원·장소 정보: 백엔드가 DB 에서 붙여 준 값만 카드로 표시
 import { useCallback, useEffect, useLayoutEffect, useRef, useState, type FormEvent, type KeyboardEvent } from "react";
 import { getNearbyPlaces, postChat } from "../../services/api/endpoints";
+import { ROUTES } from "../../services/config/site";
 import { ApiError, isAbortError } from "../../services/api/client";
 import type { ChatRequest } from "../../types/api";
 import * as C from "./chatCore";
@@ -247,7 +248,14 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
   const panel = (
     <section ref={panelRef} id="nj-panel" className="nj-panel" role="dialog" aria-modal="false" aria-label="냥집사 AI 도우미">
       <header className="nj-head">
-        {logo("냥집사 로고")}
+        {isPage ? (
+          // 챗봇은 라우터 밖에서도 쓰이는 부품이라 일반 링크로 (크게 보기는 단독 화면)
+          <a href={ROUTES.home} className="nj-home" title="냥집사 메인으로" aria-label="냥집사 메인으로">
+            {logo()}
+          </a>
+        ) : (
+          logo("냥집사 로고")
+        )}
         <div className="nj-head-text">
           <h2 className="nj-title">냥집사</h2>
           <div className="nj-state" data-state={stateName}>

@@ -667,10 +667,11 @@ export interface AdminMember {
   status: MemberStatus;
   email_verified: boolean;
   created_at: string;
-  providers: string[];
-  cat_count: number;
-  inquiry_count: number;
-  last_seen_at: string | null;
+  /** 아래 항목은 서버 배포 전(예전 서버)에는 없을 수 있음 */
+  providers?: string[];
+  cat_count?: number;
+  inquiry_count?: number;
+  last_seen_at?: string | null;
 }
 
 export interface AdminMemberList {
