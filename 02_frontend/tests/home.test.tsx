@@ -1,6 +1,6 @@
 // 홈 화면: 레이아웃·네비게이션·모달·토스트·가이드 → 상담 연결
 import { describe, expect, test } from "vitest";
-import { act, fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { App } from "../src/app/App";
 
@@ -12,10 +12,13 @@ const renderHome = () =>
   );
 
 describe("홈 화면", () => {
-  test("기존 섹션 순서대로 표시 (hero → chat → services → guide → hospital-cta)", () => {
+  test("섹션 순서대로 표시 (hero → chat → hospital-cta, 주요 서비스·건강관리 가이드는 메인에서 뺌)", () => {
     const { container } = renderHome();
     const ids = [...container.querySelectorAll("main > div > section")].map((s) => s.id);
-    expect(ids).toEqual(["hero", "chat", "services", "guide", "hospital-cta"]);
+    expect(ids).toEqual(["hero", "chat", "hospital-cta"]);
+    expect(screen.queryByText("초보 집사를 위한 똑똑한 건강관리")).toBeNull();
+    expect(screen.queryByText("처음이라면 이것부터 확인하세요!")).toBeNull();
+    expect(within(screen.getByRole("navigation", { name: "주요 메뉴" })).queryByRole("link", { name: "건강관리 가이드" })).toBeNull();
     expect(screen.getByRole("heading", { level: 1 })).toHaveTextContent("처음 만난 우리 고양이,건강한 하루를 함께해요.");
     expect(document.title).toBe("냥집사 — AI 반려묘 건강관리");
   });
@@ -60,24 +63,5 @@ describe("홈 화면", () => {
     fireEvent.click(screen.getByRole("link", { name: "이용약관" }));
     fireEvent.click(document.querySelector(".modal__backdrop")!);
     expect(screen.queryByRole("dialog")).toBeNull();
-  });
-
-  test("가이드 카드 → 모달 → 'AI에게 질문하기' 가 상담 입력창을 채운다", () => {
-    renderHome();
-    const card = document.querySelector('[data-id="vaccine"]') as HTMLElement;
-    fireEvent.keyDown(card, { key: "Enter" });
-    const dialog = screen.getByRole("dialog");
-    expect(dialog).toHaveTextContent("필수 예방접종과 접종 시기");
-    expect(dialog).toHaveTextContent("검수 예정");
-    act(() => fireEvent.click(within(dialog).getByRole("button", { name: "이 내용으로 AI에게 질문하기" })));
-    expect(screen.queryByRole("dialog")).toBeNull();
-    expect(screen.getByLabelText("질문 입력")).toHaveValue("필수 예방접종과 접종 시기에 대해 알려주세요");
-  });
-
-  test("서비스 카드 '자세히 보기'(예방접종) 는 가이드 모달을 연다", () => {
-    renderHome();
-    const svc = screen.getByRole("heading", { name: "예방접종 및 건강검진" }).closest("article")!;
-    fireEvent.click(within(svc).getByRole("button"));
-    expect(screen.getByRole("dialog")).toHaveTextContent("필수 예방접종과 접종 시기");
   });
 });

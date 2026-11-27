@@ -12,7 +12,6 @@ type MenuItem = { label: string; target: string } | { label: string; to: string 
 const MENU: MenuItem[] = [
   { label: "홈", target: "hero" },
   { label: "AI 건강 상담", target: "chat" },
-  { label: "건강관리 가이드", target: "guide" },
   { label: "병원 찾기", to: ROUTES.map },
 ];
 
