@@ -3,7 +3,7 @@
 // 앞발은 이불을 붙잡은 그대로 두고 얼굴 레이어만 이불 뒤에서 위아래로 움직인다.
 // 실제 고양이처럼 보이도록: 귀 끝이 먼저 빼꼼 → 잠깐 멈칫(살짝 갸웃) → 쏙 올라옴 → 살짝 내려앉으며 자리 잡기.
 // 키프레임은 Web Animations API 형식 (offset 0~1, transform 은 원본 픽셀 단위).
-import { RIG } from "./rig";
+import { PEEK_RIG as RIG } from "./peekRig";
 
 /** 얼굴이 이불 뒤로 완전히 숨는 거리 (귀 끝까지 + 여유) */
 export const HIDDEN_Y = RIG.hideDepth + 30;
