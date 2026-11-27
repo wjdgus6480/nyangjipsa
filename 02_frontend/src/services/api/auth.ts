@@ -3,6 +3,8 @@ import { buildUrl, request } from "./client";
 import type {
   Cat,
   CatInput,
+  Inquiry,
+  InquiryInput,
   ChangePasswordRequest,
   LoginRequest,
   MessageResponse,
@@ -66,3 +68,10 @@ export const deleteCat = (id: string) =>
  */
 export const socialLoginUrl = (provider: SocialProvider, mode: "login" | "link" = "login") =>
   buildUrl(`/api/auth/${provider}`, mode === "link" ? { mode } : undefined);
+
+// ---------- 1:1 문의 (정상 회원) ----------
+/** GET /api/users/me/inquiries — 내가 남긴 문의 (최신순, 답변 포함) */
+export const getMyInquiries = (signal?: AbortSignal) => request<{ inquiries: Inquiry[] }>("/api/users/me/inquiries", { signal });
+
+/** POST /api/users/me/inquiries — 문의 남기기 (하루 10건까지) */
+export const createInquiry = (body: InquiryInput) => request<{ inquiry: Inquiry }>("/api/users/me/inquiries", { method: "POST", body });

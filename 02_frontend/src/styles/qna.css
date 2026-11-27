@@ -41,3 +41,14 @@
   .site .qna__section { padding: 44px 0; }
   .site .qna__ask-go { display: none; }
 }
+
+/* 1:1 문의 (로그인 안내·보내기 결과) */
+.site .qna__gate { display: grid; gap: 12px; justify-items: start; padding: 22px; border-radius: 18px; background: var(--gray-50); }
+.site .qna__gate p { margin: 0; color: var(--ink); }
+.site .qna__msg { margin: 0; padding: 10px 14px; border-radius: 12px; font-size: .9rem; }
+.site .qna__msg.is-success { background: #e5f4ec; color: #1f6b47; }
+.site .qna__msg.is-error { background: #fdecea; color: #a8322d; }
+.site .qna__msg a { color: inherit; font-weight: 700; }
+.site .qna__label-row { display: flex; justify-content: space-between; align-items: baseline; }
+.site .qna__count { font-weight: 400; font-size: .8rem; color: var(--gray-500); }
+.site .qna__hint { margin: 0; font-size: .82rem; color: var(--gray-500); }

@@ -7,6 +7,7 @@ import { ROUTES } from "../../services/config/site";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import type { AuthUser, SocialProvider } from "../../types/api";
 import { MyCats } from "../cats/MyCats";
+import { MyInquiries } from "../inquiry/MyInquiries";
 import { useAuth } from "./authContext";
 import { errorMessage, SOCIAL_LABEL, socialNotice, validateNickname, validatePassword, type Notice } from "./authForm";
 import { AuthLayout, Field, FormNotice, PasswordField, SubmitButton } from "./AuthUi";
@@ -123,6 +124,9 @@ function MyPageBody({ user }: { user: AuthUser }) {
 
       <h2>우리 고양이</h2>
       <MyCats />
+
+      <h2>내 1:1 문의</h2>
+      <MyInquiries />
 
       <h2>닉네임 수정</h2>
       <form className="auth-form" onSubmit={saveNickname} noValidate>
