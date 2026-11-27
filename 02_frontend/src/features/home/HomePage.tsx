@@ -32,24 +32,19 @@ function HomeSections() {
   const { hash } = useLocation();
   useReveal(rootRef);
 
-  // 다른 화면에서 /#chat 처럼 들어온 경우 해당 섹션으로
+  // 다른 화면에서 /#chat 처럼 들어온 경우: AI 상담창을 열고, 그 밖의 섹션은 스크롤
   useEffect(() => {
     const id = hash.replace(/^#/, "");
-    if (id) requestAnimationFrame(() => scrollToSection(id));
+    if (id === "chat") chatRef.current?.open();
+    else if (id) requestAnimationFrame(() => scrollToSection(id));
   }, [hash]);
-
-  const focusChatSoon = () => setTimeout(() => chatRef.current?.focus(), 600);
 
   return (
     <div ref={rootRef} style={{ display: "contents" }}>
-      <Hero
-        onStartChat={() => {
-          scrollToSection("chat");
-          focusChatSoon();
-        }}
-      />
-      <HomeChat ref={chatRef} />
+      <Hero onStartChat={() => chatRef.current?.open()} />
       <HospitalCta />
+      {/* AI 상담: 오른쪽 아래 떠 있는 아이콘 + 스마트폰 크기 상담창 */}
+      <HomeChat ref={chatRef} />
     </div>
   );
 }

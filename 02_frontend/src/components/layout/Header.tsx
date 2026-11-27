@@ -6,6 +6,7 @@ import { useAuth } from "../../features/auth/authContext";
 import { scrollToSection } from "../common/scroll";
 import { useToast } from "../ui/Toast";
 import { EmergencyCall } from "../../features/emergency/EmergencyCall";
+import { openHomeChat } from "../../features/home/chatEvents";
 
 type MenuItem = { label: string; target: string } | { label: string; to: string };
 
@@ -33,6 +34,7 @@ export function Header() {
   const goSection = (e: MouseEvent, target: string) => {
     e.preventDefault();
     setOpen(false);
+    if (target === "chat" && openHomeChat()) return; // AI 상담은 떠 있는 상담창을 엶
     if (document.getElementById(target)) scrollToSection(target);
     else navigate(`${ROUTES.home}#${target}`);
   };
