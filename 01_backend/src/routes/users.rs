@@ -13,7 +13,7 @@ use axum::{
     http::StatusCode,
     middleware::from_fn_with_state,
     response::{AppendHeaders, IntoResponse, Response},
-    routing::{get, patch, put},
+    routing::{delete, get, patch, put},
 };
 use chrono::Utc;
 use serde::Deserialize;
@@ -41,6 +41,7 @@ pub fn router(state: AppState) -> Router<AppState> {
             "/me/inquiries",
             get(super::inquiries::list_mine).post(super::inquiries::create),
         )
+        .route("/me/inquiries/{id}", delete(super::inquiries::delete_mine))
         .route_layer(from_fn_with_state(state, csrf_guard))
 }
 

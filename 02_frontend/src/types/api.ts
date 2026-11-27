@@ -647,6 +647,8 @@ export interface AdminInquiry extends Inquiry {
   user_email: string | null;
   user_status: string;
   answered_by_nickname: string | null;
+  /** 회원이 내 목록에서 지운 시각 (관리자에게는 계속 보임) */
+  user_deleted_at?: string | null;
 }
 
 export interface AdminInquiryList {
