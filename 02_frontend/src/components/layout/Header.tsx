@@ -1,6 +1,6 @@
 // 사이트 헤더 (기존 home/js/components/header.js)
 import { useEffect, useState, type MouseEvent } from "react";
-import { Link, useNavigate } from "react-router";
+import { Link, useLocation, useNavigate } from "react-router";
 import { ROUTES, SITE } from "../../services/config/site";
 import { useAuth } from "../../features/auth/authContext";
 import { scrollToSection } from "../common/scroll";
@@ -20,6 +20,7 @@ export function Header() {
   const [open, setOpen] = useState(false);
   const [scrolled, setScrolled] = useState(false);
   const navigate = useNavigate();
+  const { pathname } = useLocation();
   const toast = useToast();
   const { user, logout } = useAuth();
 
@@ -55,13 +56,25 @@ export function Header() {
     <div id="header">
       <header className={"header" + (scrolled ? " scrolled" : "")}>
         <div className="container header__inner">
-          <a href="#hero" className="brand" onClick={(e) => goSection(e, "hero")}>
+          {/* 로고: 어느 화면에서든 메인으로. 이미 메인이면 맨 위로 */}
+          <Link
+            to={ROUTES.home}
+            className="brand"
+            title={`${SITE.brandName} 메인으로`}
+            onClick={(e) => {
+              setOpen(false);
+              if (pathname === ROUTES.home) {
+                e.preventDefault();
+                window.scrollTo({ top: 0, behavior: "smooth" });
+              }
+            }}
+          >
             <img src={SITE.appIcon} alt={`${SITE.brandName} 로고`} className="brand__logo" />
             <span className="brand__text">
               <strong>{SITE.brandName}</strong>
               <small>{SITE.brandTagline}</small>
             </span>
-          </a>
+          </Link>
           <button className="hamburger" aria-label="메뉴 열기" aria-expanded={open} onClick={() => setOpen((v) => !v)}>
             <span /><span /><span />
           </button>

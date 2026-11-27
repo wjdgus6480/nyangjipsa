@@ -49,7 +49,7 @@ export function AdminLayout() {
   return (
     <div className="adm-root">
       <aside className="adm-side">
-        <Link to={ROUTES.admin} className="adm-brand">
+        <Link to={ROUTES.home} className="adm-brand" title="냥집사 메인으로">
           <img src={SITE.logo} alt="" />
           <span>
             {SITE.brandName} <b>ADMIN</b>

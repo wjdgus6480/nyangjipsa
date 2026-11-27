@@ -359,3 +359,7 @@
 
 /* 답변에 참고한 자료 출처 */
 .nj-sources a { color: inherit; text-decoration: underline; }
+
+/* 챗봇 크게 보기: 로고를 누르면 메인으로 */
+.nj-home { display: inline-flex; flex: none; border-radius: 20%; }
+.nj-home:focus-visible { outline: 3px solid var(--nj-primary-strong); outline-offset: 2px; }

@@ -1,5 +1,5 @@
 // 관리자 — 회원 관리: 가입자 목록(검색·상태별), 로그인 수단·고양이·문의 수, 이용 정지·해제
-// 이메일은 서버가 가려서 보냄 (ab***@gmail.com). 관리자 권한 지정은 지금처럼 서버 명령(create_admin)으로만.
+// 이메일은 서버가 가려서 보냄 (ab***@gmail.com). 서버가 예전 버전이라 항목이 빠져도 화면이 멈추지 않게 "-" 로 표시. 관리자 권한 지정은 지금처럼 서버 명령(create_admin)으로만.
 import { useEffect, useState, type FormEvent } from "react";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { getAdminMembers, updateAdminMember } from "../../services/api/admin";
@@ -148,14 +148,14 @@ export function MembersPage() {
                         </b>
                         <span className="adm-table__sub">{m.email ?? "-"}</span>
                       </td>
-                      <td>{m.providers.length ? m.providers.map((p) => PROVIDER_LABEL[p] ?? p).join(" · ") : "-"}</td>
+                      <td>{m.providers?.length ? m.providers.map((p) => PROVIDER_LABEL[p] ?? p).join(" · ") : "-"}</td>
                       <td>
-                        <span className={`adm-pill is-${m.status}`}>{STATUS_LABEL[m.status]}</span>
+                        <span className={`adm-pill is-${m.status}`}>{STATUS_LABEL[m.status] ?? m.status}</span>
                       </td>
-                      <td className="is-num">{m.cat_count}</td>
-                      <td className="is-num">{m.inquiry_count}</td>
+                      <td className="is-num">{m.cat_count ?? "-"}</td>
+                      <td className="is-num">{m.inquiry_count ?? "-"}</td>
                       <td>{day(m.created_at)}</td>
-                      <td>{day(m.last_seen_at)}</td>
+                      <td>{day(m.last_seen_at ?? null)}</td>
                       <td className="is-act">
                         {canToggle && (
                           <button type="button" className={"adm-btn adm-btn--sm" + (m.status === "suspended" ? "" : " adm-btn--ghost")} disabled={busyId === m.id} onClick={() => void toggleSuspend(m)}>
