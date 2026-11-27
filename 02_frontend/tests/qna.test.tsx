@@ -1,8 +1,9 @@
 // QnA: 헤더 메뉴(로그인·회원가입 왼쪽) → /qna 페이지 (자주 묻는 질문 · 건강관리 가이드 · 1:1 문의)
 import { describe, expect, test } from "vitest";
-import { fireEvent, render, screen, within } from "@testing-library/react";
+import { fireEvent, render, screen, within, waitFor } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { App } from "../src/app/App";
+import { chatReply, mockFetch } from "./helpers/fetch";
 
 const renderAt = (path: string) =>
   render(
@@ -38,7 +39,7 @@ describe("QnA", () => {
     const faq = screen.getByText("진료비는 정확한 가격인가요?").closest("details")!;
     fireEvent.click(within(faq).getByText("진료비는 정확한 가격인가요?"));
     expect(faq).toHaveTextContent("참고 가격(추정치)");
-    expect(screen.getByText("고양이가 토를 너무 자주 해요.")).toBeInTheDocument();
+    expect(within(document.getElementById("qna-faq")!).getByText("고양이가 토를 너무 자주 해요.")).toBeInTheDocument();
 
     // 건강관리 가이드 탭: 가이드만 (자주 묻는 질문은 사라짐), 카드를 누르면 상세 창
     fireEvent.click(screen.getByRole("tab", { name: "건강관리 가이드" }));
@@ -60,4 +61,30 @@ test("주소에 ?tab=guide 가 있으면 건강관리 가이드 탭으로 열린
   renderAt("/qna?tab=guide");
   expect(await screen.findByRole("tab", { name: "건강관리 가이드" })).toHaveAttribute("aria-selected", "true");
   expect(screen.getAllByRole("tabpanel").map((p) => p.id)).toEqual(["qna-guide"]);
+});
+
+describe("QnA 화면의 AI 상담", () => {
+  test("오른쪽 아래 AI 상담 아이콘이 있고, 'AI에게 물어보기'를 누르면 메인으로 가지 않고 이 화면 상담창에서 바로 질문한다", async () => {
+    const { calls } = mockFetch((url) => (url.pathname === "/api/chat" ? { json: chatReply() } : { status: 404, json: {} }));
+    renderAt("/qna");
+    expect(await screen.findByRole("button", { name: /AI 상담하기/ })).toBeInTheDocument();
+
+    fireEvent.click(within(document.getElementById("qna-faq")!).getByText("고양이가 토를 너무 자주 해요."));
+    // 상담창이 열리고 질문이 바로 보내짐
+    const panel = await screen.findByRole("dialog", { name: "AI 건강 상담" });
+    await waitFor(() => expect(calls.some((c) => c.url === "/api/chat" && c.method === "POST")).toBe(true));
+    expect((calls.find((c) => c.url === "/api/chat")!.body as { message: string }).message).toBe("고양이가 토를 너무 자주 해요.");
+    expect(await within(panel).findByText("물을 충분히 마시는지 확인해 주세요.")).toBeInTheDocument();
+    // 여전히 QnA 화면
+    expect(screen.getByRole("heading", { level: 1, name: "무엇을 도와드릴까요?" })).toBeInTheDocument();
+  });
+
+  test("가이드 상세 창의 'AI 상담으로 이어서 물어보기'도 이 화면에서 바로 질문", async () => {
+    const { calls } = mockFetch((url) => (url.pathname === "/api/chat" ? { json: chatReply() } : { status: 404, json: {} }));
+    renderAt("/qna?tab=guide");
+    fireEvent.click(await screen.findByText("필수 예방접종과 접종 시기"));
+    fireEvent.click(screen.getByRole("button", { name: "AI 상담으로 이어서 물어보기" }));
+    await waitFor(() => expect(calls.some((c) => c.url === "/api/chat")).toBe(true));
+    expect((calls.find((c) => c.url === "/api/chat")!.body as { message: string }).message).toBe("필수 예방접종과 접종 시기에 대해 알려주세요");
+  });
 });

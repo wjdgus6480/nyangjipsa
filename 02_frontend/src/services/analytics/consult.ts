@@ -17,7 +17,7 @@ export interface ReplySummary {
   fallback: boolean;
 }
 
-export type ConsultSurface = "home" | "chatbot" | "map";
+export type ConsultSurface = "home" | "chatbot" | "map" | "qna";
 
 export interface ConsultTracker {
   /** AI 답변을 받을 때마다 호출 */

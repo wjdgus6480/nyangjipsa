@@ -2,8 +2,9 @@
 // - 위쪽 탭을 누르면 그 칸의 내용만 보임 (스크롤 이동 없음). 고른 탭은 주소(?tab=faq|guide|inquiry)에 남아 새로고침·공유해도 유지
 // - 건강관리 가이드는 메인 화면과 같은 내용·상세 창을 씀
 // - 1:1 문의: 로그인한 회원이 남기면 관리자 문의함으로 감. 답변은 내 정보 > 내 1:1 문의에서 확인
-import { Fragment, useState, type FormEvent } from "react";
-import { Link, useNavigate, useSearchParams } from "react-router";
+// - 오른쪽 아래 "AI 상담하기" 아이콘(메인과 같은 상담창). "AI에게 물어보기"는 메인으로 가지 않고 이 화면에서 바로 질문
+import { Fragment, useRef, useState, type FormEvent, type RefObject } from "react";
+import { Link, useSearchParams } from "react-router";
 import "../../styles/qna.css";
 import { SiteLayout } from "../../components/layout/SiteLayout";
 import { useModal } from "../../components/ui/Modal";
@@ -11,6 +12,7 @@ import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { ROUTES, SITE } from "../../services/config/site";
 import { GUIDES } from "../home/content";
 import { HEALTH_QUESTIONS, SERVICE_FAQ } from "./qnaContent";
+import { HomeChat, type HomeChatHandle } from "../home/HomeChat";
 import { useAuth } from "../auth/authContext";
 import { errorMessage } from "../auth/authForm";
 import { createInquiry } from "../../services/api/auth";
@@ -34,6 +36,7 @@ export function QnaPage() {
 }
 
 function QnaSections() {
+  const chatRef = useRef<HomeChatHandle>(null);
   const [params, setParams] = useSearchParams();
   const active: QnaTab = SECTIONS.find((s) => s.tab === params.get("tab"))?.tab ?? "faq";
   // 탭 바꾸기: 주소만 바꿈 (뒤로 가기 기록을 쌓지 않음)
@@ -65,15 +68,16 @@ function QnaSections() {
         </div>
       </section>
       {/* 고른 탭의 내용만 */}
-      {active === "faq" && <FaqSection />}
-      {active === "guide" && <GuideSection />}
+      {active === "faq" && <FaqSection chat={chatRef} />}
+      {active === "guide" && <GuideSection chat={chatRef} />}
       {active === "inquiry" && <InquirySection />}
+      {/* AI 상담: 메인과 같은 오른쪽 아래 아이콘 + 상담창 */}
+      <HomeChat ref={chatRef} surface="qna" />
     </div>
   );
 }
 
-function FaqSection() {
-  const navigate = useNavigate();
+function FaqSection({ chat }: { chat: RefObject<HomeChatHandle | null> }) {
   return (
     <section id="qna-faq" className="section qna__section" role="tabpanel" aria-labelledby="qna-faq-tab">
       <div className="container qna__narrow">
@@ -94,7 +98,7 @@ function FaqSection() {
         <ul className="qna__ask">
           {HEALTH_QUESTIONS.map((q) => (
             <li key={q}>
-              <button type="button" onClick={() => navigate(`${ROUTES.home}#chat`)}>
+              <button type="button" onClick={() => chat.current?.ask(q)}>
                 <span>{q}</span>
                 <span className="qna__ask-go" aria-hidden="true">AI에게 물어보기 →</span>
               </button>
@@ -106,9 +110,8 @@ function FaqSection() {
   );
 }
 
-function GuideSection() {
+function GuideSection({ chat }: { chat: RefObject<HomeChatHandle | null> }) {
   const modal = useModal();
-  const navigate = useNavigate();
   const open = (id: string) => {
     const g = GUIDES.find((x) => x.id === id);
     if (!g) return;
@@ -129,7 +132,7 @@ function GuideSection() {
           className="btn btn--primary btn--block"
           onClick={() => {
             modal.close();
-            navigate(`${ROUTES.home}#chat`);
+            chat.current?.ask(g.title.replace(/[?？]$/, "") + "에 대해 알려주세요");
           }}
         >
           AI 상담으로 이어서 물어보기

@@ -9,7 +9,7 @@ import type { ChatHistoryItem, ChatRequest, ChatResponse, PriceComparison } from
 import { requestMyLocation } from "../chatbot/geolocation";
 import { SourceList } from "../chatbot/SourceList";
 import type { LatLon } from "../chatbot/chatCore";
-import { createConsultTracker } from "../../services/analytics/consult";
+import { createConsultTracker, type ConsultSurface } from "../../services/analytics/consult";
 import { ChatCatPicker } from "../cats/ChatCatPicker";
 import { useChatCat } from "../cats/useChatCat";
 
@@ -23,9 +23,11 @@ const SUGGESTIONS = [
 const IMPORTANCE: Record<string, string> = { high: "중요", medium: "참고", low: "알아두기" };
 const PLACE_LABEL: Record<string, string> = { pharmacy: "동물약국", grooming: "미용", cremation: "장묘", boarding: "위탁" };
 
-/** 홈의 다른 영역(히어로·가이드)이 상담 입력창을 채우고 포커스할 때 쓰는 핸들 */
+/** 홈·QnA 의 다른 영역(히어로·자주 묻는 질문·가이드)이 상담창을 열거나 질문을 보낼 때 쓰는 핸들 */
 export interface HomeChatHandle {
   setInput(text: string): void;
+  /** 상담창을 열고 이 질문을 바로 보냄 (답변 중이면 입력창에 채워 둠) */
+  ask(text: string): void;
   /** 떠 있는 상담창 열기 (입력창에 포커스) */
   open(): void;
   focus(): void;
@@ -53,7 +55,7 @@ async function askChat({ message, history, choiceKeyword, location, catId }: { m
 let seq = 0;
 const nextId = () => ++seq;
 
-export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
+export function HomeChat({ ref, surface = "home" }: { ref?: Ref<HomeChatHandle>; surface?: ConsultSurface }) {
   const [messages, setMessages] = useState<Msg[]>(() => [
     {
       id: nextId(),
@@ -72,7 +74,7 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
   const inputRef = useRef<HTMLInputElement>(null);
   const logRef = useRef<HTMLDivElement>(null);
   // 분석: 상담 시작·완료 (상담 문장은 보내지 않음)
-  const consult = useRef(createConsultTracker("home"));
+  const consult = useRef(createConsultTracker(surface));
   // 로그인 회원의 "내 고양이 기준 답변" (고양이가 없으면 아무것도 안 함)
   const chatCat = useChatCat();
 
@@ -100,12 +102,6 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
     window.addEventListener(OPEN_HOME_CHAT_EVENT, openPanel);
     return () => window.removeEventListener(OPEN_HOME_CHAT_EVENT, openPanel);
   }, [openPanel]);
-
-  useImperativeHandle(ref, () => ({
-    setInput,
-    open: openPanel,
-    focus: () => inputRef.current?.focus({ preventScroll: true }),
-  }));
 
   useEffect(() => {
     if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
@@ -161,6 +157,18 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
     void send(last.text, last.keyword);
     return true;
   };
+
+  useImperativeHandle(ref, () => ({
+    setInput,
+    ask: (text: string) => {
+      openPanel();
+      // 이전 질문에 답하는 중이면 보내지 않고 입력창에 채워 둠 (끝나면 사용자가 보냄)
+      if (state.current.busy) setInput(text);
+      else void send(text);
+    },
+    open: openPanel,
+    focus: () => inputRef.current?.focus({ preventScroll: true }),
+  }));
 
   const asked = messages.some((m) => m.who === "user");
 
