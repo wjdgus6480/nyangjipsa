@@ -9,6 +9,8 @@ export const ROUTES = {
   map: "/map",
   /** 챗봇 단독 화면 (기존 map-poc/chat.html) */
   chat: "/chat",
+  /** QnA: 자주 묻는 질문 · 건강관리 가이드 · 1:1 문의 */
+  qna: "/qna",
   // 회원 (메일 링크·소셜 로그인 후 이동 주소는 백엔드와 같아야 함: 01_backend/src/auth/mod.rs, routes/auth.rs)
   login: "/login",
   signup: "/signup",

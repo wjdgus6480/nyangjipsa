@@ -72,6 +72,8 @@ export function Header() {
                 <a key={m.label} className="nav__link" href={`#${m.target}`} onClick={(e) => goSection(e, m.target)}>{m.label}</a>
               ),
             )}
+            {/* QnA: 로그인·회원가입(또는 관리자·내 정보) 바로 왼쪽 */}
+            <Link className="nav__link" to={ROUTES.qna} onClick={() => setOpen(false)}>QnA</Link>
             {user?.status === "active" ? (
               <>
                 {user.role === "admin" && (
