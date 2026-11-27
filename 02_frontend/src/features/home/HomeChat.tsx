@@ -1,6 +1,7 @@
 // AI 건강 상담 (홈 핵심 기능): 메신저형 채팅 UI — 기존 home/js/components/chat.js
 // 백엔드 POST /api/chat 과 통신. 요청 형식·화면 문구는 기존과 같습니다.
-import { useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import { useCallback, useEffect, useImperativeHandle, useRef, useState, type ReactNode, type Ref } from "react";
+import { OPEN_HOME_CHAT_EVENT } from "./chatEvents";
 import { Link } from "react-router";
 import { ROUTES, SITE, mapFocusUrl } from "../../services/config/site";
 import { postChat } from "../../services/api/endpoints";
@@ -25,6 +26,8 @@ const PLACE_LABEL: Record<string, string> = { pharmacy: "동물약국", grooming
 /** 홈의 다른 영역(히어로·가이드)이 상담 입력창을 채우고 포커스할 때 쓰는 핸들 */
 export interface HomeChatHandle {
   setInput(text: string): void;
+  /** 떠 있는 상담창 열기 (입력창에 포커스) */
+  open(): void;
   focus(): void;
 }
 
@@ -73,8 +76,34 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
   // 로그인 회원의 "내 고양이 기준 답변" (고양이가 없으면 아무것도 안 함)
   const chatCat = useChatCat();
 
+  // 오른쪽 아래 떠 있는 "AI 상담하기" 아이콘 → 스마트폰 크기 상담창 (지도 화면의 AI 도우미 버튼과 같은 방식)
+  const [open, setOpen] = useState(false);
+  const fabRef = useRef<HTMLButtonElement>(null);
+  const openPanel = useCallback(() => {
+    setOpen(true);
+    setTimeout(() => inputRef.current?.focus({ preventScroll: true }), 120);
+  }, []);
+  const closePanel = useCallback(() => {
+    setOpen(false);
+    fabRef.current?.focus({ preventScroll: true });
+  }, []);
+  useEffect(() => {
+    if (!open) return;
+    const onKey = (e: KeyboardEvent) => {
+      if (e.key === "Escape") closePanel();
+    };
+    document.addEventListener("keydown", onKey);
+    return () => document.removeEventListener("keydown", onKey);
+  }, [open, closePanel]);
+  // 헤더 메뉴 "AI 건강 상담" 등 다른 곳에서 여는 신호
+  useEffect(() => {
+    window.addEventListener(OPEN_HOME_CHAT_EVENT, openPanel);
+    return () => window.removeEventListener(OPEN_HOME_CHAT_EVENT, openPanel);
+  }, [openPanel]);
+
   useImperativeHandle(ref, () => ({
     setInput,
+    open: openPanel,
     focus: () => inputRef.current?.focus({ preventScroll: true }),
   }));
 
@@ -133,23 +162,25 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
     return true;
   };
 
+  const asked = messages.some((m) => m.who === "user");
+
   return (
-    <section id="chat" className="section">
-      <div className="container">
-        <div className="section__head reveal">
-          <img className="section__mascot" src={SITE.characters.phone} alt="" />
-          <span className="eyebrow">AI 건강 상담</span>
-          <h2>
-            우리 아이가 아픈 것 같다면?<br />AI에게 먼저 물어보세요.
-          </h2>
-          <p>작은 행동 변화부터 갑작스러운 이상 증상까지, 궁금한 점을 편하게 질문해 보세요.</p>
-        </div>
-        <div className="chat reveal">
-          <div className="chat__suggest" aria-label="추천 질문">
-            {SUGGESTIONS.map((q) => (
-              <button key={q} className="chip" data-q={q} onClick={() => void send(q)}>{q}</button>
-            ))}
-          </div>
+    <div className={"chat-float" + (open ? " is-open" : "")}>
+      <button
+        ref={fabRef}
+        type="button"
+        className="chat-fab"
+        aria-label="AI 상담하기"
+        aria-expanded={open}
+        aria-controls="chat"
+        onClick={openPanel}
+      >
+        <span className="chat-fab__icon">
+          <img src={SITE.mapLogo} alt="" draggable={false} />
+        </span>
+        <span className="chat-fab__label">AI 상담하기</span>
+      </button>
+      <section id="chat" className="chat-panel" role={open ? "dialog" : undefined} aria-modal="false" aria-label="AI 건강 상담" inert={!open}>
           <div className="chat__window">
             <div className="chat__top">
               <img src={SITE.appIcon} alt="" className="avatar" />
@@ -157,11 +188,19 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
                 <strong>AI 간호사</strong>
                 <small>수의사 진단을 대신하지 않는 참고용 상담이에요</small>
               </div>
+              <button type="button" className="chat__close" aria-label="상담창 닫기" title="닫기" onClick={closePanel}>
+                <svg viewBox="0 0 24 24" aria-hidden="true"><path d="M6 6l12 12M18 6L6 18" /></svg>
+              </button>
+            </div>
+            <div className="chat__tools">
               <button className={"chat__loc" + (location ? " on" : "")} data-loc title="근처 병원 안내에 사용" onClick={() => void requestLocation()}>
                 {location ? "📍 위치 사용 중" : "📍 위치 사용"}
               </button>
               <a className="chat__loc" href={ROUTES.chat} target="_blank" rel="noopener" title="챗봇만 크게 보기">크게 보기 ↗</a>
             </div>
+            <p className="chat__emergency">
+              🚨 호흡곤란·의식 저하·심한 출혈·소변을 못 보는 등 <b>응급 징후</b>가 보이면 <b>즉시 동물병원</b>에 가세요.
+            </p>
             <div className="chat__log" id="chat-log" aria-live="polite" ref={logRef}>
               {messages.map((m) =>
                 m.who === "user" ? (
@@ -186,6 +225,13 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
                     </div>
                   </div>
                 ),
+              )}
+              {!asked && (
+                <div className="chat__suggest" aria-label="추천 질문">
+                  {SUGGESTIONS.map((q) => (
+                    <button key={q} type="button" className="chip" data-q={q} onClick={() => void send(q)}>{q}</button>
+                  ))}
+                </div>
               )}
             </div>
             <ChatCatPicker chatCat={chatCat} />
@@ -213,12 +259,8 @@ export function HomeChat({ ref }: { ref?: Ref<HomeChatHandle> }) {
               <button className="btn btn--primary" aria-label="전송">전송</button>
             </form>
           </div>
-          <p className="chat__emergency">
-            🚨 호흡곤란, 의식 저하, 심한 출혈, 소변을 보지 못하는 등 <b>응급 징후</b>가 보이면 상담보다 먼저 <b>즉시 동물병원</b>에 방문하세요.
-          </p>
-        </div>
-      </div>
-    </section>
+      </section>
+    </div>
   );
 }
 

@@ -12,10 +12,10 @@ const renderHome = () =>
   );
 
 describe("홈 화면", () => {
-  test("섹션 순서대로 표시 (hero → chat → hospital-cta, 주요 서비스·건강관리 가이드는 메인에서 뺌)", () => {
+  test("섹션 순서대로 표시 (hero → hospital-cta, AI 상담은 떠 있는 아이콘·창, 주요 서비스·건강관리 가이드는 메인에서 뺌)", () => {
     const { container } = renderHome();
     const ids = [...container.querySelectorAll("main > div > section")].map((s) => s.id);
-    expect(ids).toEqual(["hero", "chat", "hospital-cta"]);
+    expect(ids).toEqual(["hero", "hospital-cta"]);
     expect(screen.queryByText("초보 집사를 위한 똑똑한 건강관리")).toBeNull();
     expect(screen.queryByText("처음이라면 이것부터 확인하세요!")).toBeNull();
     expect(within(screen.getByRole("navigation", { name: "주요 메뉴" })).queryByRole("link", { name: "건강관리 가이드" })).toBeNull();
@@ -31,6 +31,31 @@ describe("홈 화면", () => {
     const big = screen.getByRole("link", { name: "크게 보기 ↗" });
     expect(big).toHaveAttribute("href", "/chat");
     expect(big).toHaveAttribute("target", "_blank");
+  });
+
+  test("오른쪽 아래 'AI 상담하기' 아이콘 → 상담창 열기, 닫기 버튼·Esc 로 닫기, 헤더 메뉴·히어로 버튼으로도 열림", () => {
+    renderHome();
+    const fab = screen.getByRole("button", { name: "AI 상담하기" });
+    const float = document.querySelector(".chat-float")!;
+    const panel = document.getElementById("chat")!;
+    expect(fab).toHaveTextContent("AI 상담하기");
+    expect(fab).toHaveAttribute("aria-expanded", "false");
+    expect(panel).toHaveAttribute("inert");
+
+    fireEvent.click(fab);
+    expect(float).toHaveClass("is-open");
+    expect(fab).toHaveAttribute("aria-expanded", "true");
+    expect(panel).not.toHaveAttribute("inert");
+    fireEvent.click(screen.getByRole("button", { name: "상담창 닫기" }));
+    expect(float).not.toHaveClass("is-open");
+
+    fireEvent.click(within(screen.getByRole("navigation", { name: "주요 메뉴" })).getByRole("link", { name: "AI 건강 상담" }));
+    expect(float).toHaveClass("is-open");
+    fireEvent.keyDown(document, { key: "Escape" });
+    expect(float).not.toHaveClass("is-open");
+
+    fireEvent.click(screen.getByRole("button", { name: "AI 건강 상담 시작하기" }));
+    expect(float).toHaveClass("is-open");
   });
 
   test("햄버거 메뉴 열기/닫기", () => {
