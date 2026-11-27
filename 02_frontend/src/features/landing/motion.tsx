@@ -1,5 +1,6 @@
 // 랜딩 페이지 인터랙션 부품 (새 라이브러리 없이 React + CSS). 훅은 motionHooks.ts
 import { useEffect, useRef, useState, type CSSProperties, type ReactNode } from "react";
+import { asset } from "../../services/config/env";
 import { canObserve, useInView, useReducedMotion, type BurstItem } from "./motionHooks";
 
 const ko = (n: number) => n.toLocaleString("ko-KR");
@@ -131,4 +132,25 @@ export function Bubble({ children, side = "left", live = false }: { children: Re
       {children}
     </p>
   );
+}
+
+/** 실제 서비스 화면 캡처를 기기 틀(브라우저·휴대폰·카드)에 담아 보여 줌. 화면 아래쪽은 늦게 불러옴 */
+export function Screen({ shot, eager = false, className = "" }: { shot: { src: string; w: number; h: number; alt: string; frame: "browser" | "phone" | "card" }; eager?: boolean; className?: string }) {
+  return (
+    <figure className={`lp-screen lp-screen--${shot.frame} ${className}`}>
+      {shot.frame === "browser" && (
+        <span className="lp-screen__bar" aria-hidden="true">
+          <i /><i /><i />
+          <span>nyangjipsa.vercel.app</span>
+        </span>
+      )}
+      <img src={asset(shot.src)} alt={shot.alt} width={shot.w} height={shot.h} loading={eager ? "eager" : "lazy"} decoding="async" />
+      <figcaption className="lp-screen__tag">실제 화면</figcaption>
+    </figure>
+  );
+}
+
+/** 섹션 사이를 잇는 한 줄 */
+export function Bridge({ children }: { children: ReactNode }) {
+  return <p className="lp-bridge">{children}</p>;
 }

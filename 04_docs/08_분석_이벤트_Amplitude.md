@@ -14,7 +14,7 @@
 | 페이지 | 이벤트 | 언제 기록하나 | 속성 | 기록 위치 (02_frontend) | 알 수 있는 것 |
 |---|---|---|---|---|---|
 | 첫 화면 | `landing_viewed` | 홈(`/`) 또는 랜딩(`/intro`)이 열릴 때 (한 번) | 랜딩은 `page`=landing (utm) | `src/features/home/HomePage.tsx` `HomePage`, `src/features/landing/LandingPage.tsx` `LandingPage` 의 `useEffect` | 방문자 수, 어디서 왔는지 (홈·랜딩 구분) |
-| 랜딩 참여 | `landing_interaction` | 랜딩(`/intro`)에서 고민을 고르거나(`worry_selected`), 간호냥을 처음 쓰다듬거나(`mascot_pet`, 한 번), 발도장 3개를 다 모았을 때(`stamps_completed`, 한 번) | `action`, `worry`(hospital/fee/night), `from`(hero/tabs), `page`=landing | `src/features/landing/LandingPage.tsx` `pickWorry`, `HeroMascot` | 처음 온 사람이 어떤 고민을 많이 고르는지, 참여한 사람의 지도 전환율 |
+| 랜딩 참여 | `landing_interaction` | 랜딩(`/intro`)에서 고민 고르기(`question_selected`), 가치 카드 버튼(`value_clicked`), 실제 화면 투어 탭(`feature_tab`), 상황 카드 열기(`situation_opened`), 모든 행동 버튼(`cta_clicked`), 간호냥 처음 쓰다듬기(`mascot_pet`, 한 번) | `action`, `question`(1~6), `value`(fee/cat/emergency/ai), `tab`, `situation`, `cta`(map/fee/chat/home/signup/qna/fee_section), `section`, `page`=landing | `src/features/landing/landingTrack.ts` | 어떤 고민이 많은지, 랜딩 → `/map?tab=price` → `cost_viewed` 전환 |
 | AI 상담 | `consult_started` | 한 대화에서 AI 가 첫 질문에 답했을 때 | `surface`(home/chatbot/map), `fallback` | `src/services/analytics/consult.ts` `onReply` ← `src/features/home/HomeChat.tsx` `send`, `src/features/chatbot/Chatbot.tsx` `request` | 상담 시작률 |
 | AI 상담 | `consult_completed` | 상담 결과가 나왔을 때 (한 번): 병원·장소 목록·가격 비교가 나오거나, AI 가 더 묻지 않고 답을 마침 | `surface`, `result_type`(hospitals/price/places/answer), `reply_count`, `fallback` | 위와 같음 (`consult.ts` `resultType`) | 상담 완료율 |
 | 지도 | `fee_menu_viewed` | 진료비 메뉴(병원·진료비 지도 `/map`) 화면이 열릴 때 (한 번) | `surface`=map | `MapPage.tsx` 첫 `useEffect` | 진료비 메뉴 진입 (성장 분석 퍼널 2단계) |

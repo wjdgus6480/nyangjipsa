@@ -10,6 +10,7 @@
 // - 모바일(폭 760px 이하): 지도를 화면 전체에, 목록 패널은 왼쪽에 겹쳐 띄우고 접기·펼치기.
 //   데스크톱 배치는 그대로 (접기 손잡이·아래쪽 병원 카드는 CSS 에서 모바일에만 보임)
 // - 위쪽 탭: [길찾기] 가격 없이 병원·길찾기만 / [가격 조회] 가격을 보여 주고, 병원을 골라 지도에 가격표(조회하기)·비교표(비교하기)
+//   ?tab=price 로 들어오면 가격 조회 탭으로 시작 (랜딩의 "예상 진료비 보기" 버튼)
 import { useCallback, useEffect, useLayoutEffect, useMemo, useRef, useState } from "react";
 import { Link, useLocation, useSearchParams } from "react-router";
 import "../../styles/map.css";
@@ -85,7 +86,7 @@ export function MapPage() {
   });
   const [authFailed, setAuthFailed] = useState(false);
   /** 위쪽 탭. 가격은 가격 조회 탭에서만 받고 보여 줌 */
-  const [tab, setTab] = useState<MapTab>("route");
+  const [tab, setTab] = useState<MapTab>(() => (params.get("tab") === "price" && !fromEmergency ? "price" : "route"));
   /** 가격 조회: 비교할 병원 (고른 순서). 목록이 다시 검색돼도 유지 */
   const [picked, setPicked] = useState<NearbyPlace[]>([]);
   /** 지도에 가격표를 띄웠는지 (조회하기) */

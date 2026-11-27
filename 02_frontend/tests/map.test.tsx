@@ -265,6 +265,18 @@ describe("지도 탭: 길찾기 · 가격 조회", () => {
     installFakeNaver();
   });
 
+  test("?tab=price 로 들어오면 가격 조회 탭으로 시작하고 처음부터 가격을 받음 (랜딩 '예상 진료비 보기')", async () => {
+    const { calls } = api();
+    render(
+      <MemoryRouter initialEntries={["/map?tab=price"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    expect(screen.getByRole("tab", { name: "가격 조회" })).toHaveAttribute("aria-selected", "true");
+    expect(calls.filter((c) => c.url.startsWith("/api/places/nearby")).at(-1)!.url).toContain("include_fees=true");
+  });
+
   test("가격 조회 탭에서만 가격을 받고, 병원을 골라 지도 가격표(조회하기)를 띄운다", async () => {
     const fake = installFakeNaver();
     const { calls } = api();
