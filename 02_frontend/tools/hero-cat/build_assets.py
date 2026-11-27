@@ -3,8 +3,7 @@
 같은 구도의 원본 이미지 3장으로 레이어를 나눕니다.
   --hide  : 앞발만 이불을 붙잡고 얼굴은 숨은 사진  → 배경(하늘·이불·앞발)
   --nopaw : 앞발 없이 얼굴만 있는 사진             → 얼굴 레이어 (턱까지 온전함)
-  --base  : 기본 사진(얼굴+앞발)                   → 얼굴 색(눈 깜빡임과 딱 맞도록), 깜빡임 뜬 눈
-  --happy : 눈 감고 좋아하는 사진                   → 깜빡임 감은 눈
+  --base  : 기본 사진(얼굴+앞발)                   → 얼굴 색
 레이어 순서(아래→위): 배경 → 얼굴(위아래로 움직임) → 앞쪽(이불 앞면 + 앞발, 얼굴을 가림)
 결과: public/assets/hero-cat/{bg,head,front}.webp, public/assets/hero-cat-empty.webp, src/features/home/heroCat/rig.ts
 
@@ -18,7 +17,7 @@ from PIL import Image
 HERE = os.path.dirname(os.path.abspath(__file__))
 FRONT = os.path.abspath(os.path.join(HERE, "..", ".."))
 ap = argparse.ArgumentParser()
-for k in ["base", "nopaw", "hide", "happy"]:
+for k in ["base", "nopaw", "hide"]:
     ap.add_argument("--" + k, required=True)
 ap.add_argument("--out", default=os.path.join(FRONT, "public", "assets", "hero-cat"))
 ap.add_argument("--rig", default=os.path.join(FRONT, "src", "features", "home", "heroCat", "rig.ts"))
@@ -29,7 +28,7 @@ for f in os.listdir(args.out):  # 이전 결과 정리
 
 W, H = 2400, 1340
 F = {k: np.asarray(Image.open(getattr(args, k)).convert("RGB").resize((W, H), Image.LANCZOS)).astype(np.float32)
-     for k in ["base", "nopaw", "hide", "happy"]}
+     for k in ["base", "nopaw", "hide"]}
 hide, nopaw, base = F["hide"], F["nopaw"], F["base"]
 rb = lambda a: a[..., 0] - a[..., 2]  # 빨강-파랑: 하늘 ≪ 0, 이불(흰 보라) ≈ -8, 털 > 0
 yy, xx = np.mgrid[0:H, 0:W]
@@ -116,7 +115,7 @@ ff = solid.copy(); mm = np.zeros((H + 2, W + 2), np.uint8); cv2.floodFill(ff, mm
 head_a = head_a * cv2.dilate((lab == big).astype(np.uint8), np.ones((21, 21), np.uint8))
 head_a = np.maximum(head_a, cv2.erode(solid, np.ones((5, 5), np.uint8)).astype(np.float32))
 h3 = np.maximum(head_a, 0.35)[..., None]
-# 얼굴 색은 기본 사진에서 (눈 깜빡임이 같은 사진에서 나오므로 눈이 딱 맞음). 앞발에 가려진 턱만 앞발 없는 사진으로 채움
+# 얼굴 색은 기본 사진에서. 앞발에 가려진 턱만 앞발 없는 사진으로 채움
 bd = cv2.GaussianBlur(np.abs(base - nopaw).max(axis=2), (0, 0), 2)
 bpaw = np.zeros((H, W), np.uint8)
 for a, b in PAW_X:
@@ -145,33 +144,6 @@ save("bg", hide, q=86)
 Image.fromarray(hide.clip(0, 255).astype(np.uint8)).resize((1920, round(1920 * H / W)), Image.LANCZOS).save(
     os.path.join(os.path.dirname(args.out), "hero-cat-empty.webp"), quality=84, method=6)
 
-# ---------- 눈 깜빡임 (처음 만든 방식): 눈 둘레만 잘라 기본(뜬 눈)↔눈 감은 사진을 움직임 지도로 이어 그림 ----------
-def flow(a, b, s=0.5):
-    def g(x):
-        return cv2.cvtColor(cv2.resize(x, None, fx=s, fy=s).astype(np.uint8), cv2.COLOR_RGB2GRAY)
-    dis = cv2.DISOpticalFlow_create(cv2.DISOPTICAL_FLOW_PRESET_ULTRAFAST)
-    dis.setFinestScale(1); dis.setPatchSize(16); dis.setPatchStride(4)
-    dis.setGradientDescentIterations(30); dis.setVariationalRefinementIterations(10)
-    dis.setVariationalRefinementAlpha(40)
-    f = dis.calc(g(a), g(b), None)
-    f = cv2.GaussianBlur(f, (0, 0), 6)  # 털 결 단위가 아니라 머리 전체가 부드럽게 움직이도록
-    return cv2.resize(f, (W, H)) / s
-
-
-EYE_BOX = (1580, 520, 2080, 900)  # 두 눈 둘레 (원본 좌표)
-ex0, ey0, ex1, ey1 = EYE_BOX
-for k, src in (("n", base), ("h", F["happy"])):
-    Image.fromarray(src[ey0:ey1, ex0:ex1].clip(0, 255).astype(np.uint8)).save(os.path.join(args.out, f"blink-{k}.webp"), quality=92, method=6)
-FLOW_DOWN = 4
-for p_, q_, A_, B_ in (("n", "h", base, F["happy"]), ("h", "n", F["happy"], base)):
-    fl = flow(A_, B_)[ey0:ey1, ex0:ex1]
-    fl = cv2.resize(fl, ((ex1 - ex0) // FLOW_DOWN, (ey1 - ey0) // FLOW_DOWN), interpolation=cv2.INTER_AREA)
-    enc = np.zeros(fl.shape[:2] + (3,), np.uint8)
-    enc[..., 0] = np.clip(np.round(128 + fl[..., 0]), 0, 255)
-    enc[..., 1] = np.clip(np.round(128 + fl[..., 1]), 0, 255)
-    enc[..., 2] = 128
-    Image.fromarray(enc).save(os.path.join(args.out, f"blink-flow-{p_}{q_}.png"), optimize=True)
-
 # 얼굴이 완전히 숨는 깊이: 귀 끝까지 이불 윗선 아래로
 ys, xs = np.where(head_a > 0.5)
 hide_depth = 0.0
@@ -185,9 +157,6 @@ rig = {
     "head": {**head_box, "pivot": [round(cx, 1), round(float(edge_fit[int(cx)]), 1)]},
     "front": front_box,
     "hideDepth": int(round(hide_depth)),
-    # 눈 깜빡임 영역과 두 눈 (eyes 는 영역 안 좌표: 중심 x, y, 반지름 rx, ry, 기울기)
-    "blink": {"x": ex0, "y": ey0, "w": ex1 - ex0, "h": ey1 - ey0,
-              "eyes": [[1735 - ex0, 656 - ey0, 58, 54, 4], [1922 - ex0, 762 - ey0, 74, 60, 6]]},
 }
 NL = chr(10)
 with open(args.rig, "w", encoding="utf-8", newline=NL) as f:
