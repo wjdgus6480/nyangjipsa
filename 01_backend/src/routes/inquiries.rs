@@ -3,6 +3,8 @@
 //! 회원 (`/api/users/*`, 정상 회원):
 //! - `GET  /me/inquiries` 내가 남긴 문의 (최신순, 답변 포함)
 //! - `POST /me/inquiries` 문의 남기기 `{category, title, body}` — 하루 10건까지
+//! - `DELETE /me/inquiries/{id}` 내 목록에서 지우기. 회원 화면에서만 숨기고 기록은 남김
+//!   (관리자 문의함에는 계속 보이며 `user_deleted_at` 으로 표시)
 //!
 //! 관리자 (`/api/admin/*`):
 //! - `GET  /inquiries?status=&category=&page=&page_size=` 문의함 (상태별 개수 포함)
@@ -76,7 +78,8 @@ pub async fn list_mine(
 ) -> Result<Json<serde_json::Value>, AppError> {
     let items: Vec<MyInquiry> = sqlx::query_as(
         "SELECT id, category, title, body, status, answer, answered_at, created_at
-         FROM inquiries WHERE user_id = $1 ORDER BY created_at DESC, id LIMIT 100",
+         FROM inquiries WHERE user_id = $1 AND user_deleted_at IS NULL
+         ORDER BY created_at DESC, id LIMIT 100",
     )
     .bind(s.user.id)
     .fetch_all(&state.pool)
@@ -117,6 +120,26 @@ pub async fn create(
     ))
 }
 
+/// 내 목록에서 지우기 (기록은 관리자용으로 남음). 남의 문의·이미 지운 문의는 찾을 수 없음
+pub async fn delete_mine(
+    State(state): State<AppState>,
+    CurrentUser(s): CurrentUser,
+    Path(id): Path<Uuid>,
+) -> Result<Json<serde_json::Value>, AppError> {
+    let done = sqlx::query(
+        "UPDATE inquiries SET user_deleted_at = now(), updated_at = now()
+         WHERE id = $1 AND user_id = $2 AND user_deleted_at IS NULL",
+    )
+    .bind(id)
+    .bind(s.user.id)
+    .execute(&state.pool)
+    .await?;
+    if done.rows_affected() == 0 {
+        return Err(AppError::NotFound("문의를 찾을 수 없어요".into()));
+    }
+    Ok(Json(serde_json::json!({ "ok": true })))
+}
+
 // ---------- 관리자 ----------
 
 #[derive(Debug, Deserialize)]
@@ -144,6 +167,8 @@ pub struct AdminInquiry {
     pub user_email: Option<String>,
     pub user_status: String,
     pub answered_by_nickname: Option<String>,
+    /// 회원이 내 목록에서 지운 시각 (관리자에게는 계속 보임)
+    pub user_deleted_at: Option<DateTime<Utc>>,
 }
 
 #[derive(Debug, Serialize, Default)]
@@ -216,7 +241,7 @@ pub async fn admin_list(
         "SELECT i.id, i.category, i.title, i.body, i.status, i.answer, i.answered_at,
                 i.created_at, i.updated_at, i.user_id, u.nickname AS user_nickname,
                 {MASKED_EMAIL_SQL} AS user_email, u.status AS user_status,
-                a.nickname AS answered_by_nickname
+                a.nickname AS answered_by_nickname, i.user_deleted_at
          FROM inquiries i
          JOIN users u ON u.id = i.user_id
          LEFT JOIN users a ON a.id = i.answered_by

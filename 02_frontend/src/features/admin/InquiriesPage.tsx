@@ -168,6 +168,7 @@ function InquiryDetail({ q, onChanged }: { q: AdminInquiry; onChanged(): void })
         <p className="adm-inq-detail__who">
           {q.user_nickname ?? "(닉네임 없음)"} · {q.user_email ?? "-"}
           {q.user_status !== "active" && <span className="adm-pill is-suspended">회원 상태: {q.user_status === "suspended" ? "정지" : q.user_status}</span>}
+          {q.user_deleted_at && <span className="adm-pill is-suspended" title={`회원이 ${fmtDateTime(q.user_deleted_at)}에 내 목록에서 지움`}>회원이 삭제함</span>}
         </p>
         <p className="adm-inq-detail__text">{q.body}</p>
 

@@ -75,3 +75,7 @@ export const getMyInquiries = (signal?: AbortSignal) => request<{ inquiries: Inq
 
 /** POST /api/users/me/inquiries — 문의 남기기 (하루 10건까지) */
 export const createInquiry = (body: InquiryInput) => request<{ inquiry: Inquiry }>("/api/users/me/inquiries", { method: "POST", body });
+
+/** DELETE /api/users/me/inquiries/{id} — 내 목록에서 지우기 (기록은 관리자에게 남음) */
+export const deleteMyInquiry = (id: string) =>
+  request<{ ok: true }>(`/api/users/me/inquiries/${encodeURIComponent(id)}`, { method: "DELETE" });
