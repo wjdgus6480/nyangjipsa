@@ -18,6 +18,7 @@ import { SocialCompletePage, SocialDonePage } from "../features/auth/SocialPages
 import { MyPage, WithdrawPage } from "../features/auth/AccountPages";
 
 const MapPage = lazy(() => import("../features/map/MapPage").then((m) => ({ default: m.MapPage })));
+const QnaPage = lazy(() => import("../features/qna/QnaPage").then((m) => ({ default: m.QnaPage })));
 const ChatPage = lazy(() => import("../features/chatbot/ChatPage").then((m) => ({ default: m.ChatPage })));
 const AdminLayout = lazy(() => import("../features/admin/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const DashboardPage = lazy(() => import("../features/admin/DashboardPage").then((m) => ({ default: m.DashboardPage })));
@@ -47,6 +48,7 @@ export function App() {
         <Route path={ROUTES.landing} element={<LandingPage />} />
         <Route path={ROUTES.map} element={page(<MapPage />)} />
         <Route path={ROUTES.chat} element={page(<ChatPage />)} />
+        <Route path={ROUTES.qna} element={page(<QnaPage />)} />
 
         {/* 회원 (메일 링크·소셜 로그인 후 이동 주소는 백엔드와 같아야 함) */}
         <Route path={ROUTES.login} element={<LoginPage />} />
