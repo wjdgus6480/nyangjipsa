@@ -316,3 +316,11 @@
   .map-page .map-tabs { padding:0 14px 10px; }
   .map-page .price-compare { top:8px; left:8px; right:8px; max-height:calc(100% - 16px); }
 }
+
+/* 고양이 친화병원만 보기 (반경 옆 스위치). 켜면 황금색 — 지도의 친화병원 핀과 같은 색 */
+.map-page .row .cat-only { position:relative; display:inline-flex; align-items:center; gap:6px; margin-left:auto; padding:5px 11px; border:1px solid var(--line); border-radius:999px; font-size:12.5px; font-weight:700; color:var(--muted); background:var(--bg); cursor:pointer; user-select:none; transition: background .15s, border-color .15s, color .15s; }
+.map-page .row .cat-only input { position:absolute; opacity:0; pointer-events:none; }
+.map-page .row .cat-only__dot { width:10px; height:10px; border-radius:50%; background:#ffc21a; border:1.5px solid #b07d00; flex:none; }
+.map-page .row .cat-only:hover { border-color:#e0a800; }
+.map-page .row .cat-only.is-on { background:#fff4cc; border-color:#e0a800; color:#7a5300; }
+.map-page .row .cat-only:has(input:focus-visible) { outline:2px solid var(--primary-strong); outline-offset:2px; }
