@@ -19,6 +19,7 @@ import { SourceList } from "./SourceList";
 import { createConsultTracker } from "../../services/analytics/consult";
 import { ChatCatPicker } from "../cats/ChatCatPicker";
 import { useChatCat } from "../cats/useChatCat";
+import { scrollChatToLatestAnswer } from "../../components/common/scroll";
 
 const SEARCH_RADIUS_M = 3000; // 백엔드 CHAT_RADIUS_M 과 동일
 const FALLBACK_LIMIT = 5;
@@ -89,22 +90,24 @@ export function Chatbot({ logoSrc, map = null, layout = "floating" }: Props) {
     const sync = () => {
       rootRef.current?.style.setProperty("--nj-vh", vv.height + "px");
       if (panelRef.current) panelRef.current.style.top = window.matchMedia(MOBILE).matches ? vv.offsetTop + "px" : "";
-      if (latest.current.open && bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
+    };
+    // 키보드가 열리고 닫히며 높이가 바뀔 때만 최근 답변 첫 줄로 다시 맞춤 (화면 이동 때마다 끌어내리지 않음)
+    const onResize = () => {
+      sync();
+      if (latest.current.open) scrollChatToLatestAnswer(bodyRef.current, ".nj-msg.is-user");
     };
     sync();
-    vv.addEventListener("resize", sync);
+    vv.addEventListener("resize", onResize);
     vv.addEventListener("scroll", sync);
     return () => {
-      vv.removeEventListener("resize", sync);
+      vv.removeEventListener("resize", onResize);
       vv.removeEventListener("scroll", sync);
     };
   }, [open]);
 
-  // 새 메시지·로딩·오류가 생기면 맨 아래로
+  // 새 메시지·로딩·오류가 생기면 최근 답변의 첫 줄로 (긴 답변도 처음부터 읽게)
   useEffect(() => {
-    const id = requestAnimationFrame(() => {
-      if (bodyRef.current) bodyRef.current.scrollTop = bodyRef.current.scrollHeight;
-    });
+    const id = requestAnimationFrame(() => scrollChatToLatestAnswer(bodyRef.current, ".nj-msg.is-user"));
     return () => cancelAnimationFrame(id);
   }, [messages, busy, error]);
 
