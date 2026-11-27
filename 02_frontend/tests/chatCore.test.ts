@@ -43,7 +43,7 @@ describe("chatCore (기존 chat-core.test.js)", () => {
     });
     expect(cards.length).toBe(3);
     expect(cards[0].kind).toBe("hospital");
-    expect(cards[0].fees.length).toBe(1);
+    expect(cards[0].fees.length).toBe(0); // 카드에는 가격을 넣지 않음
     expect(cards[1].typeLabel).toBe("동물약국");
     expect(cards[2].lat).toBe(null);
     expect(cards[2].phone).toBe(null);

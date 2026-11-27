@@ -27,7 +27,9 @@ describe("챗봇", () => {
     const card = (await screen.findByText("냥병원")).closest("article") as HTMLElement;
     expect(calls[0].body).toEqual({ message: "근처 병원 알려줘", history: [], lat: 37.5233, lon: 127.049 });
     expect(card).toHaveTextContent("850m");
-    expect(card).toHaveTextContent("초진 진찰료 (체중 5kg) · 참고용11,000원");
+    // 그냥 병원 찾기에서는 카드에 가격을 보여 주지 않음 (가격은 가격 비교표에서만)
+    expect(card).not.toHaveTextContent("11,000원");
+    expect(card.querySelector(".nj-fees")).toBeNull();
     expect(within(card).getByRole("link", { name: "전화" })).toHaveAttribute("href", "tel:021234567");
     fireEvent.click(within(card).getByRole("button", { name: "지도에서 보기" }));
     expect(focus).toHaveBeenCalledWith(expect.objectContaining({ name: "냥병원", lat: 37.52, lon: 127.05 }), expect.objectContaining({ rightInset: expect.any(Number) }));
