@@ -1,5 +1,5 @@
 // 메인 홈페이지 (기존 home/index.html + js/main.js 의 조립 순서 그대로)
-import { useCallback, useEffect, useRef } from "react";
+import { useEffect, useRef } from "react";
 import { useLocation } from "react-router";
 import { SiteLayout } from "../../components/layout/SiteLayout";
 import { scrollToSection } from "../../components/common/scroll";
@@ -7,8 +7,6 @@ import { useReveal } from "../../hooks/useReveal";
 import { useDocumentTitle } from "../../hooks/useDocumentTitle";
 import { Hero } from "./Hero";
 import { HomeChat, type HomeChatHandle } from "./HomeChat";
-import { Services } from "./Services";
-import { Guides, useGuideModal } from "./Guides";
 import { HospitalCta } from "./HospitalCta";
 import { analytics } from "../../services/analytics/analytics";
 
@@ -42,13 +40,6 @@ function HomeSections() {
 
   const focusChatSoon = () => setTimeout(() => chatRef.current?.focus(), 600);
 
-  const askAbout = useCallback((text: string) => {
-    scrollToSection("chat");
-    chatRef.current?.setInput(text);
-    setTimeout(() => chatRef.current?.focus(), 600);
-  }, []);
-  const openGuide = useGuideModal(askAbout);
-
   return (
     <div ref={rootRef} style={{ display: "contents" }}>
       <Hero
@@ -58,8 +49,6 @@ function HomeSections() {
         }}
       />
       <HomeChat ref={chatRef} />
-      <Services onOpenGuide={openGuide} />
-      <Guides onOpenGuide={openGuide} />
       <HospitalCta />
     </div>
   );

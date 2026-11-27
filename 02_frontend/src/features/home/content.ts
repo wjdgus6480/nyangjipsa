@@ -1,20 +1,8 @@
-// 서비스 소개·건강 가이드 콘텐츠 (기존 home/js/data/content.js 그대로)
+// 건강 가이드 콘텐츠 — QnA 페이지에서 씀 (기존 home/js/data/content.js 그대로)
 // 실제 의료 정보는 수의학 자료로 검수한 뒤 `sources`(출처)와 `reviewedBy`(검수자)를 채워 게시합니다.
 // 아직 검수되지 않은 항목은 화면에 "검수 예정"으로 표시됩니다.
 
 export type IconName = "nurse" | "syringe" | "book" | "pin" | "hospital";
-
-export type ServiceAction =
-  | { type: "scroll"; target: string; label: string }
-  | { type: "guide"; id: string; label: string }
-  | { type: "hospital"; label: string };
-
-export interface Service {
-  icon: IconName;
-  title: string;
-  points: string[];
-  action: ServiceAction;
-}
 
 export interface Guide {
   id: string;
@@ -26,33 +14,6 @@ export interface Guide {
   /** 검수 출처. 비어 있으면 "검수 예정" 안내 */
   sources: string[];
 }
-export const SERVICES: Service[] = [
-  {
-    icon: "nurse",
-    title: "AI 건강 상담",
-    points: ["고양이의 이상 증상과 행동 변화 상담", "질병 관련 기초 정보 제공", "상황에 맞는 대처 방법 안내"],
-    action: { type: "scroll", target: "chat", label: "상담 시작하기" },
-  },
-  {
-    icon: "syringe",
-    title: "예방접종 및 건강검진",
-    points: ["연령별 예방접종 정보", "필수 건강검진 항목 안내", "기본 검사 및 관리 시기 안내"],
-    action: { type: "guide", id: "vaccine", label: "자세히 보기" },
-  },
-  {
-    icon: "book",
-    title: "질병 정보 및 건강 가이드",
-    points: ["고양이에게 자주 발생하는 질병 정보", "증상별 주의사항 안내", "초보 집사를 위한 기초 건강관리"],
-    action: { type: "scroll", target: "guide", label: "자세히 보기" },
-  },
-  {
-    icon: "pin",
-    title: "주변 동물병원 및 가격 비교",
-    points: ["위치 기반 주변 동물병원 검색", "병원별 진료 항목 및 가격 비교", "적절한 병원 선택 지원"],
-    action: { type: "hospital", label: "자세히 보기" },
-  },
-];
-
 export const GUIDES: Guide[] = [
   {
     id: "first-day",
