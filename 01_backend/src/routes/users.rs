@@ -5,6 +5,7 @@
 //! - `DELETE /me` 회원 탈퇴 → 개인정보 컬럼 삭제, 로그인 수단·세션·토큰·반려묘 정보 삭제
 //! - `GET    /me/cats` 내 반려묘 목록, `POST /me/cats` 추가 (정상 회원)
 //! - `PUT    /me/cats/{id}` 전체 수정, `DELETE /me/cats/{id}` 삭제 (본인 고양이만)
+//! - `GET    /me/inquiries` 내 1:1 문의, `POST /me/inquiries` 문의 남기기 (routes/inquiries.rs)
 
 use axum::{
     Json, Router,
@@ -36,6 +37,10 @@ pub fn router(state: AppState) -> Router<AppState> {
         .route("/me/password", patch(change_password))
         .route("/me/cats", get(list_cats).post(create_cat))
         .route("/me/cats/{id}", put(update_cat).delete(delete_cat))
+        .route(
+            "/me/inquiries",
+            get(super::inquiries::list_mine).post(super::inquiries::create),
+        )
         .route_layer(from_fn_with_state(state, csrf_guard))
 }
 
@@ -220,13 +225,14 @@ async fn withdraw(
     .bind(s.user.id)
     .execute(&mut *tx)
     .await?;
-    // 반려묘 건강 정보도 개인정보로 보고 함께 삭제 (되돌릴 수 없음)
+    // 반려묘 건강 정보·1:1 문의도 개인정보로 보고 함께 삭제 (되돌릴 수 없음)
     for table in [
         "user_auth_identities",
         "user_sessions",
         "email_verifications",
         "password_reset_tokens",
         "user_cats",
+        "inquiries",
     ] {
         // table 은 위 배열의 고정 문자열 (사용자 입력 아님)
         sqlx::query(sqlx::AssertSqlSafe(format!(

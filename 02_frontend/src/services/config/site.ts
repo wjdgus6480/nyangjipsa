@@ -25,6 +25,8 @@ export const ROUTES = {
   // 관리자 (role=admin 만, 서버가 매 요청 확인)
   admin: "/admin",
   adminGrowth: "/admin/growth",
+  adminMembers: "/admin/members",
+  adminInquiries: "/admin/inquiries",
   adminContent: "/admin/content",
   adminHospitals: "/admin/hospitals",
   adminSettings: "/admin/settings",

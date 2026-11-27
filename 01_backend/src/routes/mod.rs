@@ -8,6 +8,7 @@ pub mod chat;
 pub mod directions;
 pub mod health;
 pub mod hospitals;
+pub mod inquiries;
 pub mod places;
 pub mod share;
 pub mod stats;

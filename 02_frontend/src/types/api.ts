@@ -614,3 +614,69 @@ export interface AdminSheet {
   sheet: SheetTable;
   fetched_at: string;
 }
+
+// ---------- 1:1 문의 (routes/inquiries.rs) ----------
+export type InquiryCategory = "service" | "hospital_info" | "fee" | "account" | "etc";
+/** received = 접수, in_progress = 처리 중, answered = 답변 완료 */
+export type InquiryStatus = "received" | "in_progress" | "answered";
+
+export interface Inquiry {
+  id: string;
+  category: InquiryCategory;
+  title: string;
+  body: string;
+  status: InquiryStatus;
+  answer: string | null;
+  answered_at: string | null;
+  created_at: string;
+}
+
+export interface InquiryInput {
+  category: InquiryCategory;
+  title: string;
+  body: string;
+}
+
+export interface AdminInquiry extends Inquiry {
+  updated_at: string;
+  user_id: string;
+  user_nickname: string | null;
+  /** 가린 이메일 (ab***@gmail.com) */
+  user_email: string | null;
+  user_status: string;
+  answered_by_nickname: string | null;
+}
+
+export interface AdminInquiryList {
+  total: number;
+  page: number;
+  page_size: number;
+  counts: Record<InquiryStatus, number>;
+  items: AdminInquiry[];
+}
+
+// ---------- 관리자 회원 관리 (routes/admin.rs) ----------
+export type MemberStatus = "pending" | "active" | "suspended" | "withdrawn";
+
+export interface AdminMember {
+  id: string;
+  /** 가린 이메일 */
+  email: string | null;
+  nickname: string | null;
+  role: "user" | "admin";
+  status: MemberStatus;
+  email_verified: boolean;
+  created_at: string;
+  providers: string[];
+  cat_count: number;
+  inquiry_count: number;
+  last_seen_at: string | null;
+}
+
+export interface AdminMemberList {
+  count: number;
+  total: number;
+  page: number;
+  page_size: number;
+  items: AdminMember[];
+}

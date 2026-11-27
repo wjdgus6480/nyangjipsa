@@ -43,4 +43,3 @@ export const HEALTH_QUESTIONS = [
   "고양이가 평소보다 너무 조용해요.",
 ];
 
-export const INQUIRY_TYPES = ["서비스 이용", "병원 정보 수정 요청", "진료비 정보", "회원·계정", "기타"];

@@ -48,14 +48,11 @@ describe("QnA", () => {
     expect(screen.getByRole("dialog")).toHaveTextContent("첫 며칠");
     fireEvent.click(screen.getByRole("button", { name: "닫기" }));
 
-    // 1:1 문의 탭: 문의만. 칸은 있지만 입력은 막혀 있고, 보내면 준비 중 안내
+    // 1:1 문의 탭: 문의만. 로그인하지 않았으면 로그인 안내 (문의 보내기는 tests/inquiry.test.tsx)
     fireEvent.click(screen.getByRole("tab", { name: "1:1 문의" }));
     expect(panels()).toEqual(["qna-inquiry"]);
     expect(screen.queryByText("고양이를 처음 데려왔다면 해야 할 일")).toBeNull();
-    const form = screen.getByRole("form", { name: "1:1 문의 (준비 중)" });
-    expect(within(form).getByPlaceholderText("문의 제목을 적어 주세요")).toBeDisabled();
-    fireEvent.click(within(form).getByRole("button", { name: "문의 보내기 (준비 중)" }));
-    expect(await screen.findByText("1:1 문의는 준비 중이에요. 조금만 기다려 주세요.")).toBeInTheDocument();
+    expect(screen.getByRole("link", { name: "로그인하고 문의하기" })).toBeInTheDocument();
   });
 });
 

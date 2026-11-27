@@ -23,6 +23,8 @@ const ChatPage = lazy(() => import("../features/chatbot/ChatPage").then((m) => (
 const AdminLayout = lazy(() => import("../features/admin/AdminLayout").then((m) => ({ default: m.AdminLayout })));
 const DashboardPage = lazy(() => import("../features/admin/DashboardPage").then((m) => ({ default: m.DashboardPage })));
 const GrowthPage = lazy(() => import("../features/admin/GrowthPage").then((m) => ({ default: m.GrowthPage })));
+const MembersPage = lazy(() => import("../features/admin/MembersPage").then((m) => ({ default: m.MembersPage })));
+const InquiriesPage = lazy(() => import("../features/admin/InquiriesPage").then((m) => ({ default: m.InquiriesPage })));
 const ContentStudioPage = lazy(() => import("../features/admin/ContentStudioPage").then((m) => ({ default: m.ContentStudioPage })));
 const HospitalsAdminPage = lazy(() => import("../features/admin/AdminPlaceholderPages").then((m) => ({ default: m.HospitalsAdminPage })));
 const SettingsAdminPage = lazy(() => import("../features/admin/AdminPlaceholderPages").then((m) => ({ default: m.SettingsAdminPage })));
@@ -66,6 +68,8 @@ export function App() {
         <Route path={ROUTES.admin} element={page(<AdminLayout />)}>
           <Route index element={page(<DashboardPage />)} />
           <Route path={ROUTES.adminGrowth} element={page(<GrowthPage />)} />
+          <Route path={ROUTES.adminMembers} element={page(<MembersPage />)} />
+          <Route path={ROUTES.adminInquiries} element={page(<InquiriesPage />)} />
           <Route path={ROUTES.adminContent} element={page(<ContentStudioPage />)} />
           <Route path={ROUTES.adminHospitals} element={page(<HospitalsAdminPage />)} />
           <Route path={ROUTES.adminSettings} element={page(<SettingsAdminPage />)} />

@@ -8,6 +8,8 @@ import "../../styles/admin.css";
 const ADMIN_MENU = [
   { to: ROUTES.admin, label: "대시보드", desc: "핵심 지표와 운영 현황", icon: "M3 13h8V3H3v10Zm0 8h8v-6H3v6Zm10 0h8V11h-8v10Zm0-18v6h8V3h-8Z" },
   { to: ROUTES.adminGrowth, label: "성장 분석", desc: "유입·퍼널·병원 이용", icon: "M3 17l6-6 4 4 8-8M15 7h6v6" },
+  { to: ROUTES.adminMembers, label: "회원 관리", desc: "가입자 목록·이용 정지", icon: "M16 8a4 4 0 1 1-8 0 4 4 0 0 1 8 0ZM4 21a8 8 0 0 1 16 0" },
+  { to: ROUTES.adminInquiries, label: "1:1 문의함", desc: "회원 문의 확인·답변", icon: "M4 4h16v12h-5l-3 3-3-3H4V4Zm4 5h8M8 12h5" },
   { to: ROUTES.adminContent, label: "콘텐츠 스튜디오", desc: "시트 데이터·콘텐츠", icon: "M7 3h7l5 5v13H7V3Zm7 0v5h5M10 13h6M10 17h6" },
   { to: ROUTES.adminHospitals, label: "병원 관리", desc: "병원 정보 조회·관리", icon: "M4 21V7l8-4 8 4v14M9 21v-6h6v6M12 8v4M10 10h4" },
   { to: ROUTES.adminSettings, label: "설정 및 관리", desc: "권한·데이터 연동", icon: "M12 15a3 3 0 1 0 0-6 3 3 0 0 0 0 6Zm7.4-3a7.4 7.4 0 0 0-.1-1.2l2-1.6-2-3.4-2.4 1a7.6 7.6 0 0 0-2-1.2L14.5 2h-5l-.4 2.6a7.6 7.6 0 0 0-2 1.2l-2.4-1-2 3.4 2 1.6a7.4 7.4 0 0 0 0 2.4l-2 1.6 2 3.4 2.4-1a7.6 7.6 0 0 0 2 1.2l.4 2.6h5l.4-2.6a7.6 7.6 0 0 0 2-1.2l2.4 1 2-3.4-2-1.6c.1-.4.1-.8.1-1.2Z" },

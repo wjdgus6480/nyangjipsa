@@ -1,0 +1,24 @@
+/* 1:1 문의 — 내 정보의 "내 문의" (features/inquiry), QnA 문의 칸과 같은 토큰(site.css) */
+.site .inq-badge { flex: none; display: inline-block; padding: 2px 9px; border-radius: 999px; font-size: .75rem; font-weight: 700; }
+.site .inq-badge.is-received { background: var(--gray-100, #eef2f6); color: var(--gray-500); }
+.site .inq-badge.is-in_progress { background: #fff4e0; color: #9a5b00; }
+.site .inq-badge.is-answered { background: #e5f4ec; color: #1f8a5b; }
+
+.site .inq-list { list-style: none; margin: 0; padding: 0; display: grid; gap: 8px; }
+.site .inq-item { border: 1px solid var(--gray-200); border-radius: var(--radius-sm); background: var(--white); }
+.site .inq-item summary { display: grid; gap: 4px; padding: 12px 40px 12px 14px; cursor: pointer; list-style: none; position: relative; }
+.site .inq-item summary::-webkit-details-marker { display: none; }
+.site .inq-item summary::after { content: "+"; position: absolute; right: 14px; top: 50%; transform: translateY(-50%); font-size: 1.2rem; color: var(--gray-500); }
+.site .inq-item[open] summary::after { content: "−"; }
+.site .inq-item__top { display: flex; align-items: center; gap: 8px; flex-wrap: wrap; }
+.site .inq-item__cat { font-size: .8rem; font-weight: 700; color: var(--sky-deep); }
+.site .inq-item__date { font-size: .78rem; color: var(--gray-500); }
+.site .inq-item__title { font-weight: 700; color: var(--navy); }
+.site .inq-item__body { padding: 0 14px 14px; display: grid; gap: 10px; }
+.site .inq-text { margin: 0; white-space: pre-wrap; overflow-wrap: anywhere; color: var(--ink); font-size: .93rem; }
+.site .inq-answer { display: grid; gap: 4px; padding: 12px 14px; border-radius: 12px; background: var(--sky-soft); }
+.site .inq-answer strong { color: var(--navy); font-size: .88rem; }
+.site .inq-wait { margin: 0; padding: 10px 12px; border-radius: 12px; background: var(--gray-50); color: var(--gray-500); font-size: .88rem; }
+.site .inq-empty { display: flex; align-items: center; justify-content: space-between; gap: 12px; flex-wrap: wrap; padding: 14px 16px; border: 1px dashed var(--gray-200); border-radius: var(--radius-sm); }
+.site .inq-empty p { margin: 0; }
+.site .inq-mine .auth-actions { margin-top: 10px; }
