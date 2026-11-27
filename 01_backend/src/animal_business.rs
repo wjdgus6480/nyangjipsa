@@ -482,6 +482,29 @@ pub async fn all_points(
     .await
 }
 
+/// 고양이 친화병원 인증 병원(영업 중)의 위치 — 지도에서 "고양이 친화병원만"을 켰을 때 구역별 개수용
+pub async fn cat_friendly_points(pool: &PgPool) -> Result<Vec<PlacePoint>, sqlx::Error> {
+    let rows: Vec<(f64, f64, bool)> = sqlx::query_as(
+        "SELECT ST_X(b.location::geometry), ST_Y(b.location::geometry), b.address_masked
+         FROM animal_businesses b
+         JOIN hospitals h ON b.business_type = 'hospital' AND h.external_id = b.mng_no
+         WHERE b.status_code = '01'
+           AND b.location IS NOT NULL
+           AND EXISTS (SELECT 1 FROM cat_friendly_hospitals cf WHERE cf.hospital_id = h.id)
+         ORDER BY b.id",
+    )
+    .fetch_all(pool)
+    .await?;
+    Ok(rows
+        .into_iter()
+        .map(|(lon, lat, address_masked)| PlacePoint {
+            lon,
+            lat,
+            address_masked,
+        })
+        .collect())
+}
+
 #[cfg(test)]
 mod tests {
     use super::*;

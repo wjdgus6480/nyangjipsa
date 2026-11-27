@@ -115,6 +115,13 @@ async fn import_matches_and_api_marks_and_filters(pool: PgPool) {
     let items = p["items"].as_array().unwrap();
     assert_eq!(items.len(), 2);
     assert!(items.iter().all(|i| i["cat_friendly"] == true));
+
+    // 지도 구역별 개수용 위치: 친화병원만 켜면 인증 병원 위치만 (전체는 3곳)
+    let (_, all) = get_json(&pool, "/api/places/points?type=hospital").await;
+    assert_eq!(all["count"], 3);
+    let (status, cat) = get_json(&pool, "/api/places/points?cat_friendly=true").await;
+    assert_eq!(status, StatusCode::OK);
+    assert_eq!(cat["count"], 2);
 }
 
 #[sqlx::test(migrations = "./migrations")]

@@ -51,6 +51,8 @@ export interface NearbyPlacesQuery {
   /** 기본 50, 최대 200 */
   limit?: number;
   include_fees?: boolean;
+  /** true 면 고양이 친화병원 인증 병원만 */
+  cat_friendly?: boolean;
 }
 
 /** GET /api/places/nearby 응답 (routes/places.rs NearbyResponse) */

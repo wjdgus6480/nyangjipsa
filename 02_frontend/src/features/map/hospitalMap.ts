@@ -29,6 +29,8 @@ export interface MapFilters {
   withFees?: boolean;
   /** 받은 진료비를 정보창에 바로 보여 줄지. 생략하면 withFees 와 같음 (가격 조회 탭은 받기만 하고 조회하기·비교하기에서 보여 줌) */
   feesInInfo?: boolean;
+  /** 고양이 친화병원(인증)만 보기 — 켜면 업종과 상관없이 인증 병원만 목록·핀·구역 개수에 나옴 */
+  catOnly?: boolean;
 }
 
 export interface RegionBarState {
@@ -104,8 +106,9 @@ export class HospitalMap implements MapBridge {
     const typesChanged = next.types.join() !== this.filters.types.join();
     const radiusChanged = next.radius !== this.filters.radius;
     const feesChanged = this.withFees() !== (next.withFees !== false);
+    const catChanged = !!next.catOnly !== !!this.filters.catOnly;
     this.filters = next;
-    if (typesChanged) void this.loadRegionPoints();
+    if (typesChanged || catChanged) void this.loadRegionPoints();
     if (feesChanged) {
       // 가격을 보여 주지 않는 탭으로 바뀌면 가격표·가격이 든 정보창을 닫음
       if (!this.withFees()) {
@@ -113,7 +116,7 @@ export class HospitalMap implements MapBridge {
         this.infoWindow.close();
       }
     }
-    if (typesChanged || radiusChanged || feesChanged) this.scheduleLoad();
+    if (typesChanged || radiusChanged || feesChanged || catChanged) this.scheduleLoad();
   }
 
   private withFees() {
@@ -121,7 +124,13 @@ export class HospitalMap implements MapBridge {
   }
 
   private typesLabel() {
+    if (this.filters.catOnly) return "고양이 친화병원";
     return this.filters.types.map((t) => TYPE_LABEL[t]).join("·");
+  }
+
+  /** 검색할 업종: 친화병원만이면 동물병원만 */
+  private queryTypes(): string[] {
+    return this.filters.catOnly ? ["hospital"] : this.filters.types;
   }
 
   private scheduleLoad() {
@@ -175,7 +184,7 @@ export class HospitalMap implements MapBridge {
 
   // 구역별 개수용 위치 전체 (선택한 업종 기준). 개수는 regions 모듈이 경계 안에서 셈
   private async loadRegionPoints() {
-    const types = this.filters.types;
+    const types = this.queryTypes();
     this.pointsController?.abort();
     if (!types.length) {
       this.regions?.setPoints([]);
@@ -183,7 +192,7 @@ export class HospitalMap implements MapBridge {
     }
     const ctrl = (this.pointsController = new AbortController());
     try {
-      const body = await getPlacePoints(types, ctrl.signal);
+      const body = await getPlacePoints(types, ctrl.signal, !!this.filters.catOnly);
       if (!this.destroyed) this.regions?.setPoints(body.points);
     } catch (e) {
       if (!isAbortError(e)) console.warn("구역별 개수를 불러오지 못했습니다:", (e as Error).message);
@@ -193,7 +202,7 @@ export class HospitalMap implements MapBridge {
   // ---------- 목록·핀 ----------
   private async load() {
     if (this.destroyed) return;
-    const types = this.filters.types;
+    const types = this.queryTypes();
     if (!types.length) {
       this.render([]);
       this.cb.onStatus("업종을 하나 이상 선택하세요.");
@@ -215,7 +224,7 @@ export class HospitalMap implements MapBridge {
     this.cb.onStatus("검색 중…");
     try {
       const body = await getNearbyPlaces(
-        { lon: Number(c.lng().toFixed(6)), lat: Number(c.lat().toFixed(6)), radius_m: radius, type: types, limit: LIMIT, include_fees: this.withFees() },
+        { lon: Number(c.lng().toFixed(6)), lat: Number(c.lat().toFixed(6)), radius_m: radius, type: types, limit: LIMIT, include_fees: this.withFees(), ...(this.filters.catOnly ? { cat_friendly: true } : {}) },
         ctrl.signal,
       );
       if (this.destroyed) return;
@@ -231,7 +240,10 @@ export class HospitalMap implements MapBridge {
         this.cb.onStatus(`${regionSel.name} ${this.typesLabel()} ${total.toLocaleString("ko-KR")}곳${shown}`);
       } else {
         this.render(body.items);
-        this.cb.onStatus(`반경 ${fmtKm(radius)}km · ${body.count}곳${more}`);
+        // 친화병원만 보기인데 근처에 없으면 넓혀 보라고 안내
+        if (this.filters.catOnly && body.count === 0)
+          this.cb.onStatus(`반경 ${fmtKm(radius)}km 안에 고양이 친화병원이 없어요. 지도를 축소하거나 반경을 넓혀 보세요.`);
+        else this.cb.onStatus(`반경 ${fmtKm(radius)}km · ${this.filters.catOnly ? "고양이 친화병원 " : ""}${body.count}곳${more}`);
       }
     } catch (e) {
       if (isAbortError(e)) return;

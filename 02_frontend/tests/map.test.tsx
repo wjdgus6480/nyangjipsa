@@ -417,3 +417,30 @@ describe("지도 위쪽 머리", () => {
     expect(screen.getByRole("button", { name: "냥집사 AI 도우미 열기" })).toBeInTheDocument();
   });
 });
+
+describe("고양이 친화병원만 보기", () => {
+  beforeEach(() => {
+    installFakeNaver();
+  });
+
+  test("켜면 친화병원만 검색하고(cat_friendly=true, 동물병원만), 구역 개수도 친화병원 기준", async () => {
+    const { calls } = api();
+    render(
+      <MemoryRouter initialEntries={["/map"]}>
+        <MapPage />
+      </MemoryRouter>,
+    );
+    await waitFor(() => expect(document.querySelectorAll("#list li")).toHaveLength(2));
+    const n = calls.filter((c) => c.url.startsWith("/api/places/nearby")).length;
+    fireEvent.click(screen.getByLabelText("고양이 친화병원만"));
+    await waitFor(() => expect(calls.filter((c) => c.url.startsWith("/api/places/nearby")).length).toBe(n + 1));
+    const q = new URLSearchParams(calls.filter((c) => c.url.startsWith("/api/places/nearby")).at(-1)!.url.split("?")[1]);
+    expect(q.get("cat_friendly")).toBe("true");
+    expect(q.get("type")).toBe("hospital");
+    expect(calls.some((c) => c.url === "/api/places/points?cat_friendly=true")).toBe(true);
+
+    // 끄면 원래대로
+    fireEvent.click(screen.getByLabelText("고양이 친화병원만"));
+    await waitFor(() => expect(calls.filter((c) => c.url.startsWith("/api/places/nearby")).at(-1)!.url).not.toContain("cat_friendly"));
+  });
+});

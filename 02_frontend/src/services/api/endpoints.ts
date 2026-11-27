@@ -25,9 +25,9 @@ export const postChat = (body: ChatRequest, signal?: AbortSignal) =>
 export const getNearbyPlaces = ({ type, ...rest }: NearbyPlacesQuery, signal?: AbortSignal) =>
   request<NearbyPlacesResponse>("/api/places/nearby", { query: { ...rest, type }, signal });
 
-/** GET /api/places/points — 행정구역별 개수용 위치 목록 */
-export const getPlacePoints = (types: readonly string[], signal?: AbortSignal) =>
-  request<PlacePointsResponse>("/api/places/points", { query: { type: types }, signal });
+/** GET /api/places/points — 행정구역별 개수용 위치 목록. catFriendly 면 고양이 친화병원만 (업종 무시) */
+export const getPlacePoints = (types: readonly string[], signal?: AbortSignal, catFriendly = false) =>
+  request<PlacePointsResponse>("/api/places/points", { query: catFriendly ? { cat_friendly: true } : { type: types }, signal });
 
 /** GET /api/hospitals/nearby — 병원 테이블 반경 검색 (최대 5km, 진료비 포함) */
 export const getNearbyHospitals = (

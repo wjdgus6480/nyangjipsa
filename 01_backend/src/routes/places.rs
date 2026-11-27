@@ -37,6 +37,8 @@ pub struct PointsQuery {
     /// 업종(쉼표로 여러 개). 생략하면 전체
     #[serde(rename = "type")]
     pub types: Option<String>,
+    /// true 면 고양이 친화병원 인증 병원만 (업종 조건은 무시). 기본 false
+    pub cat_friendly: Option<bool>,
 }
 
 #[derive(Debug, Serialize)]
@@ -63,14 +65,18 @@ fn parse_types(raw: Option<&str>) -> Result<Option<Vec<BusinessType>>, AppError>
     }
 }
 
-/// 예: `/api/places/points?type=hospital`
+/// 예: `/api/places/points?type=hospital`, `/api/places/points?cat_friendly=true`
 /// 전국 위치는 동기화 때만 바뀌므로 캐시 헤더를 붙입니다 (routes::PUBLIC_CACHE)
 async fn points(
     State(state): State<AppState>,
     Query(q): Query<PointsQuery>,
 ) -> Result<impl IntoResponse, AppError> {
     let types = parse_types(q.types.as_deref())?;
-    let rows = animal_business::all_points(&state.pool, types.as_deref()).await?;
+    let rows = if q.cat_friendly.unwrap_or(false) {
+        animal_business::cat_friendly_points(&state.pool).await?
+    } else {
+        animal_business::all_points(&state.pool, types.as_deref()).await?
+    };
     let points: Vec<[f64; 2]> = rows
         .into_iter()
         .map(|p| {

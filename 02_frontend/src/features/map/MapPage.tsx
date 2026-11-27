@@ -93,11 +93,13 @@ export function MapPage() {
   const [compareOpen, setCompareOpen] = useState(false);
   const withFees = tab === "price";
   // 가격 조회 탭은 가격을 받아 두되(고를 수 있는 병원·비교용) 목록·정보창에는 바로 보여 주지 않음
-  const filters = useRef({ types, radius, withFees, feesInInfo: false });
+  /** 고양이 친화병원(인증)만 보기 */
+  const [catOnly, setCatOnly] = useState(false);
+  const filters = useRef({ types, radius, withFees, feesInInfo: false, catOnly });
   const paramsRef = useRef(params);
   const itemsRef = useRef(items);
   useLayoutEffect(() => {
-    filters.current = { types, radius, withFees, feesInInfo: false };
+    filters.current = { types, radius, withFees, feesInInfo: false, catOnly };
     paramsRef.current = params;
     itemsRef.current = items;
   });
@@ -226,8 +228,8 @@ export function MapPage() {
 
   // 필터·탭 변경 → 다시 검색 (업종이 바뀌면 구역별 개수도, 탭이 바뀌면 가격 포함 여부도)
   useEffect(() => {
-    hmRef.current?.setFilters({ types, radius, withFees, feesInInfo: false });
-  }, [types, radius, withFees]);
+    hmRef.current?.setFilters({ types, radius, withFees, feesInInfo: false, catOnly });
+  }, [types, radius, withFees, catOnly]);
 
   // 지도 가격표: 가격 조회 탭에서 조회하기를 눌렀을 때만, 고른 병원이 바뀌면 다시 그림
   useEffect(() => {
@@ -339,6 +341,12 @@ export function MapPage() {
                   <option key={o.label} value={String(o.value)}>{o.label}</option>
                 ))}
               </select>
+              {/* 고양이 친화병원(인증)만: 켜면 업종과 상관없이 인증 병원만 (지도의 황금색 핀) */}
+              <label className={"cat-only" + (catOnly ? " is-on" : "")} title="고양이 친화병원 인증(ISFM 등)을 받은 병원만 보여 줘요">
+                <input type="checkbox" checked={catOnly} onChange={(e) => setCatOnly(e.target.checked)} />
+                <span className="cat-only__dot" aria-hidden="true" />
+                고양이 친화병원만
+              </label>
             </div>
             <div className="status" id="status" role="status">{status}</div>
           </div>
