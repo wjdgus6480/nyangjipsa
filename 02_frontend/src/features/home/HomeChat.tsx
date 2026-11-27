@@ -12,6 +12,7 @@ import type { LatLon } from "../chatbot/chatCore";
 import { createConsultTracker, type ConsultSurface } from "../../services/analytics/consult";
 import { ChatCatPicker } from "../cats/ChatCatPicker";
 import { useChatCat } from "../cats/useChatCat";
+import { scrollChatToLatestAnswer } from "../../components/common/scroll";
 
 const SUGGESTIONS = [
   "고양이가 토를 너무 자주 해요.",
@@ -104,7 +105,8 @@ export function HomeChat({ ref, surface = "home" }: { ref?: Ref<HomeChatHandle>;
   }, [openPanel]);
 
   useEffect(() => {
-    if (logRef.current) logRef.current.scrollTop = logRef.current.scrollHeight;
+    // 최근 답변의 첫 줄로 (긴 답변도 처음부터 읽게)
+    scrollChatToLatestAnswer(logRef.current, ".msg--user");
   }, [messages]);
 
   const addBot = (content: ReactNode) => setMessages((ms) => [...ms, { id: nextId(), who: "bot", kind: "text", content }]);
