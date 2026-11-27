@@ -1,12 +1,16 @@
 // 회원 화면: 가입·로그인·인증·비밀번호 재설정·소셜·내 정보, 분석 이벤트 개인정보 제거
 import { StrictMode } from "react";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { act, fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { App } from "../src/app/App";
 import { createAnalytics, sanitize } from "../src/services/analytics/analytics";
 import { request } from "../src/services/api/client";
 import { mockFetch } from "./helpers/fetch";
+import { MEMBER_PAGES, warmLazyPages } from "./helpers/lazyPages";
+
+// 회원 화면은 따로 받는(lazy) 화면이라 먼저 한 번 받아 둠
+beforeAll(() => warmLazyPages(MEMBER_PAGES));
 
 function Where() {
   const l = useLocation();

@@ -1,12 +1,16 @@
 // 반려묘 건강 프로필: 가입 화면 입력, '해당 없음' 규칙, 모름·미입력 구분, 기타 질환명, 내 정보 표시·추가
 import { StrictMode } from "react";
-import { afterEach, describe, expect, test, vi } from "vitest";
+import { afterEach, beforeAll, describe, expect, test, vi } from "vitest";
 import { fireEvent, render, screen, waitFor, within } from "@testing-library/react";
 import { MemoryRouter, useLocation } from "react-router";
 import { App } from "../src/app/App";
 import { catFormToInput, catToForm, emptyCatForm, isCatFormBlank, signupCat, toggleExclusive } from "../src/features/cats/catProfile";
 import type { Cat } from "../src/types/api";
 import { chatReply, mockFetch } from "./helpers/fetch";
+import { MEMBER_PAGES, warmLazyPages } from "./helpers/lazyPages";
+
+// 회원 화면은 따로 받는(lazy) 화면이라 먼저 한 번 받아 둠
+beforeAll(() => warmLazyPages(MEMBER_PAGES));
 
 function Where() {
   const l = useLocation();

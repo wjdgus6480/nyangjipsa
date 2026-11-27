@@ -1,6 +1,7 @@
 // 라우팅. 새 화면(회원가입·로그인·마이페이지·관리자)은 여기에 경로를 추가합니다.
 // 첫 로딩을 줄이려고 무거운 화면(지도·챗봇·관리자)은 그 화면에 들어갈 때 따로 받습니다 (React.lazy).
-// 첫 화면으로 자주 열리는 홈·랜딩·회원 화면은 바로 보이도록 기본 파일에 둡니다.
+// 첫 화면으로 자주 열리는 홈·랜딩·로그인은 바로 보이도록 기본 파일에 두고,
+// 가끔 여는 회원 화면(가입·메일 인증·비밀번호 찾기·내 정보·탈퇴)은 들어갈 때 따로 받습니다.
 import { lazy, Suspense, type ReactNode } from "react";
 import { Route, Routes } from "react-router";
 import { ROUTES } from "../services/config/site";
@@ -9,13 +10,16 @@ import { LandingPage } from "../features/landing/LandingPage";
 
 import { AuthProvider } from "../features/auth/AuthProvider";
 import { LoginPage } from "../features/auth/LoginPage";
-import { SignupPage } from "../features/auth/SignupPage";
-import { CheckEmailPage } from "../features/auth/CheckEmailPage";
-import { VerifyEmailPage } from "../features/auth/VerifyEmailPage";
-import { ForgotPasswordPage } from "../features/auth/ForgotPasswordPage";
-import { ResetPasswordPage } from "../features/auth/ResetPasswordPage";
-import { SocialCompletePage, SocialDonePage } from "../features/auth/SocialPages";
-import { MyPage, WithdrawPage } from "../features/auth/AccountPages";
+
+const SignupPage = lazy(() => import("../features/auth/SignupPage").then((m) => ({ default: m.SignupPage })));
+const CheckEmailPage = lazy(() => import("../features/auth/CheckEmailPage").then((m) => ({ default: m.CheckEmailPage })));
+const VerifyEmailPage = lazy(() => import("../features/auth/VerifyEmailPage").then((m) => ({ default: m.VerifyEmailPage })));
+const ForgotPasswordPage = lazy(() => import("../features/auth/ForgotPasswordPage").then((m) => ({ default: m.ForgotPasswordPage })));
+const ResetPasswordPage = lazy(() => import("../features/auth/ResetPasswordPage").then((m) => ({ default: m.ResetPasswordPage })));
+const SocialCompletePage = lazy(() => import("../features/auth/SocialPages").then((m) => ({ default: m.SocialCompletePage })));
+const SocialDonePage = lazy(() => import("../features/auth/SocialPages").then((m) => ({ default: m.SocialDonePage })));
+const MyPage = lazy(() => import("../features/auth/AccountPages").then((m) => ({ default: m.MyPage })));
+const WithdrawPage = lazy(() => import("../features/auth/AccountPages").then((m) => ({ default: m.WithdrawPage })));
 
 const MapPage = lazy(() => import("../features/map/MapPage").then((m) => ({ default: m.MapPage })));
 const QnaPage = lazy(() => import("../features/qna/QnaPage").then((m) => ({ default: m.QnaPage })));
@@ -54,15 +58,15 @@ export function App() {
 
         {/* 회원 (메일 링크·소셜 로그인 후 이동 주소는 백엔드와 같아야 함) */}
         <Route path={ROUTES.login} element={<LoginPage />} />
-        <Route path={ROUTES.signup} element={<SignupPage />} />
-        <Route path={ROUTES.signupCheckEmail} element={<CheckEmailPage />} />
-        <Route path={ROUTES.verifyEmail} element={<VerifyEmailPage />} />
-        <Route path={ROUTES.forgotPassword} element={<ForgotPasswordPage />} />
-        <Route path={ROUTES.resetPassword} element={<ResetPasswordPage />} />
-        <Route path={ROUTES.socialComplete} element={<SocialCompletePage />} />
-        <Route path={ROUTES.socialDone} element={<SocialDonePage />} />
-        <Route path={ROUTES.me} element={<MyPage />} />
-        <Route path={ROUTES.withdraw} element={<WithdrawPage />} />
+        <Route path={ROUTES.signup} element={page(<SignupPage />)} />
+        <Route path={ROUTES.signupCheckEmail} element={page(<CheckEmailPage />)} />
+        <Route path={ROUTES.verifyEmail} element={page(<VerifyEmailPage />)} />
+        <Route path={ROUTES.forgotPassword} element={page(<ForgotPasswordPage />)} />
+        <Route path={ROUTES.resetPassword} element={page(<ResetPasswordPage />)} />
+        <Route path={ROUTES.socialComplete} element={page(<SocialCompletePage />)} />
+        <Route path={ROUTES.socialDone} element={page(<SocialDonePage />)} />
+        <Route path={ROUTES.me} element={page(<MyPage />)} />
+        <Route path={ROUTES.withdraw} element={page(<WithdrawPage />)} />
 
         {/* 관리자 (role=admin 만. 서버도 /api/admin/* 에서 매 요청 확인) */}
         <Route path={ROUTES.admin} element={page(<AdminLayout />)}>
