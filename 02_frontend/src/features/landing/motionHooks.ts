@@ -134,3 +134,44 @@ export function useMagnet<T extends HTMLElement>(ref: RefObject<T | null>, stren
     };
   }, [ref, reduce, strength, max]);
 }
+
+/**
+ * 목록 길이만큼 index 를 ms 간격으로 돌림 (문장 교체용). paused 거나 움직임 줄이기면 멈춤.
+ * 탭이 숨겨져 있을 때도 멈춤
+ */
+export function useRotating(length: number, ms: number, paused: boolean): number {
+  const reduce = useReducedMotion();
+  const [i, setI] = useState(0);
+  useEffect(() => {
+    if (reduce || paused || length < 2) return;
+    const t = window.setInterval(() => {
+      if (document.visibilityState === "visible") setI((v) => (v + 1) % length);
+    }, ms);
+    return () => window.clearInterval(t);
+  }, [length, ms, paused, reduce]);
+  return reduce ? 0 : i;
+}
+
+/**
+ * 여러 단계 요소 중 화면 가운데 줄에 걸린 것의 번호 (고정 무대 스크롤용).
+ * 관찰할 수 없으면 0 (첫 단계)
+ */
+export function useActiveStep(refs: RefObject<(HTMLElement | null)[]>, count: number): number {
+  const [active, setActive] = useState(0);
+  useEffect(() => {
+    if (!canObserve()) return;
+    const els = (refs.current ?? []).slice(0, count).filter((e): e is HTMLElement => !!e);
+    if (!els.length) return;
+    const io = new IntersectionObserver(
+      (entries) => {
+        for (const e of entries) {
+          if (e.isIntersecting) setActive(Number((e.target as HTMLElement).dataset.step ?? 0));
+        }
+      },
+      { rootMargin: "-45% 0px -45% 0px" },
+    );
+    els.forEach((el) => io.observe(el));
+    return () => io.disconnect();
+  }, [refs, count]);
+  return active;
+}
